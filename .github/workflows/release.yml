@@ -1,0 +1,43 @@
+name: Windows release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-desktop.txt
+      - run: choco install innosetup --no-progress -y
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = '0.1.0'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $version = $env:GITHUB_REF_NAME.TrimStart('v') }
+          ./packaging/build.ps1 -Version $version
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          $env:FINANCE_DESKTOP_DATA_DIR = Join-Path $env:RUNNER_TEMP 'ledger-smoke'
+          $p = Start-Process ./dist/ShiguangLedger/ShiguangLedger.exe -ArgumentList '--self-test' -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'Smoke test timed out' }
+          if ($p.ExitCode -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/self-test.ok")) { throw 'Smoke test failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Windows-installers
+          path: release/*
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$env:GITHUB_REF_NAME" *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output 'Release already exists; leaving published assets unchanged.'; exit 0 }
+          gh release create "$env:GITHUB_REF_NAME" release/* --draft --title "Shiguang Ledger $env:GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md

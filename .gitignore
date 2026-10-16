@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.test_tmp/
+.test_ui_tmp/
+.runtime_tmp/
+data/*.sqlite3*
+*.log
+.env
+tools/
+build/
+dist/
+release/
+*.spec
+.test_*/
+desktop_preview.png

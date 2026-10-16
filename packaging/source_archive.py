@@ -9,10 +9,10 @@ files = ['desktop.py', 'app.py', 'README.md', 'DESKTOP_README.md', 'WINDOWS_RELE
          'start.bat', 'start.ps1']
 for directory, pattern in [('finance', '*.py'), ('tests', '*.py'), ('packaging', '*.py'),
                            ('packaging', '*.ps1'), ('packaging', '*.iss'), ('samples', '*.csv'),
-                           ('.github/workflows', '*.yml'), ('assets', '*.ico')]:
+                           ('.github/workflows', '*.yml'), ('assets', '*.ico'), ('assets', '*.png'), ('assets', '*.txt')]:
     files.extend(str(p.relative_to(root)) for p in (root / directory).glob(pattern))
 (root / 'release').mkdir(exist_ok=True)
-with ZipFile(root / 'release' / 'ShiguangLedger-source.zip', 'w', ZIP_DEFLATED) as archive:
+with ZipFile(root / 'release' / 'AIFinanceHelper-source.zip', 'w', ZIP_DEFLATED) as archive:
     for name in files:
         archive.write(root / name, name)
 print('Source archive created without user databases or credentials.')

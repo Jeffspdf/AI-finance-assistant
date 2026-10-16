@@ -1,20 +1,20 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
 [Setup]
 AppId={{A88EA818-B539-4A70-B546-032EE1893D91}
-AppName=拾光账本
+AppName=AI理财小助手
 AppVersion={#AppVersion}
-AppPublisher=Shiguang Ledger Project
+AppPublisher=AI Finance Helper Project
 DefaultDirName={localappdata}\Programs\ShiguangLedger
-DefaultGroupName=拾光账本
+DefaultGroupName=AI理财小助手
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\release
-OutputBaseFilename=ShiguangLedger-{#AppVersion}-Setup-x64
+OutputBaseFilename=AIFinanceHelper-{#AppVersion}-Setup-x64
 SetupIconFile=..\assets\app.ico
-UninstallDisplayIcon={app}\ShiguangLedger.exe
+UninstallDisplayIcon={app}\AIFinanceHelper.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -26,9 +26,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: checkedonce
 [Files]
-Source: "..\dist\ShiguangLedger\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\AIFinanceHelper\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+[InstallDelete]
+Type: files; Name: "{autodesktop}\拾光账本.lnk"
+Type: files; Name: "{autoprograms}\拾光账本.lnk"
 [Icons]
-Name: "{autoprograms}\拾光账本"; Filename: "{app}\ShiguangLedger.exe"
-Name: "{autodesktop}\拾光账本"; Filename: "{app}\ShiguangLedger.exe"; Tasks: desktopicon
+Name: "{autoprograms}\AI理财小助手"; Filename: "{app}\AIFinanceHelper.exe"
+Name: "{autodesktop}\AI理财小助手"; Filename: "{app}\AIFinanceHelper.exe"; Tasks: desktopicon
 [Run]
-Filename: "{app}\ShiguangLedger.exe"; Description: "Launch Shiguang Ledger"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\AIFinanceHelper.exe"; Description: "Launch AI Finance Helper"; Flags: nowait postinstall skipifsilent

@@ -3,9 +3,9 @@ from PIL import Image, ImageDraw
 
 root = Path(__file__).resolve().parents[1]
 (root / 'assets').mkdir(exist_ok=True)
-im = Image.new('RGBA', (256, 256), '#172640')
+im = Image.new('RGBA', (256, 256), '#edf7f1')
 d = ImageDraw.Draw(im)
-d.rounded_rectangle((48, 38, 208, 218), radius=22, fill='#4568ed')
+d.rounded_rectangle((48, 38, 208, 218), radius=28, fill='#269580')
 d.line((82, 90, 174, 90), fill='white', width=12)
 d.line((82, 127, 155, 127), fill='white', width=12)
 d.line((82, 164, 136, 164), fill='#70e2c3', width=12)

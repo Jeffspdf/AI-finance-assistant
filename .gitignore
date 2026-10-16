@@ -14,3 +14,4 @@ release/
 *.spec
 .test_*/
 desktop_preview.png
+*_preview_v2.png

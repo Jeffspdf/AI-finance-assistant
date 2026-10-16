@@ -5,6 +5,7 @@ import os
 import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from PIL import Image, ImageTk
 
 from finance.storage import Store
 from finance.demo import demo_bytes
@@ -15,45 +16,104 @@ from finance.categories import CATEGORIES
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
-BG = '#f3f6fb'
-INK = '#172640'
-MUTED = '#77849b'
-BLUE = '#4568ed'
-GREEN = '#159d85'
+BG = '#f5f8f7'
+INK = '#243c38'
+MUTED = '#718681'
+BLUE = '#269580'
+GREEN = '#168b73'
 
 
 class Desktop(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('拾光账本 · AI 理财助手')
-        self.geometry('1180x800')
-        self.minsize(1020, 720)
+        self.title('AI理财小助手')
+        self.geometry('1280x860')
+        self.minsize(1140, 800)
         self.configure(bg=BG)
         self.option_add('*Font', ('Microsoft YaHei UI', 10))
         style = ttk.Style(self)
         style.theme_use('clam')
-        style.configure('Treeview', rowheight=33, background='white', fieldbackground='white', borderwidth=0, font=('Microsoft YaHei UI', 10))
-        style.configure('Treeview.Heading', background='#eaf0fa', foreground=INK, padding=9)
-        style.map('Treeview', background=[('selected', '#dbe5ff')], foreground=[('selected', INK)])
+        style.configure('Treeview', rowheight=35, background='white', fieldbackground='white', foreground=INK, borderwidth=0, font=('Microsoft YaHei UI', 10))
+        style.configure('Treeview.Heading', background='#edf5f1', foreground=INK, padding=10, relief='flat')
+        style.map('Treeview', background=[('selected', '#dcefe7')], foreground=[('selected', INK)])
+        style.configure('TEntry', padding=7, fieldbackground='white', bordercolor='#dce7e2')
+        style.configure('TCombobox', padding=6)
         self.mode = 'demo'
         self.store = Store(DATA_DIR / 'demo.sqlite3')
         if self.store.transactions().empty:
             self.store.import_rows(parse_statement(demo_bytes(), 'desktop_demo.csv').rows)
-        side = tk.Frame(self, bg='#172640', width=210)
+        side = tk.Frame(self, bg='white', width=238)
         side.pack(side='left', fill='y'); side.pack_propagate(False)
-        tk.Label(side, text='◈  拾光账本', bg='#172640', fg='white', font=('Microsoft YaHei UI', 20, 'bold')).pack(anchor='w', padx=23, pady=(34, 6))
-        tk.Label(side, text='FINANCE COMPANION', bg='#172640', fg='#899bb9', font=('Segoe UI', 9)).pack(anchor='w', padx=26, pady=(0, 40))
-        for label, page in [('财务概览', 'home'), ('交易账本', 'records'), ('储蓄规划', 'plan'), ('问问助手', 'assistant')]:
-            tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='#233654', fg='white', activebackground=BLUE, activeforeground='white', relief='flat', padx=22, pady=14, cursor='hand2').pack(fill='x', padx=14, pady=5)
-        spaces = tk.Frame(side, bg='#172640'); spaces.pack(side='bottom', fill='x', padx=14, pady=18)
-        self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='#172640', fg='#a7b6cd', pady=8)
+        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 19, 'bold')).pack(anchor='w', padx=22, pady=(30, 5))
+        tk.Label(side, text='FINANCE, WITH A LITTLE JOY', bg='white', fg=MUTED, font=('Segoe UI', 8)).pack(anchor='w', padx=24, pady=(0, 30))
+        self.nav = {}
+        for label, page in [('01    财务概览', 'home'), ('02    交易账本', 'records'), ('03    储蓄规划', 'plan'), ('04    问问助手', 'assistant')]:
+            b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=0, padx=20, pady=13, cursor='hand2')
+            b.pack(fill='x', padx=14, pady=3); self.nav[page] = b
+        spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=18, pady=14)
+        self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=8)
         self.space_label.pack()
-        tk.Button(spaces, text='切换演示 / 个人空间', command=self.switch_space, relief='flat', bg='#233654', fg='white', pady=8).pack(fill='x')
-        tk.Button(spaces, text='打开数据文件夹', command=lambda: os.startfile(str(DATA_DIR)), relief='flat', bg='#233654', fg='white', pady=8).pack(fill='x', pady=5)
+        tk.Button(spaces, text='切换演示 / 个人空间', command=self.switch_space, relief='flat', bg='#edf5f1', fg=GREEN, pady=8).pack(fill='x')
+        tk.Button(spaces, text='打开数据文件夹', command=lambda: os.startfile(str(DATA_DIR)), relief='flat', bg='white', fg=MUTED, pady=7).pack(fill='x', pady=3)
+        self.guide = tk.Frame(side, bg='#f3f9f5', padx=12, pady=12)
+        self.guide.pack(side='bottom', fill='x', padx=16, pady=8)
+        self.mascot_photo = None
+        asset = ROOT / 'assets' / 'caishen.png'
+        if asset.exists():
+            image = Image.open(asset).convert('RGBA'); image.thumbnail((125, 125), Image.Resampling.LANCZOS)
+            self.mascot_photo = ImageTk.PhotoImage(image)
+            tk.Label(self.guide, image=self.mascot_photo, bg='#f3f9f5').pack()
+        tk.Label(self.guide, text='小财神 · 你的记账搭子', bg='#f3f9f5', fg=GREEN, font=('Microsoft YaHei UI', 10, 'bold')).pack(pady=(4, 5))
+        self.tip = tk.Label(self.guide, text='', bg='#f3f9f5', fg=MUTED, wraplength=180, height=3, justify='left', font=('Microsoft YaHei UI', 9))
+        self.tip.pack(fill='x')
+        self.guide_action = tk.Button(self.guide, text='开始记账 →', bg='#e0f0e7', fg=GREEN, relief='flat', pady=6, command=lambda: self.show('records'))
+        self.guide_action.pack(fill='x', pady=(8, 0))
+        controls = tk.Frame(spaces, bg='white'); controls.pack(fill='x')
+        self.guide_toggle = tk.Button(controls, text='收起向导', command=self.toggle_guide, bg='white', fg=MUTED, relief='flat')
+        self.guide_toggle.pack(side='left')
+        tk.Button(controls, text='桌面小财神 ↗', command=self.show_pet, bg='white', fg=GREEN, relief='flat').pack(side='right')
+        self.pet = None
         self.main = tk.Frame(self, bg=BG)
         self.main.pack(side='left', fill='both', expand=True, padx=30, pady=24)
         self.page = 'home'
         self.show('home')
+
+    def toggle_guide(self):
+        if self.guide.winfo_manager():
+            self.guide.pack_forget(); self.guide_toggle.config(text='显示向导')
+        else:
+            self.guide.pack(side='bottom', fill='x', padx=16, pady=8)
+            self.guide_toggle.config(text='收起向导')
+
+    def show_pet(self):
+        if self.pet is not None and self.pet.winfo_exists():
+            self.pet.lift(); return
+        asset = ROOT / 'assets' / 'caishen.png'
+        if not asset.exists(): return
+        pet = tk.Toplevel(self); self.pet = pet
+        pet.overrideredirect(True); pet.attributes('-topmost', True)
+        transparent = '#fff0fe'; pet.configure(bg=transparent)
+        if sys.platform == 'win32': pet.wm_attributes('-transparentcolor', transparent)
+        pet.geometry(f'240x325+{max(0,self.winfo_screenwidth()-290)}+{max(0,self.winfo_screenheight()-420)}')
+        picture = Image.open(asset).convert('RGBA'); picture.thumbnail((175, 210), Image.Resampling.LANCZOS)
+        pet.photo = ImageTk.PhotoImage(picture)
+        character = tk.Label(pet, image=pet.photo, bg=transparent, cursor='fleur'); character.place(relx=.5, y=65, anchor='n')
+        tk.Label(pet, text='小财神陪你慢慢攒。\n拖动角色移动位置', bg='#e7f3ec', fg=GREEN, padx=12, pady=9, font=('Microsoft YaHei UI', 10)).place(relx=.5, y=8, anchor='n')
+        tk.Button(pet, text='×', command=pet.destroy, relief='flat', bg='#e7f3ec', fg=MUTED).place(x=218, y=0)
+        tk.Button(pet, text='打开小助手', command=lambda: (self.deiconify(), self.lift()), relief='flat', bg='#e7f3ec', fg=GREEN, padx=16, pady=6).place(relx=.5, y=282, anchor='n')
+        def start(event): pet.drag = (event.x_root-pet.winfo_x(), event.y_root-pet.winfo_y())
+        def move(event):
+            if hasattr(pet, 'drag'): pet.geometry(f'+{max(0,event.x_root-pet.drag[0])}+{max(0,event.y_root-pet.drag[1])}')
+        character.bind('<ButtonPress-1>', start); character.bind('<B1-Motion>', move)
+        import math
+        def animate(tick=0):
+            if not pet.winfo_exists(): return
+            character.place_configure(y=66+int(3*math.sin(tick/10)))
+            pet.animation = pet.after(80, lambda: animate(tick+1))
+        def cleanup(event):
+            if event.widget is pet and hasattr(pet, 'animation'):
+                pet.after_cancel(pet.animation)
+        pet.bind('<Destroy>', cleanup); animate()
 
     def switch_space(self):
         self.mode = 'personal' if self.mode == 'demo' else 'demo'
@@ -67,15 +127,21 @@ class Desktop(tk.Tk):
         return w
 
     def button(self, parent, text, command):
-        b = tk.Button(parent, text=text, command=command, bg=BLUE, fg='white', activebackground='#3557cc', activeforeground='white', relief='flat', padx=18, pady=10, cursor='hand2')
+        b = tk.Button(parent, text=text, command=command, bg=BLUE, fg='white', activebackground='#207c6b', activeforeground='white', relief='flat', borderwidth=0, padx=17, pady=10, cursor='hand2')
         b.pack(side='left', padx=(0, 10), pady=10)
         return b
 
     def show(self, page):
         self.page = page
+        for key, button in self.nav.items():
+            button.config(bg='#e7f3ec' if key == page else 'white', fg=GREEN if key == page else MUTED)
+        tips = {'home': ('看清收支，留出小目标的预算。演示账单不代表真实资产。', '去看看账单 →', 'records'), 'records': ('先核对分类，点选交易可查看原始文件和行号。', '规划一个小目标 →', 'plan'), 'plan': ('试着调整月预算，看看两种方案差在哪里。', '问问消费情况 →', 'assistant'), 'assistant': ('我来指路，代码算钱。当前为本地规则模式，未连接大模型。', '返回财务概览 →', 'home')}
+        tip, action, target = tips[page]
+        self.tip.config(text=tip)
+        self.guide_action.config(text=action, command=lambda p=target: self.show(p))
         for child in self.main.winfo_children(): child.destroy()
         self.frame = self.store.transactions()
-        titles = {'home': ('让每一笔钱，都有方向', '从真实记录出发，理解消费，为下一个目标留出空间。'), 'records': ('交易账本', '支持 CSV / Excel 导入、重复检测、分类修正与来源追溯。'), 'plan': ('把愿望，变成计划', '调整预算和期限，比较每一种选择。金额由 Python 计算。'), 'assistant': ('问问你的理财助手', '当前使用本地规则问答；尚未连接大模型，不向外发送账单。')}
+        titles = {'home': ('把生活记好，把小目标存好。', '财务概览  /  每一笔记录，都让计划更清楚一点。'), 'records': ('好好记账，心里有数。', '交易账本  /  导入、核对与修正，每笔都有来源。'), 'plan': ('给下一个愿望，留点预算。', '储蓄规划  /  试试不同的预算，找到舒服的节奏。'), 'assistant': ('关于钱的小疑问，一起理清。', '本地规则模式  /  回答来自已导入账单，不向外发送数据。')}
         self.label(self.main, titles[page][0], 25, bold=True)
         self.label(self.main, titles[page][1], 10, MUTED)
         getattr(self, page)()
@@ -88,7 +154,8 @@ class Desktop(tk.Tk):
         scroll = ttk.Scrollbar(box, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side='right', fill='y'); tree.pack(fill='both', expand=True)
-        for row in rows: tree.insert('', 'end', values=row)
+        tree.tag_configure('alternate', background='#f8fbf9')
+        for index, row in enumerate(rows): tree.insert('', 'end', values=row, tags=('alternate',) if index % 2 else ())
         return tree
 
     def home(self):
@@ -97,7 +164,7 @@ class Desktop(tk.Tk):
         expense = int(f.loc[f.kind == '支出', 'amount_cents'].sum())
         band = tk.Frame(self.main, bg=BG); band.pack(fill='x', pady=20)
         for title, value, color in [('累计收入', income, INK), ('累计支出', expense, INK), ('累计结余', income-expense, GREEN)]:
-            card = tk.Frame(band, bg='white', padx=20, pady=15); card.pack(side='left', fill='x', expand=True, padx=(0, 12))
+            card = tk.Frame(band, bg='#e8f4ec' if title == '累计结余' else 'white', padx=20, pady=20); card.pack(side='left', fill='x', expand=True, padx=(0, 12))
             self.label(card, title, 10, MUTED)
             self.label(card, '¥ '+yuan(value), 23, color, True)
         monthly, categories = overview(f)
@@ -109,7 +176,8 @@ class Desktop(tk.Tk):
         for i, (_, row) in enumerate(top.iterrows()):
             y = 24+i*32
             canvas.create_text(20, y, text=row['分类'], anchor='w', fill=INK, font=('Microsoft YaHei UI', 10))
-            canvas.create_rectangle(110, y-7, 110+float(row['支出'])/maxval*390, y+7, fill=[BLUE, '#7594f6', GREEN, '#e7af63', '#a798e9'][i], outline='')
+            canvas.create_rectangle(110, y-6, 500, y+6, fill='#f0f5f2', outline='')
+            canvas.create_rectangle(110, y-6, 110+float(row['支出'])/maxval*390, y+6, fill=[BLUE, '#75b9a2', '#9ac6b4', '#e6c997', '#b1b6d8'][i], outline='')
             canvas.create_text(530, y, text=f"¥ {row['支出']:,.2f}   ·   {row['占比']}%", anchor='w', fill=MUTED)
         self.label(self.main, '月度收支', 14, bold=True)
         self.table(self.main, ['月份', '收入 / 元', '支出 / 元', '结余 / 元'], [[r['月份'], f"{r['收入']:,.2f}", f"{r['支出']:,.2f}", f"{r['结余']:,.2f}"] for _, r in monthly.iterrows()], 4)

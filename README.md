@@ -2,7 +2,7 @@
 
 ## Windows 桌面版（新增）
 
-普通用户请从 [GitHub Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.2.2-Setup-x64.exe`，安装后通过桌面快捷方式或开始菜单启动，无需安装 Python。本地安装包位于 `release/`。不要把 GitHub 的 Download ZIP 源码包当作安装包。
+普通用户请从 [GitHub Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.2.3-Setup-x64.exe`，安装后通过桌面快捷方式或开始菜单启动，无需安装 Python。本地安装包位于 `release/`。不要把 GitHub 的 Download ZIP 源码包当作安装包。
 
 桌面版支持独立演示/个人空间；数据位于 `%LOCALAPPDATA%\ShiguangLedger`，安装更新与卸载默认保留数据。当前助手为本地规则模式。Windows x64，尚未签名。
 
@@ -97,3 +97,5 @@ US1：导入 CSV/Excel，查看并修正分类。US2：持久化存钱目标，�
 Streamlit 控件与会话状态参考官方文档：
 https://docs.streamlit.io/develop/concepts/design/dataframes
 https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state
+
+桌面版侧栏底部新增“关于与更新”：手动后台检查 GitHub 正式版，显示当前版本和更新说明，新版安装包通过浏览器下载，退出应用后覆盖安装。不在启动时自动联网，不自动安装。

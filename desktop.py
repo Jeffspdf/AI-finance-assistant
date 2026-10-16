@@ -3,6 +3,9 @@ from pathlib import Path
 from datetime import date
 import os
 import sys
+import queue
+import threading
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
@@ -13,6 +16,7 @@ from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
 from finance.categories import CATEGORIES
+from finance.updates import APP_VERSION, RELEASES_URL, check_latest
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
@@ -54,7 +58,10 @@ class Desktop(tk.Tk):
         self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=8)
         self.space_label.pack()
         tk.Button(spaces, text='切换演示 / 个人空间', command=self.switch_space, relief='flat', bg='#edf5f1', fg=GREEN, pady=8).pack(fill='x')
-        tk.Button(spaces, text='打开数据文件夹', command=lambda: os.startfile(str(DATA_DIR)), relief='flat', bg='white', fg=MUTED, pady=7).pack(fill='x', pady=3)
+        links = tk.Frame(spaces, bg='white'); links.pack(fill='x', pady=3)
+        tk.Button(links, text='数据文件夹', command=lambda: os.startfile(str(DATA_DIR)), relief='flat', bg='white', fg=MUTED, pady=7).pack(side='left')
+        tk.Button(links, text='关于与更新', command=self.show_updates, relief='flat', bg='white', fg=GREEN, pady=7).pack(side='right')
+        self.update_window = None
         self.guide = tk.Frame(side, bg='#f3f9f5', padx=12, pady=12)
         self.guide.pack(side='bottom', fill='x', padx=16, pady=8)
         self.mascot_photo = None
@@ -79,6 +86,62 @@ class Desktop(tk.Tk):
         self.main.pack(side='left', fill='both', expand=True, padx=30, pady=24)
         self.page = 'home'
         self.show('home')
+
+    def show_updates(self):
+        if self.update_window is not None and self.update_window.winfo_exists():
+            self.update_window.lift(); return
+        window = tk.Toplevel(self); self.update_window = window
+        window.title('关于与更新 · AI理财小助手')
+        window.geometry('650x540'); window.minsize(580, 500)
+        window.configure(bg=BG); window.transient(self)
+        content = tk.Frame(window, bg=BG, padx=26, pady=22); content.pack(fill='both', expand=True)
+        self.label(content, 'AI理财小助手', 21, bold=True)
+        self.label(content, f'当前版本  v{APP_VERSION}  ·  Windows x64', 11, MUTED)
+        self.label(content, '手动检查官方 GitHub 正式版本；不会上传账单。', 10, MUTED)
+        status = self.label(content, '点击“检查更新”获取最新版本。', 11, GREEN)
+        status.config(wraplength=560)
+        notes = tk.Text(content, wrap='word', height=6, relief='flat', bg='white', fg=INK, padx=14, pady=12, font=('Microsoft YaHei UI', 10))
+        notes.pack(fill='both', expand=True, pady=12)
+        notes.insert('1.0', '发现新版本后可在此查看更新说明，并在浏览器中下载安装包。\n\n下载后请先退出本程序，再运行安装包。覆盖安装保留账单数据。\n\n当前助手为本地规则模式。')
+        notes.config(state='disabled')
+        buttons = tk.Frame(content, bg=BG); buttons.pack(fill='x')
+        download = self.button(buttons, '下载新版安装包 ↗', lambda: None)
+        download.config(state='disabled')
+        self.button(buttons, '官方发布页面 ↗', lambda: webbrowser.open(RELEASES_URL))
+        mailbox = queue.Queue()
+        checking = [False]
+
+        def start_check():
+            if checking[0]: return
+            checking[0] = True; check.config(state='disabled'); download.config(state='disabled')
+            status.config(text='正在检查 GitHub 最新版本…')
+            def worker():
+                try: mailbox.put(('ok', check_latest()))
+                except Exception: mailbox.put(('error', None))
+            threading.Thread(target=worker, daemon=True).start()
+            window.poll = window.after(100, poll)
+
+        def poll():
+            try: kind, result = mailbox.get_nowait()
+            except queue.Empty:
+                window.poll = window.after(100, poll); return
+            checking[0] = False; check.config(state='normal')
+            if kind == 'error':
+                status.config(text='检查失败：网络不可用或 GitHub 限流。可重试或打开发布页面。')
+                return
+            status.config(text=f'发现新版本 v{result["version"]}' if result['newer'] else f'当前已是最新版本（GitHub 正式版 v{result["version"]}）。')
+            notes.config(state='normal'); notes.delete('1.0', 'end'); notes.insert('1.0', result['notes']); notes.config(state='disabled')
+            if result['newer'] and result['installer_url']:
+                download.config(state='normal', command=lambda url=result['installer_url']: webbrowser.open(url))
+            elif result['newer']:
+                status.config(text=f'发现 v{result["version"]}，请在官方发布页面查看并下载安装包。')
+
+        check = tk.Button(content, text='检查更新', command=start_check, bg='#e0f0e7', fg=GREEN, relief='flat', pady=10)
+        check.pack(fill='x', pady=(10, 0))
+        def cleanup(event):
+            if event.widget is window and hasattr(window, 'poll'):
+                window.after_cancel(window.poll)
+        window.bind('<Destroy>', cleanup)
 
     def toggle_guide(self):
         if self.guide.winfo_manager():

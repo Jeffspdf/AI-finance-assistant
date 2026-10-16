@@ -58,12 +58,14 @@ class Desktop(tk.Tk):
         self.guide = tk.Frame(side, bg='#f3f9f5', padx=12, pady=12)
         self.guide.pack(side='bottom', fill='x', padx=16, pady=8)
         self.mascot_photo = None
-        asset = ROOT / 'assets' / 'caishen_female.png'
+        asset = ROOT / 'assets' / 'campus_heroine.png'
         if asset.exists():
-            image = Image.open(asset).convert('RGBA'); image.thumbnail((125, 125), Image.Resampling.LANCZOS)
+            image = Image.open(asset).convert('RGBA'); image.thumbnail((170, 290), Image.Resampling.LANCZOS)
             self.mascot_photo = ImageTk.PhotoImage(image)
-            tk.Label(self.guide, image=self.mascot_photo, bg='#f3f9f5').pack()
-        tk.Label(self.guide, text='小财灵 · 你的财神向导', bg='#f3f9f5', fg=GREEN, font=('Microsoft YaHei UI', 10, 'bold')).pack(pady=(4, 5))
+            portrait = tk.Frame(self.guide, bg='#f3f9f5', height=125)
+            portrait.pack(fill='x'); portrait.pack_propagate(False)
+            tk.Label(portrait, image=self.mascot_photo, bg='#f3f9f5').place(relx=.5, y=0, anchor='n')
+        tk.Label(self.guide, text='小财灵 · 校园理财搭子', bg='#f3f9f5', fg=GREEN, font=('Microsoft YaHei UI', 10, 'bold')).pack(pady=(4, 5))
         self.tip = tk.Label(self.guide, text='', bg='#f3f9f5', fg=MUTED, wraplength=180, height=3, justify='left', font=('Microsoft YaHei UI', 9))
         self.tip.pack(fill='x')
         self.guide_action = tk.Button(self.guide, text='开始记账 →', bg='#e0f0e7', fg=GREEN, relief='flat', pady=6, command=lambda: self.show('records'))
@@ -71,7 +73,7 @@ class Desktop(tk.Tk):
         controls = tk.Frame(spaces, bg='white'); controls.pack(fill='x')
         self.guide_toggle = tk.Button(controls, text='收起向导', command=self.toggle_guide, bg='white', fg=MUTED, relief='flat')
         self.guide_toggle.pack(side='left')
-        tk.Button(controls, text='桌面小财神 ↗', command=self.show_pet, bg='white', fg=GREEN, relief='flat').pack(side='right')
+        tk.Button(controls, text='桌面小助手 ↗', command=self.show_pet, bg='white', fg=GREEN, relief='flat').pack(side='right')
         self.pet = None
         self.main = tk.Frame(self, bg=BG)
         self.main.pack(side='left', fill='both', expand=True, padx=30, pady=24)
@@ -88,19 +90,19 @@ class Desktop(tk.Tk):
     def show_pet(self):
         if self.pet is not None and self.pet.winfo_exists():
             self.pet.lift(); return
-        asset = ROOT / 'assets' / 'caishen_female.png'
+        asset = ROOT / 'assets' / 'campus_heroine.png'
         if not asset.exists(): return
         pet = tk.Toplevel(self); self.pet = pet
         pet.overrideredirect(True); pet.attributes('-topmost', True)
         transparent = '#fff0fe'; pet.configure(bg=transparent)
         if sys.platform == 'win32': pet.wm_attributes('-transparentcolor', transparent)
-        pet.geometry(f'240x325+{max(0,self.winfo_screenwidth()-290)}+{max(0,self.winfo_screenheight()-420)}')
-        picture = Image.open(asset).convert('RGBA'); picture.thumbnail((175, 210), Image.Resampling.LANCZOS)
+        pet.geometry(f'240x405+{max(0,self.winfo_screenwidth()-290)}+{max(0,self.winfo_screenheight()-480)}')
+        picture = Image.open(asset).convert('RGBA'); picture.thumbnail((190, 285), Image.Resampling.LANCZOS)
         pet.photo = ImageTk.PhotoImage(picture)
         character = tk.Label(pet, image=pet.photo, bg=transparent, cursor='fleur'); character.place(relx=.5, y=65, anchor='n')
         tk.Label(pet, text='小财灵：聪明花，慢慢攒！\n拖动角色移动位置', bg='#e7f3ec', fg=GREEN, padx=12, pady=9, font=('Microsoft YaHei UI', 10)).place(relx=.5, y=8, anchor='n')
         tk.Button(pet, text='×', command=pet.destroy, relief='flat', bg='#e7f3ec', fg=MUTED).place(x=218, y=0)
-        tk.Button(pet, text='打开小助手', command=lambda: (self.deiconify(), self.lift()), relief='flat', bg='#e7f3ec', fg=GREEN, padx=16, pady=6).place(relx=.5, y=282, anchor='n')
+        tk.Button(pet, text='打开小助手', command=lambda: (self.deiconify(), self.lift()), relief='flat', bg='#e7f3ec', fg=GREEN, padx=16, pady=6).place(relx=.5, y=358, anchor='n')
         def start(event): pet.drag = (event.x_root-pet.winfo_x(), event.y_root-pet.winfo_y())
         def move(event):
             if hasattr(pet, 'drag'): pet.geometry(f'+{max(0,event.x_root-pet.drag[0])}+{max(0,event.y_root-pet.drag[1])}')

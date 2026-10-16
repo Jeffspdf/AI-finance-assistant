@@ -18,7 +18,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $version = '0.2.0'
+          $version = '0.2.1'
           if ($env:GITHUB_REF_TYPE -eq 'tag') { $version = $env:GITHUB_REF_NAME.TrimStart('v') }
           ./packaging/build.ps1 -Version $version
       - name: Smoke test executable

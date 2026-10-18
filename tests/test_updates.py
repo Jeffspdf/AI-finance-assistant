@@ -52,7 +52,7 @@ def test_rate_limit_fallback_and_untrusted_redirect():
     with patch('finance.updates.urlopen',side_effect=[HTTPError('',403,'rate limit',{},None),response]):
         result=check_latest()
         assert result['version']=='0.4.0' and result['newer']
-        assert result['installer_url'] is None
+        assert result['installer_url']==f'https://github.com/{REPO}/releases/download/v0.4.0/AIFinanceHelper-0.4.0-Setup-x64.exe'
     response.__enter__.return_value.geturl.return_value='https://evil.example/releases/tag/v9.0.0'
     with patch('finance.updates.urlopen',side_effect=[HTTPError('',429,'rate limit',{},None),response]):
         with pytest.raises(ValueError): check_latest()

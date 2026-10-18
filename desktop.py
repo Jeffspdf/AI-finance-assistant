@@ -16,7 +16,7 @@ from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
 from finance.categories import CATEGORIES
-from finance.updates import APP_VERSION, RELEASES_URL, check_latest
+from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer
 from finance.llm import ModelClient
 import json
 
@@ -160,9 +160,9 @@ class Desktop(tk.Tk):
         self.label(content, '手动检查官方 GitHub 正式版本；不会上传账单。', 10, MUTED)
         status = self.label(content, '点击“检查更新”获取最新版本。', 11, GREEN)
         status.config(wraplength=560)
-        notes = tk.Text(content, wrap='word', height=6, relief='flat', bg='white', fg=INK, padx=14, pady=12, font=('Microsoft YaHei UI', 10))
+        notes = tk.Text(content, wrap='word', height=3, relief='flat', bg='white', fg=INK, padx=14, pady=12, font=('Microsoft YaHei UI', 10))
         notes.pack(fill='both', expand=True, pady=12)
-        notes.insert('1.0', '发现新版本后可在此查看更新说明，并在浏览器中下载安装包。\n\n下载后请先退出本程序，再运行安装包。覆盖安装保留账单数据。\n\n当前助手为本地规则模式。')
+        notes.insert('1.0', '发现新版本后可直接下载安装包，显示下载进度并打开下载目录。\n\n下载后请先退出本程序，再运行安装包。覆盖安装保留账单数据。\n\n如网络无法连接 GitHub，可使用浏览器下载链接。')
         notes.config(state='disabled')
         buttons = tk.Frame(content, bg=BG); buttons.pack(fill='x')
         download = self.button(buttons, '下载新版安装包 ↗', lambda: None)
@@ -170,6 +170,48 @@ class Desktop(tk.Tk):
         self.button(buttons, '官方发布页面 ↗', lambda: webbrowser.open(RELEASES_URL))
         mailbox = queue.Queue()
         checking = [False]
+        cancel_download = threading.Event()
+        download_box = queue.Queue()
+        download_busy = [False]
+        download_url = [None]
+        progress = ttk.Progressbar(content, mode='determinate', maximum=100)
+        progress.pack(fill='x',pady=4)
+        browser_download = tk.Button(content,text='浏览器下载备用链接 ↗',command=lambda: webbrowser.open(download_url[0] or RELEASES_URL),bg=BG,fg=GREEN,relief='flat')
+        browser_download.pack(anchor='w')
+
+        def start_download():
+            if download_busy[0] or not download_url[0]: return
+            download_busy[0]=True; cancel_download.clear(); download.config(state='disabled'); check.config(state='disabled')
+            status.config(text='正在连接 GitHub 下载安装包…'); progress['value']=0
+            def report(received,total): download_box.put(('progress',(received,total)))
+            def worker():
+                try: download_box.put(('done',download_installer(download_url[0],DATA_DIR/'downloads',report,cancel_download.is_set)))
+                except Exception as exc:
+                    from urllib.error import HTTPError
+                    message=f'下载失败：HTTP {exc.code}，请重试或使用浏览器备用链接。' if isinstance(exc,HTTPError) else '下载失败：网络不可达、超时或文件不完整。请重试或使用浏览器备用链接。'
+                    download_box.put(('error',message))
+            threading.Thread(target=worker,daemon=True).start(); window.download_poll=window.after(100,poll_download)
+
+        def poll_download():
+            terminal=None
+            while True:
+                try: kind,value=download_box.get_nowait()
+                except queue.Empty: break
+                if kind=='progress':
+                    received,total=value
+                    progress['value']=received/total*100 if total else 0
+                    status.config(text=f'已下载 {received/1048576:.1f} MB'+(f' / {total/1048576:.1f} MB' if total else ''))
+                else: terminal=(kind,value)
+            if terminal:
+                download_busy[0]=False; download.config(state='normal');check.config(state='normal')
+                kind,value=terminal
+                if kind=='done':
+                    path,sha=value;progress['value']=100
+                    status.config(text='下载完成！请先退出应用，再运行下载的安装包。')
+                    notes.config(state='normal');notes.delete('1.0','end');notes.insert('1.0',f'文件：{path}\n\nSHA256：{sha}\n\n校验了传输长度及 EXE 文件头。未进行代码签名验证。');notes.config(state='disabled')
+                    os.startfile(str(Path(path).parent))
+                else: status.config(text=value)
+            else: window.download_poll=window.after(100,poll_download)
 
         def start_check():
             if checking[0]: return
@@ -192,15 +234,18 @@ class Desktop(tk.Tk):
             status.config(text=f'发现新版本 v{result["version"]}' if result['newer'] else f'当前已是最新版本（GitHub 正式版 v{result["version"]}）。')
             notes.config(state='normal'); notes.delete('1.0', 'end'); notes.insert('1.0', result['notes']); notes.config(state='disabled')
             if result['newer'] and result['installer_url']:
-                download.config(state='normal', command=lambda url=result['installer_url']: webbrowser.open(url))
+                download_url[0]=result['installer_url']
+                download.config(state='normal', command=start_download)
             elif result['newer']:
                 status.config(text=f'发现 v{result["version"]}，请在官方发布页面查看并下载安装包。')
 
         check = tk.Button(content, text='检查更新', command=start_check, bg='#e0f0e7', fg=GREEN, relief='flat', pady=10)
         check.pack(fill='x', pady=(10, 0))
         def cleanup(event):
-            if event.widget is window and hasattr(window, 'poll'):
-                window.after_cancel(window.poll)
+            if event.widget is window:
+                cancel_download.set()
+                for name in ['poll','download_poll']:
+                    if hasattr(window,name): window.after_cancel(getattr(window,name))
         window.bind('<Destroy>', cleanup)
 
     def toggle_guide(self):

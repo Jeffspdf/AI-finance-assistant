@@ -2,7 +2,7 @@
 
 ## Windows 桌面版（新增）
 
-普通用户请从 [GitHub Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.3.0-Setup-x64.exe`，安装后通过桌面快捷方式或开始菜单启动，无需安装 Python。本地安装包位于 `release/`。不要把 GitHub 的 Download ZIP 源码包当作安装包。
+普通用户请从 [GitHub Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.3.1-Setup-x64.exe`，安装后通过桌面快捷方式或开始菜单启动，无需安装 Python。本地安装包位于 `release/`。不要把 GitHub 的 Download ZIP 源码包当作安装包。
 
 桌面版支持独立演示/个人空间；数据位于 `%LOCALAPPDATA%\ShiguangLedger`，安装更新与卸载默认保留数据。当前助手为本地规则模式。Windows x64，尚未签名。
 

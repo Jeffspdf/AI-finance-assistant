@@ -2,7 +2,7 @@
 
 ## 普通用户
 
-打开仓库 Releases，选择对应版本，在 Assets 下载 `AIFinanceHelper-0.3.0-Setup-x64.exe`。双击安装，可创建桌面快捷方式；开始菜单和 Windows 已安装应用均可找到程序。无需 Python。ZIP 为便携程序目录，必须完整解压后启动其中的 EXE，不能只复制 EXE。
+打开仓库 Releases，选择对应版本，在 Assets 下载 `AIFinanceHelper-0.3.1-Setup-x64.exe`。双击安装，可创建桌面快捷方式；开始菜单和 Windows 已安装应用均可找到程序。无需 Python。ZIP 为便携程序目录，必须完整解压后启动其中的 EXE，不能只复制 EXE。
 
 安装界面暂为英文，应用界面为中文。程序为课程原型，未购买代码签名证书，可能显示未知发布者。数据保存在 `%LOCALAPPDATA%\ShiguangLedger`，卸载不删除账单，更新使用同一个 AppId；不要手动删除数据目录。备份时先退出程序。
 
@@ -22,7 +22,7 @@ python -m venv .venv
 
 将此项目目录作为仓库根目录，包含 `.github/workflows/release.yml`、`packaging/`、`finance/`、`desktop.py`、requirements 和文档。不要上传整个上级课程目录，不要上传 .venv、tools、data、build、dist 或个人账单。发布源码 ZIP 使用白名单打包，避免夹带本地数据。
 
-上传源码后可先手动运行 Actions 的 Windows release，下载 artifact 验证。之后创建并推送 `v0.3.0` 标签，工作流自动构建程序、执行 EXE 冒烟检查，并建立包含三个产物的草稿 Release。检查草稿内容后发布，用户即可下载。工作流运行依赖 GitHub Actions 可用额度与仓库权限；不要提交访问令牌。
+上传源码后可先手动运行 Actions 的 Windows release，下载 artifact 验证。之后创建并推送 `v0.3.1` 标签，工作流自动构建程序、执行 EXE 冒烟检查，并建立包含三个产物的草稿 Release。检查草稿内容后发布，用户即可下载。工作流运行依赖 GitHub Actions 可用额度与仓库权限；不要提交访问令牌。
 
 目标仓库为 https://github.com/Jeffspdf/AI-finance-assistant 。未配置自动更新，用户下载新版安装包覆盖安装。
 

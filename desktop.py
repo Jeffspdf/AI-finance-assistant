@@ -288,6 +288,7 @@ class Desktop(tk.Tk):
         picture = Image.open(asset).convert('RGBA'); picture.thumbnail((190, 285), Image.Resampling.LANCZOS)
         pet.photo = ImageTk.PhotoImage(picture)
         character = tk.Label(pet, image=pet.photo, bg=transparent, cursor='fleur'); character.place(relx=.5, y=65, anchor='n')
+        player=None
         sheet=ROOT/'assets'/'campus_animation.png'
         if sheet.exists():
             player=SpritePlayer(character,sheet,(240,160));self.animators.append(player);player.pause(self.animation_paused)
@@ -298,13 +299,32 @@ class Desktop(tk.Tk):
         def start(event):
             pet.drag = (event.x_root-pet.winfo_x(), event.y_root-pet.winfo_y())
             pet.drag_start=(event.x_root,event.y_root)
+            pet.pending_position=None
+            if player is not None:player.pause(True)
+            character.grab_set()
+        def flush_move():
+            pet.move_job=None
+            if pet.pending_position:
+                x,y=pet.pending_position;pet.geometry(f'+{x}+{y}');pet.pending_position=None
+                character.update_idletasks()
         def move(event):
-            if hasattr(pet, 'drag'): pet.geometry(f'+{max(0,event.x_root-pet.drag[0])}+{max(0,event.y_root-pet.drag[1])}')
+            if hasattr(pet, 'drag'):
+                pet.pending_position=(max(0,event.x_root-pet.drag[0]),max(0,event.y_root-pet.drag[1]))
+                if not getattr(pet,'move_job',None):pet.move_job=pet.after(16,flush_move)
         character.bind('<ButtonPress-1>', start); character.bind('<B1-Motion>', move)
         def release(event):
+            if getattr(pet,'move_job',None):pet.after_cancel(pet.move_job);pet.move_job=None
+            if hasattr(pet,'pending_position'):flush_move()
+            character.grab_release()
+            if player is not None:player.pause(self.animation_paused)
             if hasattr(pet,'drag_start') and abs(event.x_root-pet.drag_start[0])+abs(event.y_root-pet.drag_start[1])<8:
                 self.animate_character('wave')
+            if hasattr(pet,'drag'):del pet.drag
         character.bind('<ButtonRelease-1>',release)
+        def cleanup_move(event):
+            if event.widget is pet and getattr(pet,'move_job',None):
+                pet.after_cancel(pet.move_job);pet.move_job=None
+        pet.bind('<Destroy>',cleanup_move,add='+')
 
     def switch_space(self):
         self.mode = 'personal' if self.mode == 'demo' else 'demo'

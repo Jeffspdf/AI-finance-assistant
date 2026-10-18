@@ -17,10 +17,18 @@ def load_frames(path, size):
                        for col in range(4)] for row,state in enumerate(STATES)}
 
 
+def opaque_frame(image,background):
+    # Tk's color-key window uses a separate compositor. Always repaint every
+    # pixel, including the old pose's silhouette, rather than blend over it.
+    canvas=Image.new('RGB',image.size,background)
+    canvas.paste(image,mask=image.getchannel('A'))
+    return canvas
+
+
 class SpritePlayer:
     def __init__(self,label,path,size):
         self.label=label
-        self.frames={k:[ImageTk.PhotoImage(im,master=label) for im in v] for k,v in load_frames(path,size).items()}
+        self.frames={k:[ImageTk.PhotoImage(opaque_frame(im,label.cget('bg')),master=label) for im in v] for k,v in load_frames(path,size).items()}
         self.state='idle';self.index=0;self.job=None;self.paused=False;self.closed=False
         label.bind('<Destroy>',self._destroy,add='+')
         self.play('idle')

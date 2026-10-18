@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-APP_VERSION = '0.4.2'
+APP_VERSION = '0.5.0'
 REPO = 'Jeffspdf/AI-finance-assistant'
 RELEASES_URL = f'https://github.com/{REPO}/releases/latest'
 API_URL = f'https://api.github.com/repos/{REPO}/releases/latest'

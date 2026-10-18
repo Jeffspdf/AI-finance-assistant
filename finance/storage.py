@@ -70,3 +70,28 @@ class Store:
     def goals(self):
         with self.connect() as db:
             return pd.read_sql_query('SELECT * FROM goals ORDER BY id DESC', db)
+
+    def edit_transaction(self, txid, values):
+        from .categories import CATEGORIES
+        from datetime import datetime
+        import json
+        parsed=datetime.fromisoformat(values['date'])
+        if not 2000<=parsed.year<=2100 or parsed.tzinfo:raise ValueError('日期须为 2000 至 2100 年本地时间')
+        if values['kind'] not in ('收入','支出','转账') or values['category'] not in CATEGORIES:raise ValueError('无效类型或分类')
+        if not isinstance(values['amount_cents'],int) or not 0<values['amount_cents']<=10**12:raise ValueError('金额须大于零且在范围内')
+        if not (values['merchant'].strip() or values['description'].strip()):raise ValueError('商户或描述至少填一项')
+        with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS transaction_edits(id INTEGER PRIMARY KEY,transaction_id TEXT,old_values TEXT,changed_at TEXT DEFAULT CURRENT_TIMESTAMP)')
+            old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
+            if old is None:raise ValueError('记录不存在')
+            db.execute('INSERT INTO transaction_edits(transaction_id,old_values) VALUES (?,?)',(txid,json.dumps(dict(old),ensure_ascii=False)))
+            fields=['date','merchant','description','amount_cents','kind','category']
+            db.execute('UPDATE transactions SET '+','.join(k+'=?' for k in fields)+',category_source=? WHERE id=?',[values[k] for k in fields]+['用户修正',txid])
+
+    def update_goal(self, goal_id, plan):
+        fields=['name','target_cents','saved_cents','start_date','deadline','income_cents','budget_cents']
+        with self.connect() as db:
+            db.execute('UPDATE goals SET '+','.join(k+'=?' for k in fields)+' WHERE id=?',[plan[k] for k in fields]+[goal_id])
+
+    def delete_goal(self, goal_id):
+        with self.connect() as db:db.execute('DELETE FROM goals WHERE id=?',(goal_id,))

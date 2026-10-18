@@ -8,13 +8,30 @@ TIMELINES = {'idle': [(0,2100),(1,100),(2,120),(3,150)],
              'thinking': [(0,380),(1,380),(2,380),(3,380)],
              'success': [(0,240),(1,240),(2,400),(3,300)]*2}
 
+# The generated atlas has uneven horizontal spacing. These measured bounds
+# isolate complete poses; equal quarter-width slices cut hands into neighbours.
+POSE_BOUNDS = (
+    ((136,4,372,256),(470,3,710,256),(808,3,1049,256),(1147,3,1387,256)),
+    ((127,0,407,256),(468,0,717,256),(802,0,1119,256),(1144,0,1459,256)),
+    ((132,0,384,256),(470,0,733,256),(810,0,1063,256),(1146,0,1394,256)),
+    ((128,0,419,256),(470,0,751,256),(806,0,1072,256),(1144,0,1425,256)),
+)
+HEAD_ANCHORS = (256,596,936,1276)
+
 
 def load_frames(path, size):
     with Image.open(path) as sheet:
         sheet=sheet.convert('RGBA')
-        w,h=sheet.size
-        return {state:[sheet.crop((col*w//4,row*h//4,(col+1)*w//4,(row+1)*h//4)).resize(size,Image.Resampling.LANCZOS)
-                       for col in range(4)] for row,state in enumerate(STATES)}
+        if sheet.size != (1536,1024): raise ValueError('动画图集尺寸与逐帧裁切配置不匹配')
+        result={}
+        for row,state in enumerate(STATES):
+            result[state]=[]
+            for col,(left,top,right,bottom) in enumerate(POSE_BOUNDS[row]):
+                pose=sheet.crop((left,row*256+top,right,row*256+bottom))
+                canvas=Image.new('RGBA',(384,256),(0,0,0,0))
+                canvas.paste(pose,(left-HEAD_ANCHORS[col]+192,top))
+                result[state].append(canvas.resize(size,Image.Resampling.LANCZOS))
+        return result
 
 
 def opaque_frame(image,background):

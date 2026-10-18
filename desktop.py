@@ -17,6 +17,8 @@ from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
 from finance.categories import CATEGORIES
 from finance.updates import APP_VERSION, RELEASES_URL, check_latest
+from finance.llm import ModelClient
+import json
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
@@ -43,6 +45,13 @@ class Desktop(tk.Tk):
         style.configure('TEntry', padding=7, fieldbackground='white', bordercolor='#dce7e2')
         style.configure('TCombobox', padding=6)
         self.mode = 'demo'
+        self.model_client = None
+        self.model_key = ''
+        self.model_settings = {}
+        try:
+            self.model_settings = json.loads((DATA_DIR / 'model-settings.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError): pass
+        self.ask_generation = 0
         self.store = Store(DATA_DIR / 'demo.sqlite3')
         if self.store.transactions().empty:
             self.store.import_rows(parse_statement(demo_bytes(), 'desktop_demo.csv').rows)
@@ -57,6 +66,7 @@ class Desktop(tk.Tk):
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=18, pady=14)
         self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=8)
         self.space_label.pack()
+        tk.Button(spaces, text='模型设置 / 自定义 API', command=self.show_model_settings, relief='flat', bg='#edf5f1', fg=GREEN, pady=6).pack(fill='x', pady=(0,4))
         tk.Button(spaces, text='切换演示 / 个人空间', command=self.switch_space, relief='flat', bg='#edf5f1', fg=GREEN, pady=8).pack(fill='x')
         links = tk.Frame(spaces, bg='white'); links.pack(fill='x', pady=3)
         tk.Button(links, text='数据文件夹', command=lambda: os.startfile(str(DATA_DIR)), relief='flat', bg='white', fg=MUTED, pady=7).pack(side='left')
@@ -86,6 +96,56 @@ class Desktop(tk.Tk):
         self.main.pack(side='left', fill='both', expand=True, padx=30, pady=24)
         self.page = 'home'
         self.show('home')
+
+    def show_model_settings(self):
+        window = tk.Toplevel(self); window.title('模型设置 · 自定义 API'); window.geometry('650x610'); window.configure(bg=BG)
+        box = tk.Frame(window, bg=BG, padx=24, pady=18); box.pack(fill='both', expand=True)
+        self.label(box, '连接你自己的大模型', 20, bold=True)
+        self.label(box, '支持兼容 Chat Completions 的接口。Base URL 填到 /v1 等根路径。', 10, MUTED)
+        fields = {}
+        for label, key, default in [('Base URL', 'base_url', 'https://api.deepseek.com'), ('模型名称 / Model ID', 'model', ''), ('API Key（仅本次运行有效）', 'api_key', self.model_key)]:
+            self.label(box, label, 10)
+            entry = ttk.Entry(box, show='•' if key == 'api_key' else '', width=65)
+            entry.insert(0, default if key == 'api_key' else self.model_settings.get(key, default)); entry.pack(fill='x', pady=(0,8)); fields[key] = entry
+        enabled = tk.BooleanVar(value=self.model_client is not None)
+        tk.Checkbutton(box, text='启用模型，并允许向该接口发送我输入的问题文本', variable=enabled, bg=BG, fg=INK).pack(anchor='w', pady=8)
+        self.label(box, '仅发送问题文本用于理解查询意图，不发送完整账单。\n金额由代码计算，回答保留源记录。测试连接可能产生少量 API 费用。\n密钥不写入配置文件，关闭应用后需重新填写并启用。', 10, MUTED)
+        status = self.label(box, '填写配置后，可先测试连接。', 10, GREEN); status.config(wraplength=580)
+        def client():
+            base=fields['base_url'].get().strip()
+            if base.endswith('/chat/completions'): raise ValueError('请填写 Base URL，不要包含 /chat/completions')
+            return ModelClient(base, fields['model'].get().strip(), fields['api_key'].get().strip(), enabled=True)
+        def save():
+            try:
+                model = client() if enabled.get() else None
+                self.model_settings = {'base_url': fields['base_url'].get().strip(), 'model': fields['model'].get().strip()}
+                (DATA_DIR/'model-settings.json').write_text(json.dumps(self.model_settings),encoding='utf-8')
+                self.model_key = fields['api_key'].get().strip()
+                self.model_client = model
+                self.show(self.page); window.destroy()
+            except Exception as exc: status.config(text=str(exc))
+        mailbox=queue.Queue()
+        def test():
+            try: model=client()
+            except Exception as exc: status.config(text=str(exc)); return
+            test_button.config(state='disabled'); status.config(text='正在测试连接…')
+            def worker():
+                try: model.test_connection(); mailbox.put('连接成功，模型返回有效结果。保存并启用后生效。')
+                except Exception as exc:
+                    from urllib.error import HTTPError
+                    if isinstance(exc, HTTPError): mailbox.put(f'连接失败：HTTP {exc.code}。请检查密钥、模型名、额度及接口地址。')
+                    else: mailbox.put('连接失败：网络超时、地址不可达或返回格式不兼容。')
+            threading.Thread(target=worker,daemon=True).start(); window.poll=window.after(100,poll)
+        def poll():
+            try: text=mailbox.get_nowait()
+            except queue.Empty: window.poll=window.after(100,poll); return
+            status.config(text=text); test_button.config(state='normal')
+        buttons=tk.Frame(box,bg=BG); buttons.pack(fill='x',pady=8)
+        test_button=self.button(buttons,'测试连接',test)
+        self.button(buttons,'保存设置',save)
+        def cleanup(event):
+            if event.widget is window and hasattr(window,'poll'): window.after_cancel(window.poll)
+        window.bind('<Destroy>',cleanup)
 
     def show_updates(self):
         if self.update_window is not None and self.update_window.winfo_exists():
@@ -197,6 +257,7 @@ class Desktop(tk.Tk):
         return b
 
     def show(self, page):
+        self.ask_generation += 1
         self.page = page
         for key, button in self.nav.items():
             button.config(bg='#e7f3ec' if key == page else 'white', fg=GREEN if key == page else MUTED)
@@ -208,7 +269,10 @@ class Desktop(tk.Tk):
         self.frame = self.store.transactions()
         titles = {'home': ('把生活记好，把小目标存好。', '财务概览  /  每一笔记录，都让计划更清楚一点。'), 'records': ('好好记账，心里有数。', '交易账本  /  导入、核对与修正，每笔都有来源。'), 'plan': ('给下一个愿望，留点预算。', '储蓄规划  /  试试不同的预算，找到舒服的节奏。'), 'assistant': ('关于钱的小疑问，一起理清。', '本地规则模式  /  回答来自已导入账单，不向外发送数据。')}
         self.label(self.main, titles[page][0], 25, bold=True)
-        self.label(self.main, titles[page][1], 10, MUTED)
+        subtitle = '问题文本发送至你配置的接口；账单查询与金额由本机代码处理。' if page == 'assistant' and self.model_client else titles[page][1]
+        self.label(self.main, subtitle, 10, MUTED)
+        if page == 'assistant':
+            self.label(self.main, f'当前：大模型理解（{self.model_client.model}）+ 代码计算' if self.model_client else '当前：本地规则模式 · 可在左下角配置模型', 10, GREEN)
         getattr(self, page)()
 
     def table(self, parent, columns, rows, height=9):
@@ -354,7 +418,37 @@ class Desktop(tk.Tk):
     def ask(self, question=None):
         q = question if isinstance(question, str) else self.question.get()
         self.question.delete(0, 'end'); self.question.insert(0, q)
+        if self.model_client:
+            generation = self.ask_generation = self.ask_generation + 1
+            frame=self.frame.copy(); model=self.model_client
+            self.answer.config(text='正在理解问题并核对记录…')
+            mailbox=queue.Queue()
+            class IntentAdapter:
+                def parse_question(self, text): return model.parse_question(text)
+            def worker():
+                try:
+                    # Model is only used for phrasing outside the deterministic parser.
+                    from finance.qa import parse_question, validate_model_intent
+                    if parse_question(q) is not None:
+                        intent=model.parse_question(q)
+                        if validate_model_intent(q,intent) is None: raise ValueError('unsupported')
+                        result=answer_question(frame,q)
+                        result['parser']='模型理解 + 代码核对'
+                    else: result=answer_question(frame,q,model=IntentAdapter())
+                    mailbox.put(result)
+                except Exception:
+                    result=answer_question(frame,q); result['parser']='模型不可用，回退本地规则'; mailbox.put(result)
+            def poll():
+                if generation != self.ask_generation or self.page != 'assistant': return
+                try: result=mailbox.get_nowait()
+                except queue.Empty: self.after(100,poll); return
+                self.render_answer(result)
+            threading.Thread(target=worker,daemon=True).start(); self.after(100,poll)
+            return
         result = answer_question(self.frame, q)
+        self.render_answer(result)
+
+    def render_answer(self, result):
         self.answer.config(text=result['answer'])
         for child in self.evidence_box.winfo_children(): child.destroy()
         self.label(self.evidence_box, f"来源依据 · {len(result['evidence'])} 笔 · {result['parser']}", 10, MUTED)

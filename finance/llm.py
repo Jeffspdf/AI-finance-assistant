@@ -11,13 +11,18 @@ class ModelClient:
     def __init__(self, base_url, model, api_key='', enabled=False):
         if not enabled: raise ValueError('模型未获启用')
         parsed=urlparse(base_url)
-        if parsed.scheme not in ['http','https'] or not parsed.hostname or parsed.username or parsed.password:
+        if parsed.scheme not in ['http','https'] or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError('请输入有效的模型 API 地址')
         if parsed.scheme=='http' and parsed.hostname not in ['localhost','127.0.0.1','::1']:
             raise ValueError('远程模型 API 必须使用 HTTPS')
         if not model.strip(): raise ValueError('请填写模型名称')
         self.endpoint=base_url.rstrip('/')+'/chat/completions'
         self.model=model; self.api_key=api_key
+
+    def test_connection(self):
+        result = self._json('Connection test. Return exactly {"ok":true}.', {'test': True})
+        if result.get('ok') is not True: raise ValueError('接口已响应，但未返回有效测试结果')
+        return True
 
     def _json(self, instruction, data):
         payload={'model':self.model,'temperature':0,'messages':[

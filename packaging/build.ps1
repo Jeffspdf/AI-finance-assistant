@@ -1,4 +1,4 @@
-param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.2.3')
+param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.3.0')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Build step failed: $LASTEXITCODE" } }

@@ -2,7 +2,7 @@
 
 ## Windows 桌面版（新增）
 
-普通用户请从 [GitHub Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.2.3-Setup-x64.exe`，安装后通过桌面快捷方式或开始菜单启动，无需安装 Python。本地安装包位于 `release/`。不要把 GitHub 的 Download ZIP 源码包当作安装包。
+普通用户请从 [GitHub Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.3.0-Setup-x64.exe`，安装后通过桌面快捷方式或开始菜单启动，无需安装 Python。本地安装包位于 `release/`。不要把 GitHub 的 Download ZIP 源码包当作安装包。
 
 桌面版支持独立演示/个人空间；数据位于 `%LOCALAPPDATA%\ShiguangLedger`，安装更新与卸载默认保留数据。当前助手为本地规则模式。Windows x64，尚未签名。
 
@@ -99,3 +99,7 @@ https://docs.streamlit.io/develop/concepts/design/dataframes
 https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state
 
 桌面版侧栏底部新增“关于与更新”：手动后台检查 GitHub 正式版，显示当前版本和更新说明，新版安装包通过浏览器下载，退出应用后覆盖安装。不在启动时自动联网，不自动安装。
+
+## 桌面自定义模型
+
+左下角“模型设置 / 自定义 API”。填写服务商提供的 Base URL（不含 /chat/completions）、模型 ID、Key，测试连接后勾选启用及问题发送许可并保存。仅 Base URL/模型名持久化，密钥只在本次进程保留。重启需重新填写密钥并启用。本地接口允许 localhost HTTP，远程要求 HTTPS。模型参与受限账单查询意图理解，金额由代码计算；连接异常回退本地规则。

@@ -48,10 +48,10 @@ def test_network_success_and_failure():
 
 def test_rate_limit_fallback_and_untrusted_redirect():
     response=MagicMock()
-    response.__enter__.return_value.geturl.return_value=f'https://github.com/{REPO}/releases/tag/v0.3.0'
+    response.__enter__.return_value.geturl.return_value=f'https://github.com/{REPO}/releases/tag/v0.4.0'
     with patch('finance.updates.urlopen',side_effect=[HTTPError('',403,'rate limit',{},None),response]):
         result=check_latest()
-        assert result['version']=='0.3.0' and result['newer']
+        assert result['version']=='0.4.0' and result['newer']
         assert result['installer_url'] is None
     response.__enter__.return_value.geturl.return_value='https://evil.example/releases/tag/v9.0.0'
     with patch('finance.updates.urlopen',side_effect=[HTTPError('',429,'rate limit',{},None),response]):

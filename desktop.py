@@ -19,6 +19,7 @@ from finance.categories import CATEGORIES
 from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer
 from finance.llm import ModelClient
 import json
+from finance.animation import SpritePlayer
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
@@ -52,19 +53,21 @@ class Desktop(tk.Tk):
             self.model_settings = json.loads((DATA_DIR / 'model-settings.json').read_text(encoding='utf-8'))
         except (OSError, ValueError): pass
         self.ask_generation = 0
+        self.animators=[]
+        self.animation_paused=False
         self.store = Store(DATA_DIR / 'demo.sqlite3')
         if self.store.transactions().empty:
             self.store.import_rows(parse_statement(demo_bytes(), 'desktop_demo.csv').rows)
         side = tk.Frame(self, bg='white', width=238)
         side.pack(side='left', fill='y'); side.pack_propagate(False)
-        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 19, 'bold')).pack(anchor='w', padx=22, pady=(30, 5))
-        tk.Label(side, text='FINANCE, WITH A LITTLE JOY', bg='white', fg=MUTED, font=('Segoe UI', 8)).pack(anchor='w', padx=24, pady=(0, 30))
+        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 19, 'bold')).pack(anchor='w', padx=22, pady=(18, 5))
+        tk.Label(side, text='FINANCE, WITH A LITTLE JOY', bg='white', fg=MUTED, font=('Segoe UI', 8)).pack(anchor='w', padx=24, pady=(0, 12))
         self.nav = {}
         for label, page in [('01    财务概览', 'home'), ('02    交易账本', 'records'), ('03    储蓄规划', 'plan'), ('04    问问助手', 'assistant')]:
-            b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=0, padx=20, pady=13, cursor='hand2')
-            b.pack(fill='x', padx=14, pady=3); self.nav[page] = b
-        spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=18, pady=14)
-        self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=8)
+            b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=0, padx=20, pady=7, cursor='hand2')
+            b.pack(fill='x', padx=14, pady=1); self.nav[page] = b
+        spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=18, pady=6)
+        self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=3)
         self.space_label.pack()
         tk.Button(spaces, text='模型设置 / 自定义 API', command=self.show_model_settings, relief='flat', bg='#edf5f1', fg=GREEN, pady=6).pack(fill='x', pady=(0,4))
         tk.Button(spaces, text='切换演示 / 个人空间', command=self.switch_space, relief='flat', bg='#edf5f1', fg=GREEN, pady=8).pack(fill='x')
@@ -72,16 +75,21 @@ class Desktop(tk.Tk):
         tk.Button(links, text='数据文件夹', command=lambda: os.startfile(str(DATA_DIR)), relief='flat', bg='white', fg=MUTED, pady=7).pack(side='left')
         tk.Button(links, text='关于与更新', command=self.show_updates, relief='flat', bg='white', fg=GREEN, pady=7).pack(side='right')
         self.update_window = None
-        self.guide = tk.Frame(side, bg='#f3f9f5', padx=12, pady=12)
+        self.guide = tk.Frame(side, bg='#f3f9f5', padx=12, pady=6)
         self.guide.pack(side='bottom', fill='x', padx=16, pady=8)
         self.mascot_photo = None
         asset = ROOT / 'assets' / 'campus_heroine.png'
         if asset.exists():
             image = Image.open(asset).convert('RGBA'); image.thumbnail((170, 290), Image.Resampling.LANCZOS)
             self.mascot_photo = ImageTk.PhotoImage(image)
-            portrait = tk.Frame(self.guide, bg='#f3f9f5', height=125)
+            portrait = tk.Frame(self.guide, bg='#f3f9f5', height=100)
             portrait.pack(fill='x'); portrait.pack_propagate(False)
-            tk.Label(portrait, image=self.mascot_photo, bg='#f3f9f5').place(relx=.5, y=0, anchor='n')
+            portrait_label=tk.Label(portrait, image=self.mascot_photo, bg='#f3f9f5',cursor='hand2')
+            portrait_label.place(relx=.5, y=0, anchor='n')
+            sheet=ROOT/'assets'/'campus_animation.png'
+            if sheet.exists():
+                player=SpritePlayer(portrait_label,sheet,(150,100));self.animators.append(player)
+                portrait_label.bind('<Button-1>',lambda _:self.animate_character('wave'))
         tk.Label(self.guide, text='小财灵 · 校园理财搭子', bg='#f3f9f5', fg=GREEN, font=('Microsoft YaHei UI', 10, 'bold')).pack(pady=(4, 5))
         self.tip = tk.Label(self.guide, text='', bg='#f3f9f5', fg=MUTED, wraplength=180, height=3, justify='left', font=('Microsoft YaHei UI', 9))
         self.tip.pack(fill='x')
@@ -91,11 +99,23 @@ class Desktop(tk.Tk):
         self.guide_toggle = tk.Button(controls, text='收起向导', command=self.toggle_guide, bg='white', fg=MUTED, relief='flat')
         self.guide_toggle.pack(side='left')
         tk.Button(controls, text='桌面小助手 ↗', command=self.show_pet, bg='white', fg=GREEN, relief='flat').pack(side='right')
+        self.motion_button=tk.Button(spaces,text='暂停角色动画',command=self.toggle_animation,bg='white',fg=MUTED,relief='flat')
+        self.motion_button.pack(fill='x')
         self.pet = None
         self.main = tk.Frame(self, bg=BG)
         self.main.pack(side='left', fill='both', expand=True, padx=30, pady=24)
         self.page = 'home'
         self.show('home')
+
+    def animate_character(self,state):
+        self.animators=[p for p in self.animators if not p.closed]
+        for player in self.animators: player.play(state)
+
+    def toggle_animation(self):
+        self.animation_paused=not self.animation_paused
+        for player in self.animators:
+            if not player.closed:player.pause(self.animation_paused)
+        self.motion_button.config(text='恢复角色动画' if self.animation_paused else '暂停角色动画')
 
     def show_model_settings(self):
         window = tk.Toplevel(self); window.title('模型设置 · 自定义 API'); window.geometry('650x610'); window.configure(bg=BG)
@@ -268,22 +288,23 @@ class Desktop(tk.Tk):
         picture = Image.open(asset).convert('RGBA'); picture.thumbnail((190, 285), Image.Resampling.LANCZOS)
         pet.photo = ImageTk.PhotoImage(picture)
         character = tk.Label(pet, image=pet.photo, bg=transparent, cursor='fleur'); character.place(relx=.5, y=65, anchor='n')
+        sheet=ROOT/'assets'/'campus_animation.png'
+        if sheet.exists():
+            player=SpritePlayer(character,sheet,(240,160));self.animators.append(player);player.pause(self.animation_paused)
+            pet.geometry(f'260x285+{max(0,self.winfo_screenwidth()-300)}+{max(0,self.winfo_screenheight()-360)}')
         tk.Label(pet, text='小财灵：聪明花，慢慢攒！\n拖动角色移动位置', bg='#e7f3ec', fg=GREEN, padx=12, pady=9, font=('Microsoft YaHei UI', 10)).place(relx=.5, y=8, anchor='n')
         tk.Button(pet, text='×', command=pet.destroy, relief='flat', bg='#e7f3ec', fg=MUTED).place(x=218, y=0)
-        tk.Button(pet, text='打开小助手', command=lambda: (self.deiconify(), self.lift()), relief='flat', bg='#e7f3ec', fg=GREEN, padx=16, pady=6).place(relx=.5, y=358, anchor='n')
-        def start(event): pet.drag = (event.x_root-pet.winfo_x(), event.y_root-pet.winfo_y())
+        tk.Button(pet, text='打开小助手', command=lambda: (self.deiconify(), self.lift()), relief='flat', bg='#e7f3ec', fg=GREEN, padx=16, pady=6).place(relx=.5, y=240 if sheet.exists() else 358, anchor='n')
+        def start(event):
+            pet.drag = (event.x_root-pet.winfo_x(), event.y_root-pet.winfo_y())
+            pet.drag_start=(event.x_root,event.y_root)
         def move(event):
             if hasattr(pet, 'drag'): pet.geometry(f'+{max(0,event.x_root-pet.drag[0])}+{max(0,event.y_root-pet.drag[1])}')
         character.bind('<ButtonPress-1>', start); character.bind('<B1-Motion>', move)
-        import math
-        def animate(tick=0):
-            if not pet.winfo_exists(): return
-            character.place_configure(y=66+int(3*math.sin(tick/10)))
-            pet.animation = pet.after(80, lambda: animate(tick+1))
-        def cleanup(event):
-            if event.widget is pet and hasattr(pet, 'animation'):
-                pet.after_cancel(pet.animation)
-        pet.bind('<Destroy>', cleanup); animate()
+        def release(event):
+            if hasattr(pet,'drag_start') and abs(event.x_root-pet.drag_start[0])+abs(event.y_root-pet.drag_start[1])<8:
+                self.animate_character('wave')
+        character.bind('<ButtonRelease-1>',release)
 
     def switch_space(self):
         self.mode = 'personal' if self.mode == 'demo' else 'demo'
@@ -302,6 +323,7 @@ class Desktop(tk.Tk):
         return b
 
     def show(self, page):
+        self.animate_character('idle')
         self.ask_generation += 1
         self.page = page
         for key, button in self.nav.items():
@@ -398,6 +420,7 @@ class Desktop(tk.Tk):
             added, duplicate, conflicts = self.store.import_rows(result.rows)
             messagebox.showinfo('导入结果', f'新增 {added} 笔，重复 {duplicate} 笔，冲突 {len(conflicts)} 笔。\n'+'\n'.join(str(x) for x in conflicts[:5]))
             self.show('records')
+            self.animate_character('success')
         except Exception as exc: messagebox.showerror('导入失败', str(exc))
 
     def plan(self):
@@ -446,6 +469,7 @@ class Desktop(tk.Tk):
         (target, saved, income, a, b), deadline = self.plan_values()
         self.store.save_goal(dict(name='桌面储蓄计划 B', target_cents=target, saved_cents=saved, start_date=date.today().isoformat(), deadline=deadline, income_cents=income, budget_cents=b))
         messagebox.showinfo('计划已保存', '方案 B 已保存至当前空间的数据库。')
+        self.animate_character('success')
 
     def assistant(self):
         self.label(self.main, '有依据的回答，从一个好问题开始。', 16, bold=True)
@@ -464,6 +488,7 @@ class Desktop(tk.Tk):
         q = question if isinstance(question, str) else self.question.get()
         self.question.delete(0, 'end'); self.question.insert(0, q)
         if self.model_client:
+            self.animate_character('thinking')
             generation = self.ask_generation = self.ask_generation + 1
             frame=self.frame.copy(); model=self.model_client
             self.answer.config(text='正在理解问题并核对记录…')
@@ -494,6 +519,7 @@ class Desktop(tk.Tk):
         self.render_answer(result)
 
     def render_answer(self, result):
+        self.animate_character('success' if result.get('status')=='ok' else 'idle')
         self.answer.config(text=result['answer'])
         for child in self.evidence_box.winfo_children(): child.destroy()
         self.label(self.evidence_box, f"来源依据 · {len(result['evidence'])} 笔 · {result['parser']}", 10, MUTED)

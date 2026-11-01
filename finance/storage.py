@@ -21,7 +21,8 @@ class Store:
               CREATE INDEX IF NOT EXISTS idx_date ON transactions(date);
               CREATE TABLE IF NOT EXISTS goal_contributions(id INTEGER PRIMARY KEY AUTOINCREMENT,goal_id INTEGER NOT NULL,date TEXT NOT NULL,amount_cents INTEGER NOT NULL CHECK(amount_cents>0),created_at TEXT DEFAULT CURRENT_TIMESTAMP);
               CREATE INDEX IF NOT EXISTS idx_contribution_goal ON goal_contributions(goal_id);
-              PRAGMA user_version=2;
+              CREATE TABLE IF NOT EXISTS merchant_rules(merchant TEXT NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(merchant,kind));
+              PRAGMA user_version=3;
             ''')
 
     @contextmanager
@@ -40,8 +41,10 @@ class Store:
         added, duplicates, conflicts = 0, 0, []
         with self.connect() as db:
             existing={r['signature']:dict(r) for r in db.execute('SELECT * FROM transactions')}
+            learned={(r['merchant'],r['kind']):r['category'] for r in db.execute('SELECT * FROM merchant_rules')}
             pending=[]
             for row in rows:
+                row=dict(row)
                 old=existing.get(row['signature'])
                 if old:
                     if any(old[k] != row[k] for k in ['date','amount_cents','kind','merchant','description']):
@@ -49,6 +52,8 @@ class Store:
                     else:
                         duplicates += 1
                     continue
+                learned_category=learned.get((row['merchant'].strip(),row['kind']))
+                if learned_category and row['category_source']!='用户修正':row.update(category=learned_category,category_source='商户学习')
                 pending.append(row);existing[row['signature']]=row
                 added += 1
             if pending:
@@ -56,13 +61,16 @@ class Store:
                 db.executemany(f"INSERT INTO transactions ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})",[[row[k] for k in keys] for row in pending])
         return added, duplicates, conflicts
 
-    def correct_categories(self, corrections):
+    def correct_categories(self, corrections,learn=False):
         from .categories import CATEGORIES
         with self.connect() as db:
             for txid, category in corrections:
                 if category not in CATEGORIES:
                     raise ValueError('无效分类')
                 db.execute('UPDATE transactions SET category=?, category_source=? WHERE id=?', (category, '用户修正', txid))
+                if learn:
+                    r=db.execute('SELECT merchant,kind FROM transactions WHERE id=?',(txid,)).fetchone()
+                    if r and r['merchant'].strip():db.execute('INSERT INTO merchant_rules(merchant,kind,category) VALUES (?,?,?) ON CONFLICT(merchant,kind) DO UPDATE SET category=excluded.category,updated_at=CURRENT_TIMESTAMP',(r['merchant'].strip(),r['kind'],category))
 
     def save_budget(self, month, category, cents):
         if cents < 0: raise ValueError('预算不能为负数')
@@ -135,3 +143,55 @@ class Store:
             if category not in permitted:raise ValueError('模型分类与收支类型冲突')
             db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=?',(category,'模型建议（需核对）',txid))
             return True
+
+    def add_manual_transaction(self,when,merchant,amount_cents,kind,category,description=''):
+        from .importer import parse_statement
+        from .categories import CATEGORIES
+        import csv,io,uuid
+        if not isinstance(amount_cents,int) or amount_cents<=0:raise ValueError('金额必须大于零')
+        if category not in CATEGORIES:raise ValueError('无效分类')
+        if kind=='转账' and category!='转账':raise ValueError('转账须使用转账分类')
+        external='MANUAL-'+uuid.uuid4().hex
+        stream=io.StringIO();writer=csv.writer(stream);writer.writerow(['交易ID','日期','商户','描述','金额','类型','平台','币种'])
+        writer.writerow([external,when,merchant,description,f'{amount_cents//100}.{amount_cents%100:02d}',kind,'手动','CNY'])
+        result=parse_statement(stream.getvalue().encode('utf-8-sig'),'manual.csv')
+        if not result.rows:raise ValueError(result.issues[0]['原因'] if result.issues else '无效交易')
+        row=result.rows[0];row.update(category=category,category_source='用户修正',source_file='手动记账')
+        self.import_rows([row]);return row['id']
+
+    def merchant_rules(self):
+        with self.connect() as db:return pd.read_sql_query('SELECT * FROM merchant_rules ORDER BY merchant,kind',db)
+
+    def delete_merchant_rule(self,merchant,kind):
+        with self.connect() as db:db.execute('DELETE FROM merchant_rules WHERE merchant=? AND kind=?',(merchant,kind))
+
+    def batch_category(self,ids,category):
+        from .categories import CATEGORIES
+        import json
+        if category not in CATEGORIES:raise ValueError('无效分类')
+        snapshot=[]
+        with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS transaction_edits(id INTEGER PRIMARY KEY,transaction_id TEXT,old_values TEXT,changed_at TEXT DEFAULT CURRENT_TIMESTAMP)')
+            for txid in dict.fromkeys(ids):
+                old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
+                if old is None:continue
+                snapshot.append(dict(id=txid,category=old['category'],source=old['category_source'],new=category))
+                db.execute('INSERT INTO transaction_edits(transaction_id,old_values) VALUES (?,?)',(txid,json.dumps(dict(old),ensure_ascii=False)))
+                db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=?',(category,'用户修正',txid))
+        return snapshot
+
+    def undo_category_batch(self,snapshot):
+        count=0
+        with self.connect() as db:
+            for row in snapshot:
+                count+=db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=? AND category=? AND category_source=?',(row['category'],row['source'],row['id'],row['new'],'用户修正')).rowcount
+        return count
+
+    def copy_budgets(self,source,target,overwrite=False):
+        import re
+        if any(not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])',m) for m in [source,target]):raise ValueError('无效月份')
+        with self.connect() as db:
+            rows=db.execute('SELECT category,amount_cents FROM budgets WHERE month=?',(source,)).fetchall()
+            operation='REPLACE' if overwrite else 'IGNORE'
+            db.executemany(f'INSERT OR {operation} INTO budgets(month,category,amount_cents) VALUES (?,?,?)',[(target,r['category'],r['amount_cents']) for r in rows])
+        return len(rows)

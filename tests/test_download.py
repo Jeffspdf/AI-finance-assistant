@@ -26,3 +26,15 @@ def test_cancel_and_url_rejection(tmp_path):
     with patch('finance.updates.urlopen',return_value=response(b'MZtest')):
         with pytest.raises(InterruptedError): download_installer(URL,tmp_path,cancelled=lambda:True)
     assert not list(tmp_path.glob('*.part'))
+
+def test_hash_mismatch_rejects_file(tmp_path):
+    with patch('finance.updates.urlopen',return_value=response(b'MZtest')):
+        with pytest.raises(ValueError,match='SHA256'):download_installer(URL,tmp_path,expected_sha256='0'*64)
+    assert not list(tmp_path.iterdir())
+
+def test_verify_release_checksum(tmp_path):
+    import hashlib
+    digest=hashlib.sha256(b'MZtest').hexdigest()
+    with patch('finance.updates.published_checksum',return_value=digest) as manifest,patch('finance.updates.urlopen',return_value=response(b'MZtest')):
+        _,actual=download_installer(URL,tmp_path,verify_release=True)
+        assert actual==digest and manifest.called

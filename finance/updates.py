@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-APP_VERSION = '0.5.0'
+APP_VERSION = '0.6.0'
 REPO = 'Jeffspdf/AI-finance-assistant'
 RELEASES_URL = f'https://github.com/{REPO}/releases/latest'
 API_URL = f'https://api.github.com/repos/{REPO}/releases/latest'
@@ -28,14 +28,16 @@ def parse_release(data, current=APP_VERSION):
     page = f'https://github.com/{REPO}/releases/tag/{tag}'
     name = f'AIFinanceHelper-{tag.removeprefix("v")}-Setup-x64.exe'
     expected = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
-    installer = None
+    installer = None;checksum=None
     for asset in data.get('assets', []):
         if asset.get('name') == name and asset.get('browser_download_url') == expected and asset.get('state') == 'uploaded':
             installer = expected
+            digest=asset.get('digest','')
+            if isinstance(digest,str) and re.fullmatch(r'sha256:[0-9a-fA-F]{64}',digest):checksum=digest[7:].lower()
             break
     return dict(version=tag.removeprefix('v'), newer=latest > version_tuple(current),
                 page_url=page, installer_url=installer,
-                notes=str(data.get('body') or '此版本暂无更新说明。')[:16000])
+                notes=str(data.get('body') or '此版本暂无更新说明。')[:16000],sha256=checksum)
 
 
 def check_latest():
@@ -64,10 +66,22 @@ def check_latest():
     return parse_release(json.loads(content))
 
 
-def download_installer(url, directory, progress=lambda received,total: None, cancelled=lambda: False):
+def published_checksum(url):
+    filename=url.rsplit('/',1)[-1]
+    sums_url=url.rsplit('/',1)[0]+'/SHA256SUMS.txt'
+    with urlopen(Request(sums_url,headers={'User-Agent':'AIFinanceHelper/'+APP_VERSION}),timeout=15) as response:content=response.read(65537)
+    if len(content)>65536:raise ValueError('校验清单异常')
+    for line in content.decode('utf-8-sig').splitlines():
+        parts=line.split()
+        if len(parts)==2 and parts[1].lstrip('*')==filename and re.fullmatch(r'[0-9a-fA-F]{64}',parts[0]):return parts[0].lower()
+    raise ValueError('官方发布缺少对应文件 SHA256，请查看发布页')
+
+def download_installer(url, directory, progress=lambda received,total: None, cancelled=lambda: False, expected_sha256=None, verify_release=False):
     """Download to a partial file; expose the EXE only after a complete response."""
     match = re.fullmatch(r'https://github\.com/' + re.escape(REPO) + r'/releases/download/(v?(\d+\.\d+\.\d+))/AIFinanceHelper-\2-Setup-x64\.exe', url)
     if not match: raise ValueError('只允许下载本项目的官方安装包')
+    if verify_release and not expected_sha256:expected_sha256=published_checksum(url)
+    if expected_sha256 is not None and not re.fullmatch(r'[0-9a-fA-F]{64}',expected_sha256):raise ValueError('无效校验值')
     directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
     target = directory / url.rsplit('/',1)[-1]
     partial = target.with_suffix('.exe.part')
@@ -88,6 +102,7 @@ def download_installer(url, directory, progress=lambda received,total: None, can
         with partial.open('rb') as stream:
             if stream.read(2) != b'MZ': raise ValueError('服务器未返回 Windows 安装包')
         if cancelled(): raise InterruptedError('下载已取消')
+        if expected_sha256 and digest.hexdigest()!=expected_sha256.lower():raise ValueError('SHA256 不匹配，安装包已拒绝保存')
         os.replace(partial,target)
         return str(target), digest.hexdigest()
     finally:

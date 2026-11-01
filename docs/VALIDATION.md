@@ -27,3 +27,8 @@ Tests do not establish genuine-model accuracy, arbitrary-bank compatibility, a 5
 
 The v0.6.0 packaged EXE passed --self-test with isolated data. The first GitHub review test workflow completed successfully: https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41282130254 . This run covered the review implementation before the final extra legacy-database test; the local final suite includes that extra test (86 passed). A later evidence-only commit starts a new remote run whose status must be checked separately.
 
+
+## Second-round validation — v0.7.0
+
+Local complete regression: **89 passed**. `scripts/verify_round2_ui.py` passed at 1024x680, including stable sort/edit identity, multi-row undo, quick entry, session chat/clarification, budget command cancel/confirm, async import cancel-without-write and confirmed commit. Screenshots in this directory now show v0.7 synthetic test data and compact visuals. Windows DPI awareness is enabled, but actual 125%/150% OS scale settings are still not certified. No live model configuration was present; no live-model benchmark was executed. Previous sections record the earlier v0.6 validation chronologically.
+

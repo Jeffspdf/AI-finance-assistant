@@ -3,6 +3,11 @@
 ```mermaid
 flowchart TD
  UI[Tkinter desktop / desktop.py] --> Review[Budget, progress, AI review / desktop_review.py]
+ UI --> Everyday[Quick entry, search, batch, import / desktop_round2.py]
+ UI --> Chat[Session messages and confirmed actions / conversation.py]
+ Everyday --> Insights[Evidence-linked pure functions / insights.py]
+ Everyday --> Store
+ Chat --> QA
  UI --> Import[CSV/XLSX parsing / importer.py]
  UI --> QA[Grounded questions / qa.py]
  Review --> Calc[Integer-cent calculations / analytics.py]
@@ -22,12 +27,13 @@ Import preserves original IDs, filenames and row numbers. Same platform/ID confl
 
 Tkinter replaces the original Streamlit UI for Windows installation without a local web server. Streamlit remains a tested prototype. New desktop functionality is isolated in ReviewFeatures to reduce growth of desktop.py. The feature module is not a network service.
 
-SQLite changes are additive: goal_contributions is created if absent (schema user_version=2). Existing saved_cents remains the initial amount allocated to a goal; contributions are additional user-confirmed deposits. Progress is initial amount plus dated contributions. Planned and actual values are shown separately. Deleting a goal removes its contributions in the same transaction. Database contexts commit or roll back, then explicitly close.
+SQLite changes are additive: goal_contributions is created if absent (schema user_version=3, with exact merchant/kind learning rules). Existing saved_cents remains the initial amount allocated to a goal; contributions are additional user-confirmed deposits. Progress is initial amount plus dated contributions. Planned and actual values are shown separately. Deleting a goal removes its contributions in the same transaction. Database contexts commit or roll back, then explicitly close.
 
 Model settings persist endpoint/model only; keys and enable state are session-only. Question understanding sends question text; classification requires separate confirmation and sends merchant/description/kind, at most 20 rows. Suggestions are not saved until selected for acceptance; conditional updates cannot overwrite rules or manual corrections. Closing a suggestion window cancels subsequent requests, but a request already in flight may continue until timeout.
 
-UI and worker threads communicate through queues and Tk after callbacks. No worker directly updates widgets. Budget/analysis remain offline. AI calls, update checks and downloads are explicit. Large imports still parse on the UI thread (documented limitation); transaction display is paginated to 200 rows, while calculations use the full selected data.
+UI and worker threads communicate through queues and Tk after callbacks. No worker directly updates widgets. Budget/analysis remain offline. AI calls, update checks and downloads are explicit. Imports parse on a background worker and wait for user confirmation before a database transaction. Cancellation discards parse results but does not forcibly interrupt the parser; committing is not cancellable. Transaction display is paginated to 200 rows and scrolls with the main page; calculations use the full selected data.
 
 The Windows product name is AI理财小助手 / AIFinanceHelper. The legacy ShiguangLedger installation/data directory and AppId are intentionally stable for upgrade compatibility. Renaming that private directory without migration could lose access to old data, so it is not cosmetic cleanup.
 
 Release downloads compare SHA256 against GitHub release metadata or the official release checksum manifest. This detects transfer/tampering inconsistencies; it is not code signing and does not defend against a compromised publisher account. No third-party mirrors are used.
+

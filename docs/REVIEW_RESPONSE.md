@@ -24,3 +24,5 @@ Two factual qualifications: the deterministic September food fixture totals RMB 
 The desktop development folder and git publication checkout are retained, not destructively consolidated. The publication checkout is the repository of record; only an explicit source allowlist is synchronized into it. No venv, user databases, credentials or build directories are published. Consolidation into one working copy is a future maintenance step, not a condition for functionality.
 
 Open limitations: no clean-VM verification, no real paid model benchmark, no signed EXE, imports can block the UI for large files, no goal withdrawal tracking, no cloud/bank integration. Source-origin and fake-model tests do not establish real-world accuracy.
+
+Later v0.7 follow-up: asynchronous parsing/cancelled-result discard and error CSV export supersede the import-blocking limitation above. Manual column mapping, row-level exclusion, restore workflow and actual high-DPI machine QA remain deferred. See ROUND2_RESPONSE.md for the current product scope.

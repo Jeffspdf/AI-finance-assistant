@@ -1,4 +1,5 @@
 """Everyday actions and evidence-linked insights for the desktop product."""
+from .ui_scale import px, logical, point_font, set_window_geometry
 from datetime import date
 import re
 import tkinter as tk
@@ -9,7 +10,7 @@ from .insights import make_insights,suggested_budgets
 from .analytics import yuan
 from .qa import month_shift
 from .ui_theme import BG,INK,MUTED,PRIMARY,DANGER
-from .ui_theme import Meter
+from .ui_theme import Meter,scrollable_form
 
 class RoundTwo:
     def round2_init(self):
@@ -22,34 +23,41 @@ class RoundTwo:
         cards=make_insights(frame,self.selected_month,goals,{g['id']:self.store.contributions(g['id']) for g in goals})
         if not cards:return
         self.label(self.main,'本期洞察 · 仅基于已导入记录',12,bold=True)
-        band=tk.Frame(self.main,bg=BG);band.pack(fill='x',pady=(4,14))
+        band=tk.Frame(self.main,bg=BG);band.pack(fill='x',pady=px((4,14)))
+        boxes=[]
         for i,card in enumerate(cards):
-            box=tk.Frame(band,bg='white',padx=14,pady=12,highlightbackground='#e6ece9',highlightthickness=1)
-            box.grid(row=0,column=i,sticky='nsew',padx=(0,8));band.columnconfigure(i,weight=1,uniform='cards')
+            box=tk.Frame(band,bg='white',padx=px(14),pady=px(12),highlightbackground='#e6ece9',highlightthickness=px(1))
+            boxes.append(box)
             self.label(box,card['title'],10,MUTED);self.label(box,card['value'],20,PRIMARY,True)
-            why=self.label(box,card['why'],9,MUTED);why.configure(wraplength=210)
-            box.bind('<Configure>',lambda event,label=why:label.configure(wraplength=max(150,event.width-30)))
+            why=self.label(box,card['why'],9,MUTED);why.configure(wraplength=px(210))
+            box.bind('<Configure>',lambda event,label=why:label.configure(wraplength=max(px(100),event.width-px(30))))
             self.button(box,'查看依据',lambda c=card:self.show_insight_evidence(c))
+        def arrange(event=None):
+            columns=min(len(boxes),3 if logical(band.winfo_width())>=860 else 2)
+            for col in range(3):band.columnconfigure(col,weight=1 if col<columns else 0,uniform='cards' if col<columns else '')
+            for index,box in enumerate(boxes):box.grid(row=index//columns,column=index%columns,sticky='nsew',padx=px((0,8)),pady=px((0,8)))
+        band.bind('<Configure>',arrange);arrange()
 
     def show_insight_evidence(self,card):
         frame=self.store.transactions();tx=frame[frame.id.isin(card['ids'])]
-        window=tk.Toplevel(self);window.title('洞察依据');window.geometry('760x560');window.configure(bg=BG)
+        window=tk.Toplevel(self);window.title('洞察依据');set_window_geometry(window, 760, 560);window.configure(bg=BG)
         self.label(window,card['title']+' · '+card['value'],16,bold=True)
-        note=self.label(window,card['why'],10,MUTED);note.configure(wraplength=710)
+        note=self.label(window,card['why'],10,MUTED);note.configure(wraplength=px(710))
         self.table(window,['日期','商户','分类','金额 / 元','来源','行号'],[[r.date[:10],r.merchant,r.category,yuan(r.amount_cents),r.source_file,r.source_row] for r in tx.itertuples()],8)
         self.button(window,'进入账本筛选',lambda:(window.destroy(),self.open_category(card['category'] or '全部分类',card['month'])))
 
     def quick_entry(self):
         store=self.store;mode=self.mode
-        window=tk.Toplevel(self);window.title('快速记一笔');window.geometry('460x540');window.configure(bg=BG)
-        box=tk.Frame(window,bg=BG,padx=22,pady=16);box.pack(fill='both',expand=True)
+        window=tk.Toplevel(self);window.title('快速记一笔');set_window_geometry(window, 460, 580);window.configure(bg=BG)
+        actions=tk.Frame(window,bg=BG);actions.pack(side='bottom',fill='x',padx=px(22),pady=px(4))
+        box=scrollable_form(window,padx=22,pady=16)
         self.label(box,'快速记一笔',18,bold=True)
         self.label(box,'保存到 '+('演示空间' if mode=='demo' else '我的账本'),10,MUTED)
         fields={}
         for label,key,value in [('金额 / 元','amount',''),('商户','merchant',''),('日期 YYYY-MM-DD','date',date.today().isoformat()),('备注','description','')]:
-            self.label(box,label,10,MUTED);entry=ttk.Entry(box);entry.insert(0,value);entry.pack(fill='x',pady=(0,7));fields[key]=entry
+            self.label(box,label,10,MUTED);entry=ttk.Entry(box);entry.insert(0,value);entry.pack(fill='x',pady=px((0,7)));fields[key]=entry
         row=tk.Frame(box,bg=BG);row.pack(fill='x')
-        kind=ttk.Combobox(row,values=['支出','收入','转账'],state='readonly',width=10);kind.set('支出');kind.pack(side='left',padx=(0,10))
+        kind=ttk.Combobox(row,values=['支出','收入','转账'],state='readonly',width=10);kind.set('支出');kind.pack(side='left',padx=px((0,10)))
         category=ttk.Combobox(row,values=CATEGORIES,state='readonly',width=13);category.set('餐饮');category.pack(side='left')
         def match_kind(_=None):
             permitted=['工资','生活费','其他收入'] if kind.get()=='收入' else ['转账'] if kind.get()=='转账' else [c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']]
@@ -65,7 +73,7 @@ class RoundTwo:
                 if mode==self.mode:
                     self.selected_month='全部月份';self.search_text='';self.category_filter='全部分类';self.show('records');self.animate_character('success')
             except (ValueError,TypeError) as exc:status.config(text=str(exc),fg=DANGER)
-        self.button(box,'保存这一笔',save);window.bind('<Control-Return>',lambda _:save());fields['amount'].focus_set()
+        self.button(actions,'保存这一笔',save);window.bind('<Control-Return>',lambda _:save());fields['amount'].focus_set()
 
     def batch_correct(self,same_merchant=False):
         selection=self.tree.selection()
@@ -102,7 +110,7 @@ class RoundTwo:
             self.show('budget_page')
 
     def learned_rules_window(self):
-        store=self.store;window=tk.Toplevel(self);window.title('商户分类记忆');window.geometry('650x500');window.configure(bg=BG)
+        store=self.store;window=tk.Toplevel(self);window.title('商户分类记忆');set_window_geometry(window, 650, 500);window.configure(bg=BG)
         self.label(window,'只按完全相同商户与收支类型匹配；仅影响下次导入的新记录。',10,MUTED)
         holder=tk.Frame(window,bg=BG);holder.pack(fill='both',expand=True);state=[None,[]]
         def refresh():
@@ -115,10 +123,10 @@ class RoundTwo:
         self.button(window,'删除选中的记忆',remove);refresh()
 
     def command_palette(self):
-        window=tk.Toplevel(self);window.title('搜索与快捷操作');window.geometry('540x390');window.configure(bg=BG)
+        window=tk.Toplevel(self);window.title('搜索与快捷操作');set_window_geometry(window, 540, 390);window.configure(bg=BG)
         self.label(window,'搜索账单或输入页面名称',16,bold=True)
-        self.label(window,'支持商户 / 分类 / >100 / 上月；页面：概览、账本、预算、规划、助手、设置。',10,MUTED).configure(wraplength=490)
-        entry=ttk.Entry(window,width=45);entry.pack(fill='x',padx=18,pady=14)
+        self.label(window,'支持商户 / 分类 / >100 / 上月；页面：概览、账本、预算、规划、助手、设置。',10,MUTED).configure(wraplength=px(490))
+        entry=ttk.Entry(window,width=45);entry.pack(fill='x',padx=px(18),pady=px(14))
         def run():
             value=entry.get().strip();window.destroy()
             pages={'概览':'home','账本':'records','预算':'budget_page','规划':'plan','助手':'assistant','设置':'settings'}
@@ -138,8 +146,8 @@ class RoundTwo:
         filename=filedialog.askopenfilename(filetypes=[('账单文件','*.csv *.xlsx')])
         if not filename:return
         store=self.store;mode=self.mode
-        window=tk.Toplevel(self);window.title('导入账单');window.geometry('800x630');window.configure(bg=BG)
-        box=tk.Frame(window,bg=BG,padx=18,pady=14);box.pack(fill='both',expand=True)
+        window=tk.Toplevel(self);window.title('导入账单');set_window_geometry(window, 800, 630);window.configure(bg=BG)
+        box=tk.Frame(window,bg=BG,padx=px(18),pady=px(14));box.pack(fill='both',expand=True)
         status=self.label(box,'正在解析文件…可取消，本阶段不会写入账单。',12,PRIMARY)
         content=tk.Frame(box,bg=BG);content.pack(fill='both',expand=True)
         actions=tk.Frame(box,bg=BG);actions.pack(fill='x')
@@ -164,7 +172,7 @@ class RoundTwo:
                     fields=list(result.issues[0]) if result.issues else ['行号','原因'];writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader();writer.writerows(result.issues)
         def preview(result):
             status.config(text=f'有效 {len(result.rows)} 行 · 异常 {len(result.issues)} 行 · 跳过 {result.skipped} 行；有效行确认后才写入。')
-            if result.warnings:self.label(content,'\n'.join(result.warnings),9,DANGER).configure(wraplength=730)
+            if result.warnings:self.label(content,'\n'.join(result.warnings),9,DANGER).configure(wraplength=px(730))
             notebook=ttk.Notebook(content);notebook.pack(fill='both',expand=True)
             valid=tk.Frame(notebook,bg='white');issues=tk.Frame(notebook,bg='white');notebook.add(valid,text='有效记录预览（前200）');notebook.add(issues,text=f'全部异常（{len(result.issues)}）')
             self.table(valid,['日期','商户','类型','金额','分类'],[[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:.2f}",r['category']] for r in result.rows[:200]],8)

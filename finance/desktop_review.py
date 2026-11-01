@@ -1,4 +1,5 @@
 """Desktop features added after the November review; no network on import."""
+from .ui_scale import px, logical, point_font, set_window_geometry
 from datetime import date
 from decimal import Decimal
 import queue
@@ -29,12 +30,12 @@ class ReviewFeatures:
     def budget_page(self):
         month=self.selected_month if self.selected_month!='全部月份' else date.today().strftime('%Y-%m')
         self.budget_month=month
-        form=tk.Frame(self.main,bg='white',padx=16,pady=12);form.pack(fill='x',pady=8)
+        form=tk.Frame(self.main,bg='white',padx=px(16),pady=px(12));form.pack(fill='x',pady=px(8))
         self.label(form,'设置分类预算（元） · '+month,13,bold=True)
         row=tk.Frame(form,bg='white');row.pack(fill='x')
         categories=[c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']]
-        self.budget_category=ttk.Combobox(row,values=categories,state='readonly',width=12);self.budget_category.set('餐饮');self.budget_category.pack(side='left',padx=(0,10))
-        self.budget_amount=ttk.Entry(row,width=15);self.budget_amount.pack(side='left',padx=(0,10))
+        self.budget_category=ttk.Combobox(row,values=categories,state='readonly',width=12);self.budget_category.set('餐饮');self.budget_category.pack(side='left',padx=px((0,10)))
+        self.budget_amount=ttk.Entry(row,width=15);self.budget_amount.pack(side='left',padx=px((0,10)))
         def fill(_=None):
             value=self.store.budgets(month).get(self.budget_category.get(),0)
             self.budget_amount.delete(0,'end');self.budget_amount.insert(0,f'{value/100:.2f}')
@@ -91,14 +92,14 @@ class ReviewFeatures:
             self.label(self.main,'分类预算使用 / '+month,12,bold=True)
             for r in report.to_dict('records'):
                 key=(self.mode,month,r['分类'],r['预算'],r['已支出'])
-                line=tk.Frame(self.main,bg='#fff1e7' if r['超支'] else '#e8f4ec',padx=10,pady=4);line.pack(fill='x',pady=3)
+                line=tk.Frame(self.main,bg='#fff1e7' if r['超支'] else '#e8f4ec',padx=px(10),pady=px(4));line.pack(fill='x',pady=px(3))
                 text=f"{r['分类']} · ¥{r['已支出']:,.2f} / ¥{r['预算']:,.2f}"+(f" · 超支 ¥{r['超支']:,.2f}" if r['超支'] else '')
                 if r['超支'] and key in self.dismissed_alerts:line.destroy();continue
                 tk.Button(line,text=text,command=lambda c=r['分类']:self.open_category(c,month),relief='flat',bg=line['bg'],fg=DANGER if r['超支'] else GREEN).pack(side='left')
                 if r['超支']:
                     def dismiss(k=key,w=line):self.dismissed_alerts.add(k);w.destroy()
                     tk.Button(line,text='关闭',command=dismiss,relief='flat',bg=line['bg'],fg=MUTED).pack(side='right')
-                bar=Meter(line,length=160,value=min(100,r['使用率'] or (100 if r['已支出'] else 0)),danger=bool(r['超支']));bar.pack(side='right',padx=10)
+                bar=Meter(line,length=160,value=min(100,r['使用率'] or (100 if r['已支出'] else 0)),danger=bool(r['超支']));bar.pack(side='right',padx=px(10))
         self.show_goal_gaps(self.main)
 
     def draw_trend(self):
@@ -107,26 +108,26 @@ class ReviewFeatures:
         monthly=monthly.tail(12)
         if monthly.empty:return
         self.label(self.main,'月度支出趋势（最近有记录月份，空白月份未视为零）',12,bold=True)
-        chart=tk.Canvas(self.main,height=200,bg='white',highlightthickness=0);chart.pack(fill='x',pady=8)
+        chart=tk.Canvas(self.main,height=px(200),bg='white',highlightthickness=px(0));chart.pack(fill='x',pady=px(8))
         def draw(_=None):
-            chart.delete('all');width=max(500,chart.winfo_width());left=66;right=width-32;top=24;bottom=162
+            chart.delete('all');width=max(px(500),chart.winfo_width());left=px(78);right=width-px(42);top=px(24);bottom=px(162)
             values=monthly['支出'].tolist();scale=max(max(values)*1.15,1);points=[]
             for tick in range(4):
                 y=bottom-(bottom-top)*tick/3
                 chart.create_line(left,y,right,y,fill='#eef2f0')
-                chart.create_text(left-8,y,text=f'{scale*tick/3:,.0f}',anchor='e',fill=MUTED,font=('Segoe UI',-10))
-            chart.create_text(14,14,text='元',fill=MUTED,font=('Microsoft YaHei UI',-10))
+                chart.create_text(left-px(8),y,text=f'{scale*tick/3:,.0f}',anchor='e',fill=MUTED,font=('Segoe UI', 10))
+            chart.create_text(px(14),px(14),text='元',fill=MUTED,font=('Microsoft YaHei UI', 10))
             for i,(_,r) in enumerate(monthly.iterrows()):
                 x=(left+right)/2 if len(values)==1 else left+i*(right-left)/(len(values)-1)
                 y=bottom-r['支出']/scale*(bottom-top);points.extend([x,y])
-                dot=chart.create_oval(x-4,y-4,x+4,y+4,fill=GREEN,outline='white',width=2)
-                if i%max(1,(len(values)+5)//6)==0 or i==len(values)-1:chart.create_text(x,182,text=r['月份'],fill=MUTED,font=('Segoe UI',-10))
+                dot=chart.create_oval(x-px(4),y-px(4),x+px(4),y+px(4),fill=GREEN,outline='white',width=px(2))
+                if i%max(1,(len(values)+5)//6)==0 or i==len(values)-1:chart.create_text(x,px(182),text=r['月份'],fill=MUTED,font=('Segoe UI', 10))
                 def tooltip(event,text=f"{r['月份']} 支出 ¥{r['支出']:,.2f}"):
-                    chart.delete('tooltip');tx=min(max(110,event.x),width-120);ty=max(16,event.y-22)
-                    chart.create_rectangle(tx-108,ty-12,tx+108,ty+12,fill='#e6f4f1',outline='',tags='tooltip')
-                    chart.create_text(tx,ty,text=text,fill=GREEN,tags='tooltip',font=('Microsoft YaHei UI',-11))
+                    chart.delete('tooltip');tx=min(max(px(140),event.x),width-px(140));ty=max(px(18),event.y-px(26))
+                    chart.create_rectangle(tx-px(138),ty-px(16),tx+px(138),ty+px(16),fill='#e6f4f1',outline='',tags='tooltip')
+                    chart.create_text(tx,ty,text=text,fill=GREEN,tags='tooltip',font=('Microsoft YaHei UI', 10))
                 chart.tag_bind(dot,'<Enter>',tooltip);chart.tag_bind(dot,'<Leave>',lambda _:chart.delete('tooltip'))
-            if len(points)>=4:chart.create_line(*points,fill=GREEN,width=2,tags='series');chart.tag_lower('series')
+            if len(points)>=4:chart.create_line(*points,fill=GREEN,width=px(2),tags='series');chart.tag_lower('series')
         chart.bind('<Configure>',draw);draw()
 
     def estimate_plan(self):
@@ -145,14 +146,14 @@ class ReviewFeatures:
         goal=self.chosen_goal()
         if not goal:return
         store=self.store
-        window=tk.Toplevel(self);window.title('目标实际存入 · '+goal['name']);window.geometry('750x650');window.configure(bg=BG)
-        box=tk.Frame(window,bg=BG,padx=18,pady=14);box.pack(fill='both',expand=True)
+        window=tk.Toplevel(self);window.title('目标实际存入 · '+goal['name']);set_window_geometry(window, 750, 650);window.configure(bg=BG)
+        box=tk.Frame(window,bg=BG,padx=px(18),pady=px(14));box.pack(fill='both',expand=True)
         status=self.label(box,'',12, GREEN)
-        bar=Meter(box,maximum=100);bar.pack(fill='x',pady=8)
+        bar=Meter(box,maximum=100);bar.pack(fill='x',pady=px(8))
         self.label(box,'实际存入由用户记录，不会自动生成交易，也不修改原始计划的已有储蓄。',10,MUTED)
         form=tk.Frame(box,bg=BG);form.pack(fill='x')
-        day=ttk.Entry(form,width=14);day.insert(0,date.today().isoformat());day.pack(side='left',padx=5)
-        amount=ttk.Entry(form,width=13);amount.insert(0,'100');amount.pack(side='left',padx=5)
+        day=ttk.Entry(form,width=14);day.insert(0,date.today().isoformat());day.pack(side='left',padx=px(5))
+        amount=ttk.Entry(form,width=13);amount.insert(0,'100');amount.pack(side='left',padx=px(5))
         self.label(box,'日期 YYYY-MM-DD / 金额（元）；请勿重复记录同一笔存入。',9,MUTED)
         tree_box=tk.Frame(box,bg=BG);tree_box.pack(fill='both',expand=True)
         current=[None,[]]
@@ -178,9 +179,9 @@ class ReviewFeatures:
         candidates=self.frame[self.frame.category_source=='待确认'].head(20).to_dict('records')
         if not candidates:messagebox.showinfo('AI 分类','当前筛选范围内没有待确认分类。');return
         if not messagebox.askyesno('发送分类信息',f'将发送 {len(candidates)} 笔的商户、描述和收支类型给当前模型，不发送金额。是否继续？'):return
-        window=tk.Toplevel(self);window.title('AI 分类建议 · 人工核对');window.geometry('780x500');window.configure(bg=BG)
+        window=tk.Toplevel(self);window.title('AI 分类建议 · 人工核对');set_window_geometry(window, 780, 500);window.configure(bg=BG)
         self.label(window,'正在获取建议，关闭此窗口可取消；规则分类与人工修正不会被覆盖。',10,MUTED)
-        progress=Meter(window,maximum=len(candidates));progress.pack(fill='x',padx=15,pady=8)
+        progress=Meter(window,maximum=len(candidates));progress.pack(fill='x',padx=px(15),pady=px(8))
         mailbox=queue.Queue();cancel=threading.Event();results=[];failures=[0];tree_holder=[None]
         def worker():
             for row in candidates:

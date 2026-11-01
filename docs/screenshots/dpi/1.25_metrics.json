@@ -1,0 +1,138 @@
+{
+  "mode": "simulated Tk scale",
+  "scale": 1.25,
+  "tk_scaling": 1.6662566625666255,
+  "dpi": 119.97047970479704,
+  "work_area": [
+    0,
+    0,
+    2560,
+    1368
+  ],
+  "window": [
+    1500,
+    1000
+  ],
+  "font_linespace": 23,
+  "rowheight": 55,
+  "pages": {
+    "home": {
+      "width": 1153,
+      "horizontal_spill": []
+    },
+    "records": {
+      "width": 1153,
+      "horizontal_spill": []
+    },
+    "budget_page": {
+      "width": 1153,
+      "horizontal_spill": []
+    },
+    "plan": {
+      "width": 1153,
+      "horizontal_spill": []
+    },
+    "assistant": {
+      "width": 1153,
+      "horizontal_spill": []
+    },
+    "settings": {
+      "width": 1153,
+      "horizontal_spill": []
+    },
+    "home_minimum": {
+      "width": 1028,
+      "horizontal_spill": []
+    },
+    "records_minimum": {
+      "width": 1028,
+      "horizontal_spill": []
+    },
+    "budget_page_minimum": {
+      "width": 1028,
+      "horizontal_spill": []
+    },
+    "plan_minimum": {
+      "width": 1028,
+      "horizontal_spill": []
+    },
+    "assistant_minimum": {
+      "width": 1028,
+      "horizontal_spill": []
+    },
+    "settings_minimum": {
+      "width": 1028,
+      "horizontal_spill": []
+    }
+  },
+  "dialogs": {
+    "quick_entry": {
+      "size": [
+        575,
+        725
+      ],
+      "clipped_buttons": []
+    },
+    "edit": {
+      "size": [
+        650,
+        812
+      ],
+      "clipped_buttons": []
+    },
+    "contribution": {
+      "size": [
+        938,
+        812
+      ],
+      "clipped_buttons": []
+    },
+    "evidence": {
+      "size": [
+        1062,
+        688
+      ],
+      "clipped_buttons": []
+    },
+    "model_settings": {
+      "size": [
+        812,
+        762
+      ],
+      "clipped_buttons": []
+    },
+    "search": {
+      "size": [
+        675,
+        488
+      ],
+      "clipped_buttons": []
+    },
+    "rules": {
+      "size": [
+        812,
+        625
+      ],
+      "clipped_buttons": []
+    },
+    "updates": {
+      "size": [
+        812,
+        675
+      ],
+      "clipped_buttons": []
+    },
+    "pet": {
+      "size": [
+        350,
+        356
+      ],
+      "clipped_buttons": []
+    }
+  },
+  "default_window": [
+    1500,
+    1000
+  ],
+  "callback_errors": []
+}

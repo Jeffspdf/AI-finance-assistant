@@ -1,4 +1,5 @@
 """Session-only conversation history and confirmed deterministic actions."""
+from .ui_scale import px, logical, point_font, set_window_geometry
 from datetime import date
 import re,queue,threading
 import tkinter as tk
@@ -12,17 +13,17 @@ class ConversationFeatures:
     def conversation_page(self):
         self.label(self.main,'查询、追问或设置预算，所有金额由程序核对。',11,MUTED)
         if not self.model_client:
-            box=tk.Frame(self.main,bg='#e6f4f1',padx=12,pady=8);box.pack(fill='x',pady=8)
+            box=tk.Frame(self.main,bg='#e6f4f1',padx=px(12),pady=px(8));box.pack(fill='x',pady=px(8))
             self.label(box,'本地助手可直接使用；商户和日期区间等问题可连接自己的模型扩展。',10,PRIMARY)
             self.button(box,'连接自己的模型',self.show_model_settings)
         self.chat_messages=tk.Frame(self.main,bg=BG);self.chat_messages.pack(fill='x')
         self.draw_chat()
         self.chat_status=self.label(self.main,'会话仅保留在本次运行中，最多显示最近 20 条消息。',9,MUTED)
-        chips=tk.Frame(self.main,bg=BG);chips.pack(fill='x',pady=8)
+        chips=tk.Frame(self.main,bg=BG);chips.pack(fill='x',pady=px(8))
         for question in ['上个月餐饮花了多少？','本月结余是多少？','餐饮占比呢？']:
             self.button(chips,question,lambda q=question:self.ask(q))
-        row=tk.Frame(self.main,bg=BG);row.pack(fill='x',pady=8)
-        self.question=ttk.Entry(row,font=('Microsoft YaHei UI',-14));self.question.pack(side='left',fill='x',expand=True,ipady=3,padx=(0,10))
+        row=tk.Frame(self.main,bg=BG);row.pack(fill='x',pady=px(8))
+        self.question=ttk.Entry(row,font=('Microsoft YaHei UI', 10));self.question.pack(side='left',fill='x',expand=True,ipady=px(3),padx=px((0,10)))
         self.question.bind('<Return>',lambda _:self.ask());self.button(row,'发送',self.ask)
         self.button(row,'清空会话',self.clear_chat)
         # Keep a latest-answer accessor for existing integration tests.
@@ -38,19 +39,20 @@ class ConversationFeatures:
         if not history:
             self.label(self.chat_messages,'试试“上个月餐饮花了多少？”或“把餐饮预算设为 1200”。',12)
         for message in history:
-            mine=message['role']=='user';bubble=tk.Frame(self.chat_messages,bg='#e6f4f1' if mine else 'white',padx=14,pady=10,highlightbackground='#e6ece9',highlightthickness=1)
-            bubble.pack(fill='x',padx=(60,0) if mine else (0,40),pady=6)
+            mine=message['role']=='user';bubble=tk.Frame(self.chat_messages,bg='#e6f4f1' if mine else 'white',padx=px(14),pady=px(10),highlightbackground='#e6ece9',highlightthickness=px(1))
+            bubble.pack(fill='x',padx=px((60,0) if mine else (0,40)),pady=px(6))
             self.label(bubble,'你' if mine else '小财灵',9,PRIMARY)
-            label=self.label(bubble,message['text'],11,INK);label.configure(wraplength=max(400,self.content_canvas.winfo_width()-160))
+            label=self.label(bubble,message['text'],11,INK);label.configure(wraplength=max(px(200),self.content_canvas.winfo_width()-px(100)))
+            bubble.bind('<Configure>',lambda event,widget=label:widget.configure(wraplength=max(px(100),event.width-px(32))))
             evidence=message.get('evidence',[])
             if evidence:self.button(bubble,f'查看 {len(evidence)} 笔计算依据',lambda rows=evidence:self.chat_evidence(rows))
             if not mine:
-                followups=tk.Frame(bubble,bg='white');followups.pack(fill='x',pady=(4,0))
+                followups=tk.Frame(bubble,bg='white');followups.pack(fill='x',pady=px((4,0)))
                 self.button(followups,'本月结余',lambda:self.ask('本月结余是多少？'))
                 self.button(followups,'餐饮占比',lambda:self.ask('餐饮占比呢？'))
 
     def chat_evidence(self,rows):
-        window=tk.Toplevel(self);window.title('回答时的计算依据');window.geometry('850x550');window.configure(bg=BG)
+        window=tk.Toplevel(self);window.title('回答时的计算依据');set_window_geometry(window, 850, 550);window.configure(bg=BG)
         self.label(window,'显示回答当时的源记录快照；后续修改不会重写历史答案。',10,MUTED)
         self.table(window,['日期','商户','类型','金额 / 元','分类','源文件','行号'],[[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:,.2f}",r['category'],r['source_file'],r['source_row']] for r in rows],8)
 

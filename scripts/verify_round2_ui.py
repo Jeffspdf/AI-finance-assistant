@@ -25,7 +25,8 @@ with TemporaryDirectory(prefix='.test_round2_ui_',dir=root) as temp:
     store=Store(Path(temp)/'demo.sqlite3');store.import_rows(parse_statement(demo_bytes(date(2026,10,9)),'demo.csv').rows)
     (Path(temp)/'preferences.json').write_text(json.dumps({'space':'demo','month':'2026-09'}))
     from desktop import Desktop
-    a=Desktop();a.geometry('1024x680');a.update()
+    from finance.ui_scale import set_window_geometry
+    a=Desktop();set_window_geometry(a,1100,720,minimum=(1100,720));a.update()
     assert a.guide_action.winfo_height()>20
     assert any(c.winfo_class()=='Button' and c.cget('text')=='查看依据' for c in children(a.main))
     a.show('records');a.update();a.sort_table(a.tree,3)

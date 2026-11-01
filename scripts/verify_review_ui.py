@@ -52,6 +52,7 @@ with TemporaryDirectory(prefix='review-ui-',dir=root) as temp:
     for page in ['home','budget_page','records','plan','assistant']:
         a.show(page);a.update()
         ImageGrab.grab(window=ctypes.windll.user32.GetParent(a.winfo_id())).save(out/(page+'.png'))
-    a.geometry('1140x800');a.show('home');a.update();assert a.guide_action.winfo_height()>20
+    from finance.ui_scale import set_window_geometry
+    set_window_geometry(a,1100,720,minimum=(1100,720));a.show('home');a.update();assert a.guide_action.winfo_height()>20
     a.destroy()
 print('REVIEW_UI_BUDGET_SOURCE_ESTIMATE_PROGRESS_AI_CONFIRM_MIN_WINDOW_OK')

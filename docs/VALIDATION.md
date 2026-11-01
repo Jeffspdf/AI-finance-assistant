@@ -21,7 +21,7 @@ The screenshots are generated from deterministic demo data, then UI test changes
 
 ## Limits
 
-Tests do not establish genuine-model accuracy, arbitrary-bank compatibility, a 50k-row latency guarantee, clean Windows VM installation or high-DPI correctness. Backup/restore and enhanced import cancellation/mapping remain unimplemented. Build, remote publish and remote CI results must be independently observed; source tests alone do not establish their success.
+Tests do not establish genuine-model accuracy, arbitrary-bank compatibility, a 50k-row latency guarantee or clean Windows VM installation. The DPI evidence added below is limited to native 150% and explicit Tk simulations, not mixed-monitor certification. Backup/restore and enhanced import cancellation/mapping remain unimplemented. Build, remote publish and remote CI results must be independently observed; source tests alone do not establish their success.
 
 ## Build and CI observation
 
@@ -31,4 +31,12 @@ The v0.6.0 packaged EXE passed --self-test with isolated data. The first GitHub 
 ## Second-round validation — v0.7.0
 
 Local complete regression: **89 passed**. `scripts/verify_round2_ui.py` passed at 1024x680, including stable sort/edit identity, multi-row undo, quick entry, session chat/clarification, budget command cancel/confirm, async import cancel-without-write and confirmed commit. Screenshots in this directory now show v0.7 synthetic test data and compact visuals. Windows DPI awareness is enabled, but actual 125%/150% OS scale settings are still not certified. No live model configuration was present; no live-model benchmark was executed. Previous sections record the earlier v0.6 validation chronologically.
+
+## Third-round DPI correction — v0.7.1
+
+Full regression: **94 passed**. Both UI workflow scripts passed again using logical 1100x720 sizing. `scripts/verify_dpi_ui.py` checks six pages at default/minimum widths with real local follow-ups, plus quick entry, transaction edit, goal contributions, answer evidence, model settings, command search, merchant rules, update dialog and desktop pet. It uses isolated synthetic data and makes no model calls. No horizontal page spill, clipped/shortened dialog buttons, taskbar overlap or callback errors were detected.
+
+The local native system is 2560x1440, 150% (Windows144 DPI, Tk143.858 estimate). Native default client size1800x1200, 10pt line height27px, table row66px. Explicit Tk simulations at100/125/150/200% also passed, with a work-area-limited2400x1272 client at200%. The simulations do not change system display settings and are not separate real-machine OS-scale certifications. Metrics and screenshots: [third-round response](ROUND3_RESPONSE.md), screenshots/dpi/*.json and *.png. The root screenshots are refreshed by the workflow scripts; dpi/ contains labelled scale-specific evidence. Mixed-DPI monitor transitions remain untested.
+
+The v0.7.1 installer and portable ZIP were built locally. The actual packaged EXE passed its isolated-data `--self-test`. `scripts/verify_packaged_dpi.py` separately launched that EXE with temporary synthetic data and observed a144-DPI native1800x1200 client through the Windows window API, then closed it normally (exit0). Evidence: screenshots/dpi/packaged_native_metrics.json and packaged_native_home.png. This confirms a local packaged run, not installation on a clean Windows VM.
 

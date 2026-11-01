@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-16",
+  "transactions": 10,
+  "income_yuan": 3800,
+  "expense_yuan": 282.5,
+  "net_yuan": 3517.5,
+  "invalid_rows_rejected": 6,
+  "duplicate_rows_ignored": 6,
+  "conflicts_preserved": 1,
+  "qa_evidence_count": 7,
+  "csv_xlsx_import": "passed",
+  "cancel_import": "passed",
+  "category_edit": "passed",
+  "goal_save": "passed",
+  "space_isolation": "passed",
+  "pet_and_update_dialog": "passed"
+}

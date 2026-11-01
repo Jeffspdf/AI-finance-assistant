@@ -1,0 +1,17 @@
+{
+  "reference_date": "2026-10-09",
+  "synthetic_records": 100,
+  "duplicate_rows": 100,
+  "rejected_rows": 4,
+  "september_food_expense": 145,
+  "september_food_budget": 100,
+  "september_food_overrun": 45,
+  "september_food_evidence_count": 6,
+  "months": [
+    "2026-07",
+    "2026-08",
+    "2026-09"
+  ],
+  "average_expense_cents": 340333,
+  "xlsx": "passed"
+}

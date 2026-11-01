@@ -15,3 +15,7 @@ release/
 .test_*/
 desktop_preview.png
 *_preview_v2.png
+*_preview.png
+animation_corrected_contact.png
+.test_acceptance_*/
+review-ui-*/

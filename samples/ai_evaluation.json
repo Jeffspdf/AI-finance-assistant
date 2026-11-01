@@ -1,0 +1,277 @@
+[
+  {
+    "id": 1,
+    "group": "rules",
+    "question": "上个月餐饮花了多少？",
+    "intent": {
+      "metric": "expense",
+      "category": "餐饮",
+      "period": "last_month"
+    }
+  },
+  {
+    "id": 2,
+    "group": "rules",
+    "question": "本月支出多少？",
+    "intent": {
+      "metric": "expense",
+      "category": null,
+      "period": "this_month"
+    }
+  },
+  {
+    "id": 3,
+    "group": "rules",
+    "question": "累计结余是多少？",
+    "intent": {
+      "metric": "balance",
+      "category": null,
+      "period": "all"
+    }
+  },
+  {
+    "id": 4,
+    "group": "rules",
+    "question": "上个月收入多少？",
+    "intent": {
+      "metric": "income",
+      "category": null,
+      "period": "last_month"
+    }
+  },
+  {
+    "id": 5,
+    "group": "rules",
+    "question": "2026-09支出多少？",
+    "intent": {
+      "metric": "expense",
+      "category": null,
+      "period": "2026-09"
+    }
+  },
+  {
+    "id": 6,
+    "group": "rules",
+    "question": "上个月几笔交易？",
+    "intent": {
+      "metric": "count",
+      "category": null,
+      "period": "last_month"
+    }
+  },
+  {
+    "id": 7,
+    "group": "rules",
+    "question": "支出最多的分类是哪个？",
+    "intent": {
+      "metric": "top",
+      "category": null,
+      "period": "all"
+    }
+  },
+  {
+    "id": 8,
+    "group": "rules",
+    "question": "上个月餐饮占比多少？",
+    "intent": {
+      "metric": "share",
+      "category": "餐饮",
+      "period": "last_month"
+    }
+  },
+  {
+    "id": 9,
+    "group": "rules",
+    "question": "全部收入多少？",
+    "intent": {
+      "metric": "income",
+      "category": null,
+      "period": "all"
+    }
+  },
+  {
+    "id": 10,
+    "group": "rules",
+    "question": "本月餐饮花了多少？",
+    "intent": {
+      "metric": "expense",
+      "category": "餐饮",
+      "period": "this_month"
+    }
+  },
+  {
+    "id": 11,
+    "group": "model",
+    "question": "上个月在麦当劳花了多少？",
+    "intent": {
+      "metric": "expense",
+      "category": null,
+      "period": "last_month",
+      "merchant": "麦当劳"
+    }
+  },
+  {
+    "id": 12,
+    "group": "model",
+    "question": "上个月在星巴克花了多少？",
+    "intent": {
+      "metric": "expense",
+      "category": null,
+      "period": "last_month",
+      "merchant": "星巴克"
+    }
+  },
+  {
+    "id": 13,
+    "group": "model",
+    "question": "2026-09-01到2026-09-10支出多少？",
+    "intent": {
+      "metric": "expense",
+      "category": null,
+      "period": "all",
+      "date_from": "2026-09-01",
+      "date_to": "2026-09-10"
+    }
+  },
+  {
+    "id": 14,
+    "group": "model",
+    "question": "2026-07-01到2026-09-30收入多少？",
+    "intent": {
+      "metric": "income",
+      "category": null,
+      "period": "all",
+      "date_from": "2026-07-01",
+      "date_to": "2026-09-30"
+    }
+  },
+  {
+    "id": 15,
+    "group": "model",
+    "question": "上个月餐饮和交通各花多少？",
+    "intent": {
+      "metric": "compare",
+      "category": null,
+      "period": "last_month",
+      "compare_categories": [
+        "餐饮",
+        "交通"
+      ]
+    }
+  },
+  {
+    "id": 16,
+    "group": "model",
+    "question": "上个月购物和娱乐支出比较？",
+    "intent": {
+      "metric": "compare",
+      "category": null,
+      "period": "last_month",
+      "compare_categories": [
+        "购物",
+        "娱乐"
+      ]
+    }
+  },
+  {
+    "id": 17,
+    "group": "model",
+    "question": "近三个月月均支出？",
+    "intent": {
+      "metric": "average_expense",
+      "category": null,
+      "period": "last_3_complete_months"
+    }
+  },
+  {
+    "id": 18,
+    "group": "model",
+    "question": "最近三个月月均收入？",
+    "intent": {
+      "metric": "average_income",
+      "category": null,
+      "period": "last_3_complete_months"
+    }
+  },
+  {
+    "id": 19,
+    "group": "model",
+    "question": "上一个月餐饮花销多少？",
+    "intent": {
+      "metric": "expense",
+      "category": "餐饮",
+      "period": "last_month"
+    }
+  },
+  {
+    "id": 20,
+    "group": "model",
+    "question": "上个月在京东商城花了多少？",
+    "intent": {
+      "metric": "expense",
+      "category": null,
+      "period": "last_month",
+      "merchant": "京东商城"
+    }
+  },
+  {
+    "id": 21,
+    "group": "refuse",
+    "question": "下个月股票收益多少？",
+    "intent": null
+  },
+  {
+    "id": 22,
+    "group": "refuse",
+    "question": "明年投资怎么赚钱？",
+    "intent": null
+  },
+  {
+    "id": 23,
+    "group": "refuse",
+    "question": "预测下个月消费",
+    "intent": null
+  },
+  {
+    "id": 24,
+    "group": "refuse",
+    "question": "今年基金收益率",
+    "intent": null
+  },
+  {
+    "id": 25,
+    "group": "refuse",
+    "question": "退款是否到账？",
+    "intent": null
+  },
+  {
+    "id": 26,
+    "group": "refuse",
+    "question": "贷款利率是多少？",
+    "intent": null
+  },
+  {
+    "id": 27,
+    "group": "refuse",
+    "question": "昨天花了多少？",
+    "intent": null
+  },
+  {
+    "id": 28,
+    "group": "refuse",
+    "question": "本周交通费用？",
+    "intent": null
+  },
+  {
+    "id": 29,
+    "group": "refuse",
+    "question": "房价会涨吗？",
+    "intent": null
+  },
+  {
+    "id": 30,
+    "group": "refuse",
+    "question": "我该申请什么信用卡？",
+    "intent": null
+  }
+]

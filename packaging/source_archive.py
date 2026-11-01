@@ -3,7 +3,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parents[1]
-files = ['desktop.py', 'app.py', 'README.md', 'DESKTOP_README.md', 'WINDOWS_RELEASE.md',
+files = ['desktop.py', 'app.py', 'README.md', 'README_EN.md', 'DESKTOP_README.md', 'WINDOWS_RELEASE.md',
          'RELEASE_NOTES.md', 'requirements.txt', 'requirements-lock.txt',
          'requirements-desktop.txt', 'pytest.ini', '.gitignore', 'start_desktop.bat',
          'start.bat', 'start.ps1']
@@ -11,6 +11,10 @@ for directory, pattern in [('finance', '*.py'), ('tests', '*.py'), ('packaging',
                            ('packaging', '*.ps1'), ('packaging', '*.iss'), ('samples', '*.csv'),
                            ('.github/workflows', '*.yml'), ('assets', '*.ico'), ('assets', '*.png'), ('assets', '*.txt')]:
     files.extend(str(p.relative_to(root)) for p in (root / directory).glob(pattern))
+for directory in ['scripts','docs','samples/acceptance']:
+    files.extend(str(p.relative_to(root)) for p in (root/directory).rglob('*') if p.is_file() and p.suffix in ['.py','.md','.json','.csv','.xlsx','.png'])
+files.extend(str(p.relative_to(root)) for p in (root/'samples').glob('*.json'))
+files=list(dict.fromkeys(files))
 (root / 'release').mkdir(exist_ok=True)
 with ZipFile(root / 'release' / 'AIFinanceHelper-source.zip', 'w', ZIP_DEFLATED) as archive:
     for name in files:

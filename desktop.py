@@ -21,31 +21,30 @@ from finance.llm import ModelClient
 import json
 from finance.animation import SpritePlayer
 from finance.desktop_review import ReviewFeatures
+from finance.desktop_round2 import RoundTwo
+from finance.conversation import ConversationFeatures
+from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter
+enable_dpi_awareness()
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
-BG = '#f5f8f7'
-INK = '#243c38'
-MUTED = '#718681'
-BLUE = '#269580'
-GREEN = '#168b73'
+BG = '#f7f8f7'
+INK = '#1b2a26'
+MUTED = '#6c7a75'
+BLUE = '#0f766e'
+GREEN = '#0f766e'
 
 
-class Desktop(ReviewFeatures,tk.Tk):
+class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('AI理财小助手')
-        self.geometry('1280x860')
-        self.minsize(1140, 800)
+        self.geometry(f'{min(1200,self.winfo_screenwidth()-80)}x{max(680,min(780,self.winfo_screenheight()-100))}')
+        self.minsize(1024,680)
         self.configure(bg=BG)
-        self.option_add('*Font', ('Microsoft YaHei UI', 10))
-        style = ttk.Style(self)
-        style.theme_use('clam')
-        style.configure('Treeview', rowheight=35, background='white', fieldbackground='white', foreground=INK, borderwidth=0, font=('Microsoft YaHei UI', 10))
-        style.configure('Treeview.Heading', background='#edf5f1', foreground=INK, padding=10, relief='flat')
-        style.map('Treeview', background=[('selected', '#dcefe7')], foreground=[('selected', INK)])
-        style.configure('TEntry', padding=7, fieldbackground='white', bordercolor='#dce7e2')
-        style.configure('TCombobox', padding=6)
+        self.option_add('*Font', ('Microsoft YaHei UI', -13))
+        apply_theme(self)
+        self.round2_init()
         self.preferences={}
         try:self.preferences=json.loads((DATA_DIR/'preferences.json').read_text(encoding='utf-8'))
         except (OSError,ValueError):pass
@@ -66,10 +65,10 @@ class Desktop(ReviewFeatures,tk.Tk):
         if self.mode=='demo' and self.store.transactions().empty:
             self.store.import_rows(parse_statement(demo_bytes(), 'desktop_demo.csv').rows)
         self.review_initialize()
-        side = tk.Frame(self, bg='white', width=238)
+        side = tk.Frame(self, bg='white', width=204)
         side.pack(side='left', fill='y'); side.pack_propagate(False)
-        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 19, 'bold')).pack(anchor='w', padx=22, pady=(18, 5))
-        tk.Label(side, text='FINANCE, WITH A LITTLE JOY', bg='white', fg=MUTED, font=('Segoe UI', 8)).pack(anchor='w', padx=24, pady=(0, 12))
+        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', -20, 'bold')).pack(anchor='w', padx=16, pady=(18, 5))
+        tk.Label(side, text='PERSONAL FINANCE', bg='white', fg=MUTED, font=('Segoe UI', -10)).pack(anchor='w', padx=18, pady=(0, 12))
         self.nav = {}
         for label, page in [('01    财务概览', 'home'), ('02    交易账本', 'records'), ('03    预算与提醒', 'budget_page'), ('04    储蓄规划', 'plan'), ('05    问问助手', 'assistant')]:
             b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=0, padx=20, pady=7, cursor='hand2')
@@ -77,7 +76,7 @@ class Desktop(ReviewFeatures,tk.Tk):
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=18, pady=6)
         self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=3)
         self.space_label.pack()
-        tk.Button(spaces,text='设置 · 模型 / 更新 / 数据',command=lambda:self.show('settings'),relief='flat',bg='#edf5f1',fg=GREEN,pady=8).pack(fill='x',pady=5)
+        tk.Button(spaces,text='设置与连接',command=lambda:self.show('settings'),relief='flat',bg='#edf5f1',fg=GREEN,pady=8).pack(fill='x',pady=5)
         self.update_window = None
         self.guide = tk.Frame(side, bg='#f3f9f5', padx=12, pady=6)
         self.guide.pack(side='bottom', fill='x', padx=16, pady=8)
@@ -86,23 +85,23 @@ class Desktop(ReviewFeatures,tk.Tk):
         if asset.exists():
             image = Image.open(asset).convert('RGBA'); image.thumbnail((170, 290), Image.Resampling.LANCZOS)
             self.mascot_photo = ImageTk.PhotoImage(image)
-            portrait = tk.Frame(self.guide, bg='#f3f9f5', height=100)
+            portrait = tk.Frame(self.guide, bg='#f3f9f5', height=64)
             portrait.pack(fill='x'); portrait.pack_propagate(False)
             portrait_label=tk.Label(portrait, image=self.mascot_photo, bg='#f3f9f5',cursor='hand2')
             portrait_label.place(relx=.5, y=0, anchor='n')
             sheet=ROOT/'assets'/'campus_animation.png'
             if sheet.exists():
-                player=SpritePlayer(portrait_label,sheet,(150,100));self.animators.append(player)
+                player=SpritePlayer(portrait_label,sheet,(96,64));self.animators.append(player)
                 portrait_label.bind('<Button-1>',lambda _:self.animate_character('wave'))
-        tk.Label(self.guide, text='小财灵 · 校园理财搭子', bg='#f3f9f5', fg=GREEN, font=('Microsoft YaHei UI', 10, 'bold')).pack(pady=(4, 5))
-        self.tip = tk.Label(self.guide, text='', bg='#f3f9f5', fg=MUTED, wraplength=180, height=3, justify='left', font=('Microsoft YaHei UI', 9))
-        self.tip.pack(fill='x')
+        tk.Label(self.guide, text='小财灵 · 校园理财搭子', bg='#f3f9f5', fg=GREEN, font=('Microsoft YaHei UI',-12, 'bold')).pack(pady=(4, 5))
+        self.tip = tk.Label(self.guide, text='', bg='#f3f9f5', fg=MUTED, wraplength=150, height=2, justify='left', font=('Microsoft YaHei UI',-11))
+        # Keep the sidebar compact; detailed contextual hints live in the page.
         self.guide_action = tk.Button(self.guide, text='开始记账 →', bg='#e0f0e7', fg=GREEN, relief='flat', pady=6, command=lambda: self.show('records'))
         self.guide_action.pack(fill='x', pady=(8, 0))
         controls = tk.Frame(spaces, bg='white'); controls.pack(fill='x')
         self.guide_toggle = tk.Button(controls, text='收起向导', command=self.toggle_guide, bg='white', fg=MUTED, relief='flat')
         self.guide_toggle.pack(side='left')
-        tk.Button(controls, text='桌面小助手 ↗', command=self.show_pet, bg='white', fg=GREEN, relief='flat').pack(side='right')
+        tk.Button(controls, text='桌面小助手', command=self.show_pet, bg='white', fg=GREEN, relief='flat').pack(side='right')
         self.motion_button=tk.Button(spaces,text='暂停角色动画',command=self.toggle_animation,bg='white',fg=MUTED,relief='flat')
         self.motion_button.pack(fill='x')
         self.pet = None
@@ -119,7 +118,7 @@ class Desktop(ReviewFeatures,tk.Tk):
             self.content_canvas.configure(scrollregion=self.content_canvas.bbox('all'))
         self.main.bind('<Configure>',resize_content);self.content_canvas.bind('<Configure>',resize_content)
         def scroll_content(event):
-            if event.widget.winfo_class() in ('Treeview','Text','TCombobox'):return
+            if event.widget.winfo_class() in ('Text','TCombobox'):return
             widget=event.widget
             while widget is not None:
                 if widget is self.main:self.content_canvas.yview_scroll(-int(event.delta/120),'units');return
@@ -201,7 +200,7 @@ class Desktop(ReviewFeatures,tk.Tk):
         self.label(content, '手动检查官方 GitHub 正式版本；不会上传账单。', 10, MUTED)
         status = self.label(content, '点击“检查更新”获取最新版本。', 11, GREEN)
         status.config(wraplength=560)
-        notes = tk.Text(content, wrap='word', height=3, relief='flat', bg='white', fg=INK, padx=14, pady=12, font=('Microsoft YaHei UI', 10))
+        notes = tk.Text(content, wrap='word', height=3, relief='flat', bg='white', fg=INK, padx=14, pady=12, font=('Microsoft YaHei UI',-12))
         notes.pack(fill='both', expand=True, pady=12)
         notes.insert('1.0', '发现新版本后可直接下载安装包，显示下载进度并打开下载目录。\n\n下载后请先退出本程序，再运行安装包。覆盖安装保留账单数据。\n\n如网络无法连接 GitHub，可使用浏览器下载链接。')
         notes.config(state='disabled')
@@ -216,7 +215,7 @@ class Desktop(ReviewFeatures,tk.Tk):
         download_busy = [False]
         download_url = [None]
         download_sha=[None]
-        progress = ttk.Progressbar(content, mode='determinate', maximum=100)
+        progress = Meter(content, mode='determinate', maximum=100)
         progress.pack(fill='x',pady=4)
         browser_download = tk.Button(content,text='浏览器下载备用链接 ↗',command=lambda: webbrowser.open(download_url[0] or RELEASES_URL),bg=BG,fg=GREEN,relief='flat')
         browser_download.pack(anchor='w')
@@ -316,8 +315,8 @@ class Desktop(ReviewFeatures,tk.Tk):
         if sheet.exists():
             player=SpritePlayer(character,sheet,(240,160));self.animators.append(player);player.pause(self.animation_paused)
             pet.geometry(f'260x285+{max(0,self.winfo_screenwidth()-300)}+{max(0,self.winfo_screenheight()-360)}')
-        tk.Label(pet, text='小财灵：聪明花，慢慢攒！\n拖动角色移动位置', bg='#e7f3ec', fg=GREEN, padx=12, pady=9, font=('Microsoft YaHei UI', 10)).place(relx=.5, y=8, anchor='n')
-        tk.Button(pet, text='×', command=pet.destroy, relief='flat', bg='#e7f3ec', fg=MUTED).place(x=218, y=0)
+        tk.Label(pet, text='小财灵：聪明花，慢慢攒！\n拖动角色移动位置', bg='#e7f3ec', fg=GREEN, padx=12, pady=9, font=('Microsoft YaHei UI',-12)).place(relx=.5, y=8, anchor='n')
+        tk.Button(pet, text='关闭', command=pet.destroy, relief='flat', bg='#e7f3ec', fg=MUTED).place(x=218, y=0)
         tk.Button(pet, text='打开小助手', command=lambda: (self.deiconify(), self.lift()), relief='flat', bg='#e7f3ec', fg=GREEN, padx=16, pady=6).place(relx=.5, y=240 if sheet.exists() else 358, anchor='n')
         def start(event):
             pet.drag = (event.x_root-pet.winfo_x(), event.y_root-pet.winfo_y())
@@ -358,16 +357,27 @@ class Desktop(ReviewFeatures,tk.Tk):
         self.show(self.page)
 
     def label(self, parent, text, size=11, color=INK, bold=False):
-        w = tk.Label(parent, text=text, bg=parent['bg'], fg=color, font=('Microsoft YaHei UI', size, 'bold' if bold else 'normal'), anchor='w', justify='left')
+        w = tk.Label(parent, text=text, bg=parent['bg'], fg=color, font=('Microsoft YaHei UI', -round(size*1.25), 'bold' if bold else 'normal'), anchor='w', justify='left')
         w.pack(anchor='w', pady=4)
         return w
 
-    def button(self, parent, text, command):
-        b = tk.Button(parent, text=text, command=command, bg=BLUE, fg='white', activebackground='#207c6b', activeforeground='white', relief='flat', borderwidth=0, padx=17, pady=10, cursor='hand2')
-        b.pack(side='left', padx=(0, 10), pady=10)
+    def button(self,parent,text,command):
+        widget=parent
+        in_page=False
+        while widget is not None:
+            if widget is self.main:in_page=True;break
+            widget=getattr(widget,'master',None)
+        primary=not getattr(self,'primary_claimed',False) if in_page else not getattr(parent.winfo_toplevel(),'primary_claimed',False)
+        if in_page and primary:self.primary_claimed=True
+        elif primary:parent.winfo_toplevel().primary_claimed=True
+        danger=text.startswith('删除')
+        bg=BLUE if primary and not danger else 'white';fg='white' if bg==BLUE else '#dc2626' if danger else BLUE
+        b=tk.Button(parent,text=text,command=command,bg=bg,fg=fg,activebackground='#e6f4f1',activeforeground=BLUE,relief='flat',borderwidth=0,highlightbackground='#e6ece9',highlightthickness=1,padx=12,pady=7,cursor='hand2')
+        b.pack(side='left',padx=(0,8),pady=7)
         return b
 
     def show(self, page):
+        self.primary_claimed=False
         self.animate_character('idle')
         self.ask_generation += 1
         self.page = page
@@ -399,28 +409,52 @@ class Desktop(ReviewFeatures,tk.Tk):
                 self.selected_month=self.month_picker.get();self.save_preferences();self.show(self.page)
             self.month_picker.bind('<<ComboboxSelected>>',select_month)
             if self.selected_month!='全部月份':self.frame=self.frame[self.frame.date.str.startswith(self.selected_month)].copy()
-        tk.Button(header,text='设置 ⚙',command=lambda:self.show('settings'),bg=BG,fg=GREEN,relief='flat').pack(side='right')
+        tk.Button(header,text='设置',command=lambda:self.show('settings'),bg=BG,fg=GREEN,relief='flat').pack(side='right')
         self.space_label.config(text='我的账本 · 本机数据' if self.mode=='personal' else '演示空间 · 合成账单')
-        self.label(self.main, titles[page][0], 23, bold=True)
+        tk.Button(header,text='搜索 Ctrl+K',command=self.command_palette,bg='white',fg=MUTED,relief='flat',padx=10).pack(side='right',padx=8)
+        tk.Button(header,text='+ 记一笔',command=self.quick_entry,bg='white',fg=BLUE,relief='flat',padx=12,pady=5).pack(side='right',padx=4)
+        short_titles={'home':'财务概览','records':'交易账本','budget_page':'预算与提醒','plan':'储蓄规划','assistant':'小财灵助手','settings':'设置'}
+        self.label(self.main,short_titles[page],20,bold=True)
         subtitle = '问题文本发送至你配置的接口；账单查询与金额由本机代码处理。' if page == 'assistant' and self.model_client else titles[page][1]
         self.label(self.main, subtitle, 10, MUTED)
         if page == 'assistant':
-            self.label(self.main, f'当前：大模型理解（{self.model_client.model}）+ 代码计算' if self.model_client else '当前：本地规则模式 · 可在左下角配置模型', 10, GREEN)
+            self.label(self.main, '已连接模型 · 条件理解与本机计算' if self.model_client else '本地助手 · 无需联网即可查询', 10, GREEN)
         getattr(self, page)()
 
-    def table(self, parent, columns, rows, height=9):
-        box = tk.Frame(parent, bg='white'); box.pack(fill='both', expand=True, pady=12)
-        tree = ttk.Treeview(box, columns=list(range(len(columns))), show='headings', height=height)
-        for i, name in enumerate(columns):
-            tree.heading(i, text=name); tree.column(i, width=105, minwidth=55, anchor='w')
-        scroll = ttk.Scrollbar(box, orient='vertical', command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
-        scroll.pack(side='right', fill='y'); tree.pack(fill='both', expand=True)
-        tree.tag_configure('alternate', background='#f8fbf9')
-        for index, row in enumerate(rows): tree.insert('', 'end', values=row, tags=('alternate',) if index % 2 else ())
+    def table(self,parent,columns,rows,height=9):
+        box=tk.Frame(parent,bg='white');box.pack(fill='both',expand=True,pady=10)
+        visible=rows[:200]
+        if len(rows)>200:self.label(box,f'共 {len(rows)} 笔，当前展示前 200 笔。请进入账本分页查看。',9,MUTED)
+        ancestor=parent;in_page=False
+        while ancestor is not None:
+            if ancestor is self.main:in_page=True;break
+            ancestor=getattr(ancestor,'master',None)
+        tree=ttk.Treeview(box,columns=list(range(len(columns))),show='headings',height=max(2,len(visible) if in_page else min(height,len(visible))))
+        if not in_page:
+            scroll=ttk.Scrollbar(box,orient='vertical',command=tree.yview);scroll.pack(side='right',fill='y');tree.configure(yscrollcommand=scroll.set)
+        for i,name in enumerate(columns):
+            numeric=any(k in name for k in ['金额','收入','支出','结余','预算','剩余','使用率','超支','行号','储蓄'])
+            tree.heading(i,text=name,command=lambda c=i:self.sort_table(tree,c))
+            tree.column(i,width=110,minwidth=70,anchor='e' if numeric else 'w',stretch=True)
+        tree.pack(fill='both',expand=True)
+        tree.tag_configure('alternate',background='#f8fbf9')
+        for index,row in enumerate(visible):tree.insert('','end',iid=str(index),values=row,tags=('alternate',) if index%2 else ())
         return tree
 
+    def sort_table(self,tree,column):
+        reverse=getattr(tree,'sort_order',{}).get(column,False)
+        def value(item):
+            text=tree.set(item,column)
+            try:return (0,float(str(text).replace(',','').replace('%','').replace('¥','')))
+            except ValueError:return (1,str(text))
+        for index,item in enumerate(sorted(tree.get_children(),key=value,reverse=reverse)):tree.move(item,'',index)
+        tree.sort_order={column:not reverse}
+
+    def row_index(self,tree,item):
+        return int(item) if str(item).isdigit() else tree.index(item)
+
     def home(self):
+        self.home_insights()
         f = self.frame
         income = int(f.loc[f.kind == '收入', 'amount_cents'].sum())
         expense = int(f.loc[f.kind == '支出', 'amount_cents'].sum())
@@ -444,7 +478,7 @@ class Desktop(ReviewFeatures,tk.Tk):
         maxval = max(top['支出'].max(), 1) if len(top) else 1
         for i, (_, row) in enumerate(top.iterrows()):
             y = 24+i*32
-            canvas.create_text(20, y, text=row['分类'], anchor='w', fill=INK, font=('Microsoft YaHei UI', 10))
+            canvas.create_text(20, y, text=row['分类'], anchor='w', fill=INK, font=('Microsoft YaHei UI',-12))
             canvas.create_rectangle(110, y-6, 500, y+6, fill='#f0f5f2', outline='')
             canvas.create_rectangle(110, y-6, 110+float(row['支出'])/maxval*390, y+6, fill=[BLUE, '#75b9a2', '#9ac6b4', '#e6c997', '#b1b6d8'][i], outline='')
             canvas.create_text(530, y, text=f"¥ {row['支出']:,.2f}   ·   {row['占比']}%", anchor='w', fill=MUTED)
@@ -461,14 +495,17 @@ class Desktop(ReviewFeatures,tk.Tk):
         self.button(bar, '查看源记录', self.source)
         self.category = ttk.Combobox(bar, values=CATEGORIES, state='readonly', width=12)
         self.category.set('餐饮'); self.category.pack(side='left', padx=8)
-        self.button(bar, '保存分类', self.correct)
+        self.button(bar,'批量设为分类',self.correct)
         self.button(bar,'编辑交易',self.edit_selected)
         ai=self.button(bar,'AI 分类建议',self.suggest_categories_ui)
         if not self.model_client:ai.config(state='disabled')
+        more=tk.Frame(self.main,bg=BG);more.pack(fill='x')
+        self.button(more,'同商户全部应用',lambda:self.batch_correct(True))
+        self.button(more,'撤销上次批量',self.undo_batch)
         filters=tk.Frame(self.main,bg=BG);filters.pack(fill='x',pady=8)
         self.search_var=tk.StringVar(value=self.search_text)
         ttk.Entry(filters,textvariable=self.search_var,width=32).pack(side='left',padx=(0,10))
-        self.filter_picker=ttk.Combobox(filters,values=['全部分类',*CATEGORIES],state='readonly',width=12)
+        self.filter_picker=ttk.Combobox(filters,values=['全部分类','待确认分类',*CATEGORIES],state='readonly',width=12)
         self.filter_picker.set(self.category_filter);self.filter_picker.pack(side='left')
         self.result_count=tk.Label(filters,bg=BG,fg=MUTED);self.result_count.pack(side='right')
         self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源'],[],12)
@@ -489,17 +526,25 @@ class Desktop(ReviewFeatures,tk.Tk):
     def refresh_records(self):
         self.search_text=self.search_var.get().strip();self.category_filter=self.filter_picker.get()
         frame=self.frame
-        if self.search_text:
+        amount_match=__import__('re').fullmatch(r'([<>]=?)(\d+(?:\.\d{1,2})?)',self.search_text)
+        if amount_match:
+            op,value=amount_match.groups()
+            try:cents=money_to_cents(value,allow_zero=True)
+            except ValueError:cents=10**12+1
+            frame=frame[{'>' :frame.amount_cents>cents,'>=':frame.amount_cents>=cents,'<':frame.amount_cents<cents,'<=':frame.amount_cents<=cents}[op]]
+        elif self.search_text:
             mask=frame.merchant.str.contains(self.search_text,case=False,regex=False)|frame.description.str.contains(self.search_text,case=False,regex=False)|frame.external_id.str.contains(self.search_text,case=False,regex=False)
             frame=frame[mask]
-        if self.category_filter!='全部分类':frame=frame[frame.category==self.category_filter]
+        if self.category_filter=='待确认分类':frame=frame[frame.category_source.isin(['待确认','模型建议（需核对）'])]
+        elif self.category_filter!='全部分类':frame=frame[frame.category==self.category_filter]
         filtered=frame.sort_values('date',ascending=False).to_dict('records')
         total=len(filtered);pages=max(1,(total+199)//200)
         self.record_page=min(getattr(self,'record_page',0),pages-1)
         self.record_rows=filtered[self.record_page*200:(self.record_page+1)*200]
+        self.tree.configure(height=max(2,len(self.record_rows)))
         self.page_info.config(text=f'第 {self.record_page+1} / {pages} 页 · 每页 200 笔')
         for item in self.tree.get_children():self.tree.delete(item)
-        for i,r in enumerate(self.record_rows):self.tree.insert('','end',values=[r['date'][:10],r['merchant'],r['kind'],yuan(r['amount_cents']),r['category'],r['category_source']],tags=('alternate',) if i%2 else ())
+        for i,r in enumerate(self.record_rows):self.tree.insert('','end',iid=str(i),values=[r['date'][:10],r['merchant'],r['kind'],yuan(r['amount_cents']),r['category'],r['category_source']],tags=('alternate',) if i%2 else ())
         self.result_count.config(text=f'{total} 笔匹配 / {len(self.frame)} 笔期间记录')
 
     def change_record_page(self,delta):
@@ -523,11 +568,15 @@ class Desktop(ReviewFeatures,tk.Tk):
                 entry=ttk.Combobox(box,state='readonly',values=['收入','支出','转账'] if key=='kind' else CATEGORIES);entry.set(value)
             else:entry=ttk.Entry(box);entry.insert(0,value)
             entry.pack(fill='x',pady=(0,7));fields[key]=entry
+        remember=tk.BooleanVar(value=False)
+        tk.Checkbutton(box,text='记住此商户分类，用于以后新导入的同类收支',variable=remember,bg=BG).pack(anchor='w')
         status=self.label(box,'原始交易编号与文件来源保留。',9,MUTED)
         def save():
             try:
                 values={k:e.get().strip() for k,e in fields.items()};values['amount_cents']=money_to_cents(values['amount_cents'])
-                store.edit_transaction(record['id'],values);window.destroy();self.show('records');self.animate_character('success')
+                store.edit_transaction(record['id'],values)
+                if remember.get():store.correct_categories([(record['id'],values['category'])],learn=True)
+                window.destroy();self.show('records');self.animate_character('success')
             except Exception as exc:status.config(text=str(exc),fg='#b45f50')
         self.button(box,'保存修改',save)
 
@@ -535,7 +584,7 @@ class Desktop(ReviewFeatures,tk.Tk):
         sel = self.tree.selection()
         if not sel:
             messagebox.showinfo('选择记录', '请先选择一条交易。'); return None
-        return self.record_rows[self.tree.index(sel[0])]
+        return self.record_rows[self.row_index(self.tree,sel[0])]
 
     def source(self):
         r = self.selected()
@@ -543,26 +592,10 @@ class Desktop(ReviewFeatures,tk.Tk):
             messagebox.showinfo('源记录', f"交易 ID：{r['external_id']}\n文件：{r['source_file']}\n原始行号：{r['source_row']}\n时间：{r['date']}\n描述：{r['description']}\n分类来源：{r['category_source']}")
 
     def correct(self):
-        r = self.selected()
-        if r:
-            self.store.correct_categories([(r['id'], self.category.get())]); self.show('records')
+        self.batch_correct()
 
     def import_file(self):
-        filename = filedialog.askopenfilename(filetypes=[('账单文件', '*.csv *.xlsx')])
-        if not filename: return
-        try:
-            result = parse_statement(Path(filename).read_bytes(), Path(filename).name)
-            detail = '\n'.join(str(x) for x in result.issues[:6])
-            text = f'有效 {len(result.rows)} 行；异常 {len(result.issues)} 行；跳过 {result.skipped} 行。\n'+detail
-            if result.warnings: text += '\n'+'\n'.join(result.warnings)
-            if not result.rows:
-                messagebox.showinfo('导入检查', text); return
-            if not messagebox.askyesno('确认导入至'+('演示空间' if self.mode == 'demo' else '个人空间'), text+'\n\n是否导入有效记录？'): return
-            added, duplicate, conflicts = self.store.import_rows(result.rows)
-            messagebox.showinfo('导入结果', f'新增 {added} 笔，重复 {duplicate} 笔，冲突 {len(conflicts)} 笔。\n'+'\n'.join(str(x) for x in conflicts[:5]))
-            self.show('records')
-            self.animate_character('success')
-        except Exception as exc: messagebox.showerror('导入失败', str(exc))
+        return self.import_async()
 
     def plan(self):
         form = tk.Frame(self.main, bg='white', padx=16, pady=8); form.pack(fill='x', pady=10)
@@ -589,12 +622,12 @@ class Desktop(ReviewFeatures,tk.Tk):
         self.estimate_note=self.label(self.main,'估算仅使用最近三个完整月份，点击按钮查看月份依据。',9,MUTED)
         self.estimate_note.config(wraplength=850)
         self.goal_status=self.label(self.main,'新目标 · 保存方案 B 后可在下方查看',9,MUTED)
-        self.plan_result = tk.Label(self.main, text='', bg='white', fg=INK, justify='left', anchor='nw', padx=24, pady=22, font=('Microsoft YaHei UI', 12), wraplength=780)
+        self.plan_result = tk.Label(self.main, text='', bg='white', fg=INK, justify='left', anchor='nw', padx=24, pady=22, font=('Microsoft YaHei UI',-15), wraplength=780)
         self.plan_cards=tk.Frame(self.main,bg=BG);self.plan_cards.pack(fill='x',pady=8)
         self.plan_card_labels=[]
         for name in ('A','B'):
             card=tk.Frame(self.plan_cards,bg='white',padx=16,pady=12);card.pack(side='left',fill='both',expand=True,padx=(0,10))
-            label=tk.Label(card,bg='white',fg=INK,justify='left',anchor='nw',font=('Microsoft YaHei UI',11),wraplength=340)
+            label=tk.Label(card,bg='white',fg=INK,justify='left',anchor='nw',font=('Microsoft YaHei UI',-14),wraplength=340)
             label.pack(fill='both',expand=True);self.plan_card_labels.append(label)
         self.editing_goal_id=None
         history_bar=tk.Frame(self.main,bg=BG);history_bar.pack(fill='x')
@@ -648,7 +681,7 @@ class Desktop(ReviewFeatures,tk.Tk):
     def chosen_goal(self):
         selection=self.goal_tree.selection()
         if not selection:messagebox.showinfo('选择目标','请先选择一个已保存目标。');return None
-        return self.goal_rows[self.goal_tree.index(selection[0])]
+        return self.goal_rows[self.row_index(self.goal_tree,selection[0])]
 
     def load_goal(self):
         goal=self.chosen_goal()
@@ -674,45 +707,16 @@ class Desktop(ReviewFeatures,tk.Tk):
                ('版本与更新',f'当前 v{APP_VERSION} · 检查新版与下载安装包。',self.show_updates,'检查更新'),
                ('本机数据','演示空间和我的账本独立保存；备份前退出程序并复制数据目录。',lambda:os.startfile(str(DATA_DIR)),'打开数据目录'),
                ('角色与动画','点击角色挥手，可暂停动画或打开桌面小助手。',self.show_pet,'打开桌面小助手')]
+        items.append(('分类记忆',f'当前空间已记住 {len(self.store.merchant_rules())} 条商户规则，可查看并删除。',self.learned_rules_window,'管理分类记忆'))
         for title,description,action,caption in items:
             card=tk.Frame(self.main,bg='white',padx=18,pady=8);card.pack(fill='x',pady=6)
             self.label(card,title,13,bold=True);self.label(card,description,10,MUTED);self.button(card,caption,action)
 
     def assistant(self):
-        self.label(self.main, '有依据的回答，从一个好问题开始。', 16, bold=True)
-        quick = tk.Frame(self.main, bg=BG); quick.pack(fill='x', pady=8)
-        for text in ['上个月餐饮花了多少？', '支出最多的分类是哪个？', '累计结余是多少？']:
-            self.button(quick, text, lambda q=text: self.ask(q))
-        row = tk.Frame(self.main, bg=BG); row.pack(fill='x')
-        self.question = ttk.Entry(row, font=('Microsoft YaHei UI', 12)); self.question.pack(side='left', fill='x', expand=True, ipady=10, padx=(0, 10))
-        self.question.bind('<Return>', lambda _: self.ask())
-        self.button(row, '分析记录', self.ask)
-        self.answer = tk.Label(self.main, text='本地演示模式\n\n支持月份、收入、支出、结余、分类占比等问题。\n回答中的金额均由代码汇总，下方显示全部依据。', bg='white', fg=INK, wraplength=780, anchor='nw', justify='left', padx=22, pady=20, font=('Microsoft YaHei UI', 12))
-        self.answer.pack(fill='x', pady=14)
-        self.evidence_box = tk.Frame(self.main, bg=BG); self.evidence_box.pack(fill='both', expand=True)
+        self.conversation_page()
 
-    def ask(self, question=None):
-        q = question if isinstance(question, str) else self.question.get()
-        self.question.delete(0, 'end'); self.question.insert(0, q)
-        if self.model_client:
-            self.animate_character('thinking')
-            generation = self.ask_generation = self.ask_generation + 1
-            frame=self.frame.copy(); model=self.model_client
-            self.answer.config(text='正在理解问题并核对记录…')
-            mailbox=queue.Queue()
-            budgets=self.qa_budgets(frame)
-            def worker():
-                result=answer_question(frame,q,budgets=budgets,model=model)
-                mailbox.put(result)
-            def poll():
-                if generation != self.ask_generation or self.page != 'assistant': return
-                try: result=mailbox.get_nowait()
-                except queue.Empty: self.after(100,poll); return
-                self.render_answer(result)
-            threading.Thread(target=worker,daemon=True).start(); self.after(100,poll)
-            return
-        result = answer_question(self.frame,q,budgets=self.qa_budgets(self.frame))
-        self.render_answer(result)
+    def ask(self,question=None):
+        self.conversation_ask(question)
 
     def qa_budgets(self,frame):
         months=set(frame.date.str[:7])|{date.today().strftime('%Y-%m')}

@@ -8,7 +8,7 @@ from tkinter import ttk, messagebox
 from .analytics import budget_report, estimate_from_records, goal_progress, plan_savings, yuan
 from .importer import money_to_cents
 from .categories import CATEGORIES
-BG='#f5f8f7'; GREEN='#168b73'; MUTED='#718681'
+from .ui_theme import BG,MUTED,PRIMARY as GREEN,DANGER,Meter
 
 class ReviewFeatures:
     def review_initialize(self):
@@ -40,6 +40,9 @@ class ReviewFeatures:
             self.budget_amount.delete(0,'end');self.budget_amount.insert(0,f'{value/100:.2f}')
         self.budget_category.bind('<<ComboboxSelected>>',fill);fill()
         self.button(row,'保存预算',self.save_desktop_budget)
+        controls=tk.Frame(form,bg='white');controls.pack(fill='x')
+        self.button(controls,'复制上月预算',self.copy_previous_budget)
+        self.button(controls,'按近三月均值建议',self.propose_budgets)
         self.label(form,'零预算仍可保存；没有记录不表示没有消费。提醒仅在应用内显示。',9,MUTED)
         report=budget_report(self.store.transactions(),month,self.store.budgets(month))
         self.budget_rows=report.to_dict('records')
@@ -60,7 +63,7 @@ class ReviewFeatures:
     def budget_evidence(self,event=None):
         selected=self.budget_tree.selection()
         if not selected:return
-        category=self.budget_rows[self.budget_tree.index(selected[0])]['分类']
+        category=self.budget_rows[self.row_index(self.budget_tree,selected[0])]['分类']
         for child in self.budget_details.winfo_children():child.destroy()
         self.label(self.budget_details,category+' · 支出依据（点击下方按钮进入账本追溯）',12,bold=True)
         controls=tk.Frame(self.budget_details,bg=BG);controls.pack(fill='x')
@@ -91,11 +94,11 @@ class ReviewFeatures:
                 line=tk.Frame(self.main,bg='#fff1e7' if r['超支'] else '#e8f4ec',padx=10,pady=4);line.pack(fill='x',pady=3)
                 text=f"{r['分类']} · ¥{r['已支出']:,.2f} / ¥{r['预算']:,.2f}"+(f" · 超支 ¥{r['超支']:,.2f}" if r['超支'] else '')
                 if r['超支'] and key in self.dismissed_alerts:line.destroy();continue
-                tk.Button(line,text=text,command=lambda c=r['分类']:self.open_category(c,month),relief='flat',bg=line['bg'],fg=GREEN).pack(side='left')
+                tk.Button(line,text=text,command=lambda c=r['分类']:self.open_category(c,month),relief='flat',bg=line['bg'],fg=DANGER if r['超支'] else GREEN).pack(side='left')
                 if r['超支']:
                     def dismiss(k=key,w=line):self.dismissed_alerts.add(k);w.destroy()
                     tk.Button(line,text='关闭',command=dismiss,relief='flat',bg=line['bg'],fg=MUTED).pack(side='right')
-                bar=ttk.Progressbar(line,length=160,value=min(100,r['使用率'] or (100 if r['已支出'] else 0)));bar.pack(side='right',padx=10)
+                bar=Meter(line,length=160,value=min(100,r['使用率'] or (100 if r['已支出'] else 0)),danger=bool(r['超支']));bar.pack(side='right',padx=10)
         self.show_goal_gaps(self.main)
 
     def draw_trend(self):
@@ -104,14 +107,27 @@ class ReviewFeatures:
         monthly=monthly.tail(12)
         if monthly.empty:return
         self.label(self.main,'月度支出趋势（最近有记录月份，空白月份未视为零）',12,bold=True)
-        chart=tk.Canvas(self.main,height=145,bg='white',highlightthickness=0);chart.pack(fill='x',pady=8)
-        values=monthly['支出'].tolist();scale=max(max(values),1);points=[]
-        for i,(_,r) in enumerate(monthly.iterrows()):
-            x=50+i*min(90,680/max(len(values)-1,1));y=105-r['支出']/scale*70;points.extend([x,y])
-            chart.create_oval(x-3,y-3,x+3,y+3,fill=GREEN,outline='')
-            chart.create_text(x,125,text=r['月份'],fill=MUTED,font=('Segoe UI',8))
-            chart.create_text(x,y-12,text=f"{r['支出']:,.0f}",fill=GREEN,font=('Segoe UI',8))
-        if len(points)>=4:chart.create_line(*points,fill=GREEN,width=2)
+        chart=tk.Canvas(self.main,height=200,bg='white',highlightthickness=0);chart.pack(fill='x',pady=8)
+        def draw(_=None):
+            chart.delete('all');width=max(500,chart.winfo_width());left=66;right=width-32;top=24;bottom=162
+            values=monthly['支出'].tolist();scale=max(max(values)*1.15,1);points=[]
+            for tick in range(4):
+                y=bottom-(bottom-top)*tick/3
+                chart.create_line(left,y,right,y,fill='#eef2f0')
+                chart.create_text(left-8,y,text=f'{scale*tick/3:,.0f}',anchor='e',fill=MUTED,font=('Segoe UI',-10))
+            chart.create_text(14,14,text='元',fill=MUTED,font=('Microsoft YaHei UI',-10))
+            for i,(_,r) in enumerate(monthly.iterrows()):
+                x=(left+right)/2 if len(values)==1 else left+i*(right-left)/(len(values)-1)
+                y=bottom-r['支出']/scale*(bottom-top);points.extend([x,y])
+                dot=chart.create_oval(x-4,y-4,x+4,y+4,fill=GREEN,outline='white',width=2)
+                if i%max(1,(len(values)+5)//6)==0 or i==len(values)-1:chart.create_text(x,182,text=r['月份'],fill=MUTED,font=('Segoe UI',-10))
+                def tooltip(event,text=f"{r['月份']} 支出 ¥{r['支出']:,.2f}"):
+                    chart.delete('tooltip');tx=min(max(110,event.x),width-120);ty=max(16,event.y-22)
+                    chart.create_rectangle(tx-108,ty-12,tx+108,ty+12,fill='#e6f4f1',outline='',tags='tooltip')
+                    chart.create_text(tx,ty,text=text,fill=GREEN,tags='tooltip',font=('Microsoft YaHei UI',-11))
+                chart.tag_bind(dot,'<Enter>',tooltip);chart.tag_bind(dot,'<Leave>',lambda _:chart.delete('tooltip'))
+            if len(points)>=4:chart.create_line(*points,fill=GREEN,width=2,tags='series');chart.tag_lower('series')
+        chart.bind('<Configure>',draw);draw()
 
     def estimate_plan(self):
         try:r=estimate_from_records(self.store.transactions())
@@ -132,7 +148,7 @@ class ReviewFeatures:
         window=tk.Toplevel(self);window.title('目标实际存入 · '+goal['name']);window.geometry('750x650');window.configure(bg=BG)
         box=tk.Frame(window,bg=BG,padx=18,pady=14);box.pack(fill='both',expand=True)
         status=self.label(box,'',12, GREEN)
-        bar=ttk.Progressbar(box,maximum=100);bar.pack(fill='x',pady=8)
+        bar=Meter(box,maximum=100);bar.pack(fill='x',pady=8)
         self.label(box,'实际存入由用户记录，不会自动生成交易，也不修改原始计划的已有储蓄。',10,MUTED)
         form=tk.Frame(box,bg=BG);form.pack(fill='x')
         day=ttk.Entry(form,width=14);day.insert(0,date.today().isoformat());day.pack(side='left',padx=5)
@@ -153,7 +169,7 @@ class ReviewFeatures:
         def remove():
             tree=current[0];selected=tree.selection()
             if selected and messagebox.askyesno('删除存入记录','删除这条实际存入？',parent=window):
-                store.remove_contribution(goal['id'],current[1][tree.index(selected[0])]['id']);refresh()
+                store.remove_contribution(goal['id'],current[1][self.row_index(tree,selected[0])]['id']);refresh()
         self.button(form,'记录实际存入',save);self.button(form,'删除选中存入',remove);refresh()
 
     def suggest_categories_ui(self):
@@ -164,7 +180,7 @@ class ReviewFeatures:
         if not messagebox.askyesno('发送分类信息',f'将发送 {len(candidates)} 笔的商户、描述和收支类型给当前模型，不发送金额。是否继续？'):return
         window=tk.Toplevel(self);window.title('AI 分类建议 · 人工核对');window.geometry('780x500');window.configure(bg=BG)
         self.label(window,'正在获取建议，关闭此窗口可取消；规则分类与人工修正不会被覆盖。',10,MUTED)
-        progress=ttk.Progressbar(window,maximum=len(candidates));progress.pack(fill='x',padx=15,pady=8)
+        progress=Meter(window,maximum=len(candidates));progress.pack(fill='x',padx=15,pady=8)
         mailbox=queue.Queue();cancel=threading.Event();results=[];failures=[0];tree_holder=[None]
         def worker():
             for row in candidates:
@@ -177,7 +193,7 @@ class ReviewFeatures:
             if not selection:messagebox.showinfo('选择建议','请选中想接受的建议，可按 Ctrl 多选。',parent=window);return
             count=0
             for item in selection:
-                row,category=results[tree.index(item)]
+                row,category=results[self.row_index(tree,item)]
                 try:count+=int(store.apply_model_category(row['id'],category))
                 except ValueError:pass
             messagebox.showinfo('已接受建议',f'接受 {count} 笔。来源标记为模型建议（需核对）；再次手动修正后标记用户修正。',parent=window)

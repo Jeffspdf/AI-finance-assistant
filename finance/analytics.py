@@ -54,3 +54,28 @@ def plan_savings(target_cents, saved_cents, start_date, deadline, income_cents, 
     projected=saved_cents+n*available
     deficit=max(0,target_cents-projected)
     return dict(months=n,monthly_available=available,required_monthly=required,projected=projected,deficit=deficit,feasible=projected>=target_cents,negative_cashflow=income_cents<budget_cents,contribution_dates=contribution_dates)
+
+def estimate_from_records(frame,today=None,months=3):
+    from .qa import month_shift
+    today=today or date.today()
+    requested=[month_shift(today,-i) for i in range(months,0,-1)]
+    rows=[]
+    for month in requested:
+        tx=month_records(frame,month)
+        if tx.empty:continue
+        rows.append(dict(month=month,income_cents=int(tx.loc[tx.kind=='收入','amount_cents'].sum()),expense_cents=int(tx.loc[tx.kind=='支出','amount_cents'].sum()),count=len(tx)))
+    if not rows:raise ValueError('最近三个完整月份没有导入记录，请先导入账单。')
+    used=[r['month'] for r in rows]
+    return dict(months=used,missing_months=[m for m in requested if m not in used],rows=rows,record_count=sum(r['count'] for r in rows),
+                average_income_cents=int((Decimal(sum(r['income_cents'] for r in rows))/len(rows)).quantize(Decimal('1'))),
+                average_expense_cents=int((Decimal(sum(r['expense_cents'] for r in rows))/len(rows)).quantize(Decimal('1'))))
+
+def goal_progress(goal,contributions,today=None):
+    today=today or date.today()
+    plan=plan_savings(goal['target_cents'],goal['saved_cents'],goal['start_date'],goal['deadline'],goal['income_cents'],goal['budget_cents'])
+    actual=goal['saved_cents']+int(contributions.loc[contributions.date<=today.isoformat(),'amount_cents'].sum())
+    elapsed=sum(d<=today.isoformat() for d in plan['contribution_dates'])
+    required=plan['required_monthly'] or 0
+    expected=min(goal['target_cents'],goal['saved_cents']+elapsed*required)
+    return dict(actual_saved=actual,expected_saved=expected,behind_cents=max(0,expected-actual),remaining=max(0,goal['target_cents']-actual),
+                ratio=min(100,actual/goal['target_cents']*100),contribution_count=len(contributions),plan=plan)

@@ -1,6 +1,7 @@
 from pathlib import Path
 import sqlite3
 import pandas as pd
+from contextlib import contextmanager
 
 class Store:
     def __init__(self, path):
@@ -18,12 +19,18 @@ class Store:
               CREATE TABLE IF NOT EXISTS budgets(month TEXT NOT NULL, category TEXT NOT NULL, amount_cents INTEGER NOT NULL CHECK(amount_cents>=0), PRIMARY KEY(month,category));
               CREATE TABLE IF NOT EXISTS goals(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, target_cents INTEGER NOT NULL, saved_cents INTEGER NOT NULL, start_date TEXT NOT NULL, deadline TEXT NOT NULL, income_cents INTEGER NOT NULL, budget_cents INTEGER NOT NULL);
               CREATE INDEX IF NOT EXISTS idx_date ON transactions(date);
+              CREATE TABLE IF NOT EXISTS goal_contributions(id INTEGER PRIMARY KEY AUTOINCREMENT,goal_id INTEGER NOT NULL,date TEXT NOT NULL,amount_cents INTEGER NOT NULL CHECK(amount_cents>0),created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+              CREATE INDEX IF NOT EXISTS idx_contribution_goal ON goal_contributions(goal_id);
+              PRAGMA user_version=2;
             ''')
 
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=10)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            with db:yield db
+        finally:db.close()
 
     def transactions(self):
         with self.connect() as db:
@@ -32,17 +39,21 @@ class Store:
     def import_rows(self, rows):
         added, duplicates, conflicts = 0, 0, []
         with self.connect() as db:
+            existing={r['signature']:dict(r) for r in db.execute('SELECT * FROM transactions')}
+            pending=[]
             for row in rows:
-                old = db.execute('SELECT * FROM transactions WHERE signature=?', (row['signature'],)).fetchone()
+                old=existing.get(row['signature'])
                 if old:
                     if any(old[k] != row[k] for k in ['date','amount_cents','kind','merchant','description']):
                         conflicts.append({'行号':row['source_row'], '原因':'同一交易 ID 的内容不同，未覆盖原记录'})
                     else:
                         duplicates += 1
                     continue
-                keys = list(row)
-                db.execute(f"INSERT INTO transactions ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", [row[k] for k in keys])
+                pending.append(row);existing[row['signature']]=row
                 added += 1
+            if pending:
+                keys=['id','external_id','date','merchant','description','amount_cents','kind','category','category_source','channel','source_file','source_row','signature']
+                db.executemany(f"INSERT INTO transactions ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})",[[row[k] for k in keys] for row in pending])
         return added, duplicates, conflicts
 
     def correct_categories(self, corrections):
@@ -94,4 +105,33 @@ class Store:
             db.execute('UPDATE goals SET '+','.join(k+'=?' for k in fields)+' WHERE id=?',[plan[k] for k in fields]+[goal_id])
 
     def delete_goal(self, goal_id):
-        with self.connect() as db:db.execute('DELETE FROM goals WHERE id=?',(goal_id,))
+        with self.connect() as db:
+            db.execute('DELETE FROM goal_contributions WHERE goal_id=?',(goal_id,))
+            db.execute('DELETE FROM goals WHERE id=?',(goal_id,))
+
+    def contributions(self,goal_id):
+        with self.connect() as db:return pd.read_sql_query('SELECT * FROM goal_contributions WHERE goal_id=? ORDER BY date,id',db,params=[int(goal_id)])
+
+    def add_contribution(self,goal_id,when,amount_cents,today=None):
+        from datetime import date
+        today=today or date.today();when=date.fromisoformat(when)
+        if not isinstance(amount_cents,int) or not 0<amount_cents<=10**12:raise ValueError('实际存入必须大于零且在范围内')
+        with self.connect() as db:
+            goal=db.execute('SELECT * FROM goals WHERE id=?',(int(goal_id),)).fetchone()
+            if goal is None:raise ValueError('目标不存在')
+            if when>today or when<date.fromisoformat(goal['start_date']):raise ValueError('实际存入日期须在开始日期之后且不晚于今天')
+            db.execute('INSERT INTO goal_contributions(goal_id,date,amount_cents) VALUES (?,?,?)',(int(goal_id),when.isoformat(),amount_cents))
+
+    def remove_contribution(self,goal_id,entry_id):
+        with self.connect() as db:db.execute('DELETE FROM goal_contributions WHERE goal_id=? AND id=?',(int(goal_id),int(entry_id)))
+
+    def apply_model_category(self,txid,category):
+        from .categories import CATEGORIES
+        if category not in CATEGORIES:raise ValueError('无效模型分类')
+        with self.connect() as db:
+            row=db.execute('SELECT kind,category_source FROM transactions WHERE id=?',(txid,)).fetchone()
+            if not row or row['category_source']!='待确认':return False
+            permitted=['工资','生活费','其他收入'] if row['kind']=='收入' else [c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']]
+            if category not in permitted:raise ValueError('模型分类与收支类型冲突')
+            db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=?',(category,'模型建议（需核对）',txid))
+            return True

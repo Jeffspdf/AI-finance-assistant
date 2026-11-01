@@ -20,6 +20,7 @@ from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_in
 from finance.llm import ModelClient
 import json
 from finance.animation import SpritePlayer
+from finance.desktop_review import ReviewFeatures
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
@@ -30,7 +31,7 @@ BLUE = '#269580'
 GREEN = '#168b73'
 
 
-class Desktop(tk.Tk):
+class Desktop(ReviewFeatures,tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('AI理财小助手')
@@ -64,12 +65,13 @@ class Desktop(tk.Tk):
         self.store = Store(DATA_DIR / (self.mode+'.sqlite3'))
         if self.mode=='demo' and self.store.transactions().empty:
             self.store.import_rows(parse_statement(demo_bytes(), 'desktop_demo.csv').rows)
+        self.review_initialize()
         side = tk.Frame(self, bg='white', width=238)
         side.pack(side='left', fill='y'); side.pack_propagate(False)
         tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 19, 'bold')).pack(anchor='w', padx=22, pady=(18, 5))
         tk.Label(side, text='FINANCE, WITH A LITTLE JOY', bg='white', fg=MUTED, font=('Segoe UI', 8)).pack(anchor='w', padx=24, pady=(0, 12))
         self.nav = {}
-        for label, page in [('01    财务概览', 'home'), ('02    交易账本', 'records'), ('03    储蓄规划', 'plan'), ('04    问问助手', 'assistant')]:
+        for label, page in [('01    财务概览', 'home'), ('02    交易账本', 'records'), ('03    预算与提醒', 'budget_page'), ('04    储蓄规划', 'plan'), ('05    问问助手', 'assistant')]:
             b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=0, padx=20, pady=7, cursor='hand2')
             b.pack(fill='x', padx=14, pady=1); self.nav[page] = b
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=18, pady=6)
@@ -148,7 +150,7 @@ class Desktop(tk.Tk):
             entry.insert(0, default if key == 'api_key' else self.model_settings.get(key, default)); entry.pack(fill='x', pady=(0,8)); fields[key] = entry
         enabled = tk.BooleanVar(value=self.model_client is not None)
         tk.Checkbutton(box, text='启用模型，并允许向该接口发送我输入的问题文本', variable=enabled, bg=BG, fg=INK).pack(anchor='w', pady=8)
-        self.label(box, '仅发送问题文本用于理解查询意图，不发送完整账单。\n金额由代码计算，回答保留源记录。测试连接可能产生少量 API 费用。\n密钥不写入配置文件，关闭应用后需重新填写并启用。', 10, MUTED)
+        self.label(box, '问答仅发送问题文本；分类另行确认发送商户、描述和收支类型。\n金额由代码计算，回答保留源记录。测试连接可能产生少量 API 费用。\n密钥不写入配置文件，关闭应用后需重新填写并启用。', 10, MUTED)
         status = self.label(box, '填写配置后，可先测试连接。', 10, GREEN); status.config(wraplength=580)
         def client():
             base=fields['base_url'].get().strip()
@@ -213,6 +215,7 @@ class Desktop(tk.Tk):
         download_box = queue.Queue()
         download_busy = [False]
         download_url = [None]
+        download_sha=[None]
         progress = ttk.Progressbar(content, mode='determinate', maximum=100)
         progress.pack(fill='x',pady=4)
         browser_download = tk.Button(content,text='浏览器下载备用链接 ↗',command=lambda: webbrowser.open(download_url[0] or RELEASES_URL),bg=BG,fg=GREEN,relief='flat')
@@ -224,7 +227,7 @@ class Desktop(tk.Tk):
             status.config(text='正在连接 GitHub 下载安装包…'); progress['value']=0
             def report(received,total): download_box.put(('progress',(received,total)))
             def worker():
-                try: download_box.put(('done',download_installer(download_url[0],DATA_DIR/'downloads',report,cancel_download.is_set)))
+                try: download_box.put(('done',download_installer(download_url[0],DATA_DIR/'downloads',report,cancel_download.is_set,expected_sha256=download_sha[0],verify_release=True)))
                 except Exception as exc:
                     from urllib.error import HTTPError
                     message=f'下载失败：HTTP {exc.code}，请重试或使用浏览器备用链接。' if isinstance(exc,HTTPError) else '下载失败：网络不可达、超时或文件不完整。请重试或使用浏览器备用链接。'
@@ -247,7 +250,7 @@ class Desktop(tk.Tk):
                 if kind=='done':
                     path,sha=value;progress['value']=100
                     status.config(text='下载完成！请先退出应用，再运行下载的安装包。')
-                    notes.config(state='normal');notes.delete('1.0','end');notes.insert('1.0',f'文件：{path}\n\nSHA256：{sha}\n\n校验了传输长度及 EXE 文件头。未进行代码签名验证。');notes.config(state='disabled')
+                    notes.config(state='normal');notes.delete('1.0','end');notes.insert('1.0',f'文件：{path}\n\nSHA256：{sha}\n\n已与官方发布校验值比对。未进行代码签名验证。');notes.config(state='disabled')
                     os.startfile(str(Path(path).parent))
                 else: status.config(text=value)
             else: window.download_poll=window.after(100,poll_download)
@@ -274,6 +277,7 @@ class Desktop(tk.Tk):
             notes.config(state='normal'); notes.delete('1.0', 'end'); notes.insert('1.0', result['notes']); notes.config(state='disabled')
             if result['newer'] and result['installer_url']:
                 download_url[0]=result['installer_url']
+                download_sha[0]=result.get('sha256')
                 download.config(state='normal', command=start_download)
             elif result['newer']:
                 status.config(text=f'发现 v{result["version"]}，请在官方发布页面查看并下载安装包。')
@@ -370,6 +374,7 @@ class Desktop(tk.Tk):
         for key, button in self.nav.items():
             button.config(bg='#e7f3ec' if key == page else 'white', fg=GREEN if key == page else MUTED)
         tips = {'home': ('让我看看钱都去哪啦！先核对收支，再给小愿望留点预算。', '一起查查账 →', 'records'), 'records': ('分类不对？选中那一笔就能改。每个数字都有源记录哦。', '安排一个小目标 →', 'plan'), 'plan': ('灵机一动！换个月预算试试，看看离目标能近多少。', '问问消费情况 →', 'assistant'), 'assistant': ('我来指路，代码算钱。当前为本地规则模式，未连接大模型。', '返回财务概览 →', 'home')}
+        tips['budget_page']=('先看预算，再核对对应的账单。','查看概览 →','home')
         tips['settings']=('在这里管理模型、版本和本机数据。','返回概览 →','home')
         tip, action, target = tips[page]
         self.tip.config(text=tip)
@@ -378,6 +383,7 @@ class Desktop(tk.Tk):
         self.content_canvas.yview_moveto(0)
         self.frame = self.store.transactions()
         titles = {'home': ('把生活记好，把小目标存好。', '财务概览  /  每一笔记录，都让计划更清楚一点。'), 'records': ('好好记账，心里有数。', '交易账本  /  导入、核对与修正，每笔都有来源。'), 'plan': ('给下一个愿望，留点预算。', '储蓄规划  /  试试不同的预算，找到舒服的节奏。'), 'assistant': ('关于钱的小疑问，一起理清。', '本地规则模式  /  回答来自已导入账单，不向外发送数据。')}
+        titles['budget_page']=('预算有边界，花钱更安心。','设置分类预算，查看超支和目标缺口。')
         titles['settings']=('按你的习惯，设置小助手。','模型、更新、数据和角色，集中管理。')
         header=tk.Frame(self.main,bg=BG);header.pack(fill='x',pady=(0,12))
         self.space_picker=ttk.Combobox(header,values=['演示空间','我的账本'],state='readonly',width=12)
@@ -385,8 +391,9 @@ class Desktop(tk.Tk):
         self.space_picker.bind('<<ComboboxSelected>>',lambda _:self.switch_space() if (self.space_picker.get()=='我的账本')!=(self.mode=='personal') else None)
         months=sorted(set(self.frame.date.str[:7])|{date.today().strftime('%Y-%m')},reverse=True)
         if self.selected_month not in ['全部月份',*months]:self.selected_month=months[0]
-        if page in ('home','records'):
-            self.month_picker=ttk.Combobox(header,values=['全部月份',*months],state='readonly',width=13)
+        if page in ('home','records','budget_page'):
+            self.month_picker=ttk.Combobox(header,values=([*months] if page=='budget_page' else ['全部月份',*months]),state='readonly',width=13)
+            if page=='budget_page' and self.selected_month=='全部月份':self.selected_month=months[0]
             self.month_picker.set(self.selected_month);self.month_picker.pack(side='left')
             def select_month(_):
                 self.selected_month=self.month_picker.get();self.save_preferences();self.show(self.page)
@@ -427,6 +434,8 @@ class Desktop(tk.Tk):
             self.label(empty,'这个时间范围还没有账单。导入记录后即可分析。',12)
             self.button(empty,'导入账单',self.import_file)
             self.button(empty,'查看全部月份',self.select_all_months)
+        self.home_budget_alerts()
+        self.draw_trend()
         monthly, categories = overview(f)
         self.label(self.main, '消费结构 / '+self.selected_month, 14, bold=True)
         canvas = tk.Canvas(self.main, height=180, bg='white', highlightthickness=0)
@@ -439,6 +448,9 @@ class Desktop(tk.Tk):
             canvas.create_rectangle(110, y-6, 500, y+6, fill='#f0f5f2', outline='')
             canvas.create_rectangle(110, y-6, 110+float(row['支出'])/maxval*390, y+6, fill=[BLUE, '#75b9a2', '#9ac6b4', '#e6c997', '#b1b6d8'][i], outline='')
             canvas.create_text(530, y, text=f"¥ {row['支出']:,.2f}   ·   {row['占比']}%", anchor='w', fill=MUTED)
+            hit=canvas.create_rectangle(5,y-13,730,y+13,fill='',outline='')
+            canvas.tag_bind(hit,'<Button-1>',lambda event,c=row['分类']:self.open_category(c))
+            canvas.tag_bind(hit,'<Enter>',lambda event:canvas.config(cursor='hand2'))
         self.label(self.main, '月度收支', 14, bold=True)
         self.table(self.main, ['月份', '收入 / 元', '支出 / 元', '结余 / 元'], [[r['月份'], f"{r['收入']:,.2f}", f"{r['支出']:,.2f}", f"{r['结余']:,.2f}"] for _, r in monthly.iterrows()], 4)
         self.label(self.main, f'{"演示空间" if self.mode == "demo" else "个人空间"} · {len(f)} 笔记录 · 转账不计入收支 · 结余不等于账户余额', 9, MUTED)
@@ -451,6 +463,8 @@ class Desktop(tk.Tk):
         self.category.set('餐饮'); self.category.pack(side='left', padx=8)
         self.button(bar, '保存分类', self.correct)
         self.button(bar,'编辑交易',self.edit_selected)
+        ai=self.button(bar,'AI 分类建议',self.suggest_categories_ui)
+        if not self.model_client:ai.config(state='disabled')
         filters=tk.Frame(self.main,bg=BG);filters.pack(fill='x',pady=8)
         self.search_var=tk.StringVar(value=self.search_text)
         ttk.Entry(filters,textvariable=self.search_var,width=32).pack(side='left',padx=(0,10))
@@ -459,8 +473,13 @@ class Desktop(tk.Tk):
         self.result_count=tk.Label(filters,bg=BG,fg=MUTED);self.result_count.pack(side='right')
         self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源'],[],12)
         self.tree.bind('<Double-1>',lambda _:self.edit_selected())
-        self.search_var.trace_add('write',lambda *_:self.refresh_records())
-        self.filter_picker.bind('<<ComboboxSelected>>',lambda _:self.refresh_records())
+        self.search_var.trace_add('write',lambda *_:self.reset_record_filter())
+        self.filter_picker.bind('<<ComboboxSelected>>',lambda _:self.reset_record_filter())
+        self.record_page=0
+        paging=tk.Frame(self.main,bg=BG);paging.pack(fill='x')
+        self.button(paging,'上一页',lambda:self.change_record_page(-1))
+        self.button(paging,'下一页',lambda:self.change_record_page(1))
+        self.page_info=tk.Label(paging,bg=BG,fg=MUTED);self.page_info.pack(side='left')
         self.refresh_records()
         self.label(self.main,'搜索商户 / 描述 / 交易编号；双击交易可编辑。修改前的内容保存在审计记录中。',9,MUTED)
 
@@ -474,10 +493,21 @@ class Desktop(tk.Tk):
             mask=frame.merchant.str.contains(self.search_text,case=False,regex=False)|frame.description.str.contains(self.search_text,case=False,regex=False)|frame.external_id.str.contains(self.search_text,case=False,regex=False)
             frame=frame[mask]
         if self.category_filter!='全部分类':frame=frame[frame.category==self.category_filter]
-        self.record_rows=frame.sort_values('date',ascending=False).to_dict('records')
+        filtered=frame.sort_values('date',ascending=False).to_dict('records')
+        total=len(filtered);pages=max(1,(total+199)//200)
+        self.record_page=min(getattr(self,'record_page',0),pages-1)
+        self.record_rows=filtered[self.record_page*200:(self.record_page+1)*200]
+        self.page_info.config(text=f'第 {self.record_page+1} / {pages} 页 · 每页 200 笔')
         for item in self.tree.get_children():self.tree.delete(item)
         for i,r in enumerate(self.record_rows):self.tree.insert('','end',values=[r['date'][:10],r['merchant'],r['kind'],yuan(r['amount_cents']),r['category'],r['category_source']],tags=('alternate',) if i%2 else ())
-        self.result_count.config(text=f'{len(self.record_rows)} 笔匹配 / {len(self.frame)} 笔期间记录')
+        self.result_count.config(text=f'{total} 笔匹配 / {len(self.frame)} 笔期间记录')
+
+    def change_record_page(self,delta):
+        self.record_page=max(0,self.record_page+delta);self.refresh_records()
+
+    def reset_record_filter(self):
+        self.record_page=0
+        self.refresh_records()
 
     def edit_selected(self):
         record=self.selected()
@@ -553,7 +583,11 @@ class Desktop(tk.Tk):
         buttons = tk.Frame(self.main, bg=BG); buttons.pack(fill='x')
         self.button(buttons, '比较两个方案', self.calculate)
         self.button(buttons, '保存方案 B', self.save_plan)
+        self.button(buttons,'保存方案 A',lambda:self.save_plan('A'))
+        self.button(buttons,'用近三个月账单估算',self.estimate_plan)
         self.button(buttons, '新建目标', lambda:self.show('plan'))
+        self.estimate_note=self.label(self.main,'估算仅使用最近三个完整月份，点击按钮查看月份依据。',9,MUTED)
+        self.estimate_note.config(wraplength=850)
         self.goal_status=self.label(self.main,'新目标 · 保存方案 B 后可在下方查看',9,MUTED)
         self.plan_result = tk.Label(self.main, text='', bg='white', fg=INK, justify='left', anchor='nw', padx=24, pady=22, font=('Microsoft YaHei UI', 12), wraplength=780)
         self.plan_cards=tk.Frame(self.main,bg=BG);self.plan_cards.pack(fill='x',pady=8)
@@ -567,6 +601,7 @@ class Desktop(tk.Tk):
         self.label(history_bar,'已保存目标 / 当前空间',12,bold=True)
         self.button(history_bar,'载入选中目标',self.load_goal)
         self.button(history_bar,'删除选中目标',self.remove_goal)
+        self.button(history_bar,'实际存入与进度',self.contribution_window)
         self.goal_rows=self.store.goals().to_dict('records')
         self.goal_tree=self.table(self.main,['目标','目标金额','已有储蓄','截止日期','月预算'],[[r['name'],yuan(r['target_cents']),yuan(r['saved_cents']),r['deadline'],yuan(r['budget_cents'])] for r in self.goal_rows],3)
         self.goal_tree.bind('<Double-1>',lambda _:self.load_goal())
@@ -595,14 +630,19 @@ class Desktop(tk.Tk):
             for label in self.plan_card_labels:label.config(text='请检查输入：'+str(exc),fg='#b45f50')
             return False
 
-    def save_plan(self):
+    def save_plan(self,scenario='B'):
         if not self.calculate(): return
         (target, saved, income, a, b), deadline = self.plan_values()
-        values=dict(name='储蓄目标 B',target_cents=target,saved_cents=saved,start_date=self.plan_start,deadline=deadline,income_cents=income,budget_cents=b)
+        if scenario=='A':b=a
+        name=f'储蓄目标 {scenario}'
+        if self.editing_goal_id:
+            current=self.store.goals();matched=current[current.id==self.editing_goal_id]
+            if not matched.empty:name=matched.iloc[0]['name']
+        values=dict(name=name,target_cents=target,saved_cents=saved,start_date=self.plan_start,deadline=deadline,income_cents=income,budget_cents=b)
         if self.editing_goal_id:self.store.update_goal(self.editing_goal_id,values)
         else:self.store.save_goal(values)
         self.show('plan')
-        messagebox.showinfo('计划已保存', '方案 B 已保存至当前空间的数据库。')
+        messagebox.showinfo('计划已保存',f'方案 {scenario} 已保存至当前空间。实际存入请在历史目标中单独记录。')
         self.animate_character('success')
 
     def chosen_goal(self):
@@ -660,21 +700,10 @@ class Desktop(tk.Tk):
             frame=self.frame.copy(); model=self.model_client
             self.answer.config(text='正在理解问题并核对记录…')
             mailbox=queue.Queue()
-            class IntentAdapter:
-                def parse_question(self, text): return model.parse_question(text)
+            budgets=self.qa_budgets(frame)
             def worker():
-                try:
-                    # Model is only used for phrasing outside the deterministic parser.
-                    from finance.qa import parse_question, validate_model_intent
-                    if parse_question(q) is not None:
-                        intent=model.parse_question(q)
-                        if validate_model_intent(q,intent) is None: raise ValueError('unsupported')
-                        result=answer_question(frame,q)
-                        result['parser']='模型理解 + 代码核对'
-                    else: result=answer_question(frame,q,model=IntentAdapter())
-                    mailbox.put(result)
-                except Exception:
-                    result=answer_question(frame,q); result['parser']='模型不可用，回退本地规则'; mailbox.put(result)
+                result=answer_question(frame,q,budgets=budgets,model=model)
+                mailbox.put(result)
             def poll():
                 if generation != self.ask_generation or self.page != 'assistant': return
                 try: result=mailbox.get_nowait()
@@ -682,8 +711,12 @@ class Desktop(tk.Tk):
                 self.render_answer(result)
             threading.Thread(target=worker,daemon=True).start(); self.after(100,poll)
             return
-        result = answer_question(self.frame, q)
+        result = answer_question(self.frame,q,budgets=self.qa_budgets(self.frame))
         self.render_answer(result)
+
+    def qa_budgets(self,frame):
+        months=set(frame.date.str[:7])|{date.today().strftime('%Y-%m')}
+        return {m:self.store.budgets(m) for m in months}
 
     def render_answer(self, result):
         self.animate_character('success' if result.get('status')=='ok' else 'idle')
@@ -700,7 +733,7 @@ if __name__ == '__main__':
         if '--self-test' in sys.argv:
             app.update()
             assert len(app.store.transactions()) >= 100
-            for page in ['records', 'plan', 'assistant', 'home']:
+            for page in ['records','budget_page','plan','assistant','settings','home']:
                 app.show(page); app.update()
             app.switch_space(); app.update()
             assert app.mode == 'personal'

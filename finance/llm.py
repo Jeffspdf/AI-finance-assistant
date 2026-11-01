@@ -47,11 +47,6 @@ class ModelClient:
         return category
 
     def parse_question(self, question):
-        result=self._json('Understand a Chinese transaction query, do not calculate. Return {"metric":"expense|income|balance|count|top|share|budget", "category":null or a permitted category, "period":"this_month|last_month|all|YYYY-MM"}. If unsupported or ambiguous, return {"unsupported":true}. Do not infer future predictions, investments, individual payees, or day/date ranges. Permitted categories: '+json.dumps(CATEGORIES,ensure_ascii=False),{'question':question})
-        if result.get('unsupported'): return None
-        if result.get('metric') not in ['expense','income','balance','count','top','share','budget']: return None
-        if result.get('category') not in [None,*CATEGORIES]: return None
-        import re
-        period=result.get('period','')
-        if period not in ['this_month','last_month','all'] and not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])',period): return None
-        return result
+        result=self._json('Understand a Chinese transaction query, NEVER calculate. Return JSON fields metric (expense,income,balance,count,top,share,budget,compare,average_expense,average_income), category (null or allowed label), period (this_month,last_month,all,YYYY-MM,last_3_complete_months). Optional merchant must be literal text from user. Optional date_from/date_to must both be exact YYYY-MM-DD from user; use period all with dates. Optional compare_categories contains exactly two labels; use metric compare and category null. Preserve EVERY condition, never broaden. For ambiguous/unsupported/future/investment/refund questions return {"unsupported":true}. Allowed categories: '+json.dumps(CATEGORIES,ensure_ascii=False),{'question':question})
+        from .qa import validate_model_intent
+        return validate_model_intent(question,result)

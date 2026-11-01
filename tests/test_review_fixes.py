@@ -37,6 +37,18 @@ def test_goal_contributions_migrate_and_cascade(store):
     with pytest.raises(ValueError):store.add_contribution(gid,'2027-01-01',100,today=date(2026,10,9))
     store.delete_goal(gid);assert store.contributions(gid).empty
 
+def test_true_legacy_database_upgrade(tmp_path):
+    import sqlite3
+    path=tmp_path/'legacy.sqlite3'
+    db=sqlite3.connect(path)
+    db.execute('CREATE TABLE goals(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,target_cents INTEGER NOT NULL,saved_cents INTEGER NOT NULL,start_date TEXT NOT NULL,deadline TEXT NOT NULL,income_cents INTEGER NOT NULL,budget_cents INTEGER NOT NULL)')
+    db.execute("INSERT INTO goals VALUES(1,'旧目标',600000,5000,'2026-07-01','2027-01-01',500000,400000)")
+    db.commit();db.close()
+    upgraded=Store(path)
+    assert upgraded.goals().iloc[0].saved_cents==5000 and upgraded.contributions(1).empty
+    upgraded.add_contribution(1,'2026-08-01',1000,today=date(2026,10,9))
+    assert upgraded.contributions(1).iloc[0].amount_cents==1000
+
 def test_model_suggestions_protect_corrections(store):
     row=store.transactions().iloc[0]
     assert not store.apply_model_category(row.id,'娱乐')

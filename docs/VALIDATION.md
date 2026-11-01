@@ -2,7 +2,7 @@
 
 ## Completed locally
 
-- Full regression: **85 passed**, Python 3.12 / Windows; includes original Streamlit UI tests. Run: `python -m pytest -q`. The first sandbox run stalled on local socket setup; the same suite passed in the normal local execution environment. This is not recorded as an application failure or a skipped test pass.
+- Full regression: **86 passed**, Python 3.12 / Windows; includes original Streamlit UI tests. Run: `python -m pytest -q`. The first sandbox run stalled on local socket setup; the same suite passed in the normal local execution environment. This is not recorded as an application failure or a skipped test pass.
 - Desktop self-test: passes in an isolated FINANCE_DESKTOP_DATA_DIR, including overview, ledger, budget, plan, assistant and settings pages. No personal ledger was modified.
 - `python scripts/verify_review_ui.py`: verifies budget persistence, food expense evidence, three-month estimate, actual goal deposits, selected AI suggestion acceptance (mock), source protection and minimum-window controls. It uses temporary databases and synthetic screenshots.
 - `python scripts/reproduce_acceptance.py`: 100 unique synthetic rows, repeated import skips 100, 4 invalid rows rejected, Excel parsing passes. September food expense RMB 145, budget RMB 100, overrun RMB 45, **6** source records. Last-three-complete-month average expense = 340333 cents, rounded to cents.
@@ -22,3 +22,8 @@ The screenshots are generated from deterministic demo data, then UI test changes
 ## Limits
 
 Tests do not establish genuine-model accuracy, arbitrary-bank compatibility, a 50k-row latency guarantee, clean Windows VM installation or high-DPI correctness. Backup/restore and enhanced import cancellation/mapping remain unimplemented. Build, remote publish and remote CI results must be independently observed; source tests alone do not establish their success.
+
+## Build and CI observation
+
+The v0.6.0 packaged EXE passed --self-test with isolated data. The first GitHub review test workflow completed successfully: https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41282130254 . This run covered the review implementation before the final extra legacy-database test; the local final suite includes that extra test (86 passed). A later evidence-only commit starts a new remote run whose status must be checked separately.
+

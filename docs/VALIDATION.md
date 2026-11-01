@@ -40,3 +40,13 @@ The local native system is 2560x1440, 150% (Windows144 DPI, Tk143.858 estimate).
 
 The v0.7.1 installer and portable ZIP were built locally. The actual packaged EXE passed its isolated-data `--self-test`. `scripts/verify_packaged_dpi.py` separately launched that EXE with temporary synthetic data and observed a144-DPI native1800x1200 client through the Windows window API, then closed it normally (exit0). Evidence: screenshots/dpi/packaged_native_metrics.json and packaged_native_home.png. This confirms a local packaged run, not installation on a clean Windows VM.
 
+## API configuration persistence — v0.7.2
+
+Full regression: **106 passed** (94 prior tests plus12 settings-persistence cases). Includes actual Windows current-user DPAPI cross-process decrypt and damaged-blob rejection. Persistence tests also cover legacy/corrupt settings, no plaintext key, startup with model requests blocked, session-only and keyless activation, clear/disable, endpoint tampering, and encryption/atomic-write failures preserving old settings.
+
+`scripts/verify_model_persistence_ui.py` passed seven fresh-process stages: GUI save, restored enabled/key, endpoint change clears input without rewriting old saved config, clear, cleared restart, session-only save, session-only restart. All model requests were blocked; only synthetic keys used. `scripts/verify_dpi_ui.py native` and `... 2` passed six pages at default/minimum size and nine dialogs/pet surfaces; new model form remains scrollable with an unclipped fixed action footer.
+
+The actual v0.7.2 packaged EXE passed `scripts/verify_packaged_model_settings.py`: two fresh launches with synthetic DPAPI credentials in a separate data directory; self-test verifies runtime key/activation equals the independently loaded configuration, and the ciphertext file remains unchanged. No live model request or real credential was used. Installer/data paths and AppId remain unchanged; no clean-machine install or migration of previously unsaved in-memory credentials is claimed.
+
+A1 design documents were added to version control in a separate commit before this fix. They describe later account/reconciliation/refund work and are not runtime features of v0.7.2.
+

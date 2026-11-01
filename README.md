@@ -8,7 +8,7 @@
 
 ## Windows 安装
 
-从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.7.1-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
+从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.7.2-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
 
 顶部选择演示空间或我的账本。首次演示默认最近有数据月份；个人账本初始为空。私有数据目录保留为 `%LOCALAPPDATA%\ShiguangLedger`，保证旧版升级兼容，卸载默认保留。请退出程序后备份整个目录；本版尚无一键恢复。
 
@@ -23,7 +23,7 @@
 
 ## 模型与隐私
 
-设置 → 配置模型，填写 Base URL（不含 `/chat/completions`）、模型 ID 和 Key，测试连接后勾选启用与发送许可。远程要求 HTTPS，本机 localhost 可用 HTTP。端点/模型名保存；密钥和启用状态只在本次运行有效。
+设置 → 配置模型，填写 Base URL（不含 `/chat/completions`）、模型 ID 和 Key，测试连接后勾选启用与发送许可。远程要求 HTTPS，本机 localhost 可用 HTTP。勾选“记住密钥和启用状态”并保存后，密钥使用Windows当前用户DPAPI加密，重启/更新后恢复；取消记住则仅本次启用。启动恢复不请求接口，可用“清除密钥”删除保存值并停用。旧版未保存的密钥需重新填写一次。
 
 问答仅发送问题文本。AI 分类需再次确认，发送待确认记录的商户、描述、收支类型，每次最多 20 笔，可能产生费用。返回建议需人工选择接受，来源标注“模型建议（需核对）”；人工修正与规则结果不被覆盖。模型不能执行任意 SQL/代码。没有真实 API 凭据时，不会声称真实模型评测已通过。
 
@@ -78,3 +78,9 @@ python scripts/verify_review_ui.py
 首页顺序：收支概览 → 洞察 → 预算。洞察随内容宽度采用2/3列，只有两张时均分宽度。说明文字至少10pt。
 
 运行 `python scripts/verify_dpi_ui.py` 可复现100/125/150/200%模拟和本机原生缩放测试，覆盖六页默认/最小尺寸、九种弹窗/桌面角色和对话换行。详见[第三轮回应](docs/ROUND3_RESPONSE.md)。本机原生150%已验证；其余为Tk模拟，未认证跨不同DPI显示器热切换及干净Windows安装。
+
+## API配置记忆（0.7.2）
+
+设置 → 配置模型 → 填写地址、模型和Key → 勾选启用与记住 → 保存设置。后续在同一Windows用户下启动/更新，无需重新填写。地址与模型保存在既有用户数据目录，密钥以DPAPI密文保存，不随安装目录或版本号变化。更改接口地址会清空输入框中的旧Key，避免误发送；更换电脑/Windows用户可能需要重填。取消记住或清除密钥后不会自动启用，免密本地接口也遵循该开关。
+
+验证：`python scripts/verify_model_persistence_ui.py`（虚构Key，独立进程保存/重启/清除/仅本次/地址变化，不请求模型）；`python scripts/verify_packaged_model_settings.py`验证实际打包EXE连续两次恢复。[配置实现与验证](docs/MODEL_SETTINGS.md)。[修订ADR](docs/adr/0001-monthly-review-incremental-plan.md)及[一页计划](docs/A1_IMPLEMENTATION_PLAN.md)记录后续账户/对账/退款设计，这些业务未在本补丁实现。

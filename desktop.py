@@ -19,6 +19,7 @@ from finance.qa import answer_question
 from finance.categories import CATEGORIES
 from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer
 from finance.llm import ModelClient
+from finance.model_settings import ModelSettings
 import json
 from finance.animation import SpritePlayer
 from finance.desktop_review import ReviewFeatures
@@ -53,12 +54,13 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         if self.mode not in ('demo','personal'):self.mode='demo'
         self.selected_month=self.preferences.get('month',date.today().strftime('%Y-%m'))
         self.search_text='';self.category_filter='全部分类' 
-        self.model_client = None
-        self.model_key = ''
-        self.model_settings = {}
-        try:
-            self.model_settings = json.loads((DATA_DIR / 'model-settings.json').read_text(encoding='utf-8'))
-        except (OSError, ValueError): pass
+        self.model_repository = ModelSettings(DATA_DIR)
+        loaded = self.model_repository.load()
+        self.model_settings = {'base_url': loaded.base_url, 'model': loaded.model,
+                               'remember_key': loaded.remember_key, 'enabled': loaded.enabled}
+        self.model_key = loaded.api_key
+        self.model_notice = loaded.notice
+        self.model_client = ModelClient(loaded.base_url, loaded.model, loaded.api_key, enabled=True) if loaded.enabled else None
         self.ask_generation = 0
         self.animators=[]
         self.animation_paused=False
@@ -139,19 +141,31 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         self.motion_button.config(text='恢复角色动画' if self.animation_paused else '暂停角色动画')
 
     def show_model_settings(self):
-        window = tk.Toplevel(self); window.title('模型设置 · 自定义 API'); set_window_geometry(window, 650, 610); window.configure(bg=BG)
-        box = tk.Frame(window, bg=BG, padx=px(24), pady=px(18)); box.pack(fill='both', expand=True)
+        window = tk.Toplevel(self); window.title('模型设置 · 自定义 API'); set_window_geometry(window, 680, 680); window.configure(bg=BG)
+        buttons = tk.Frame(window, bg=BG); buttons.pack(side='bottom',fill='x',padx=px(24),pady=px(4))
+        box = scrollable_form(window)
         self.label(box, '连接你自己的大模型', 20, bold=True)
         self.label(box, '支持兼容 Chat Completions 的接口。Base URL 填到 /v1 等根路径。', 10, MUTED)
         fields = {}
-        for label, key, default in [('Base URL', 'base_url', 'https://api.deepseek.com'), ('模型名称 / Model ID', 'model', ''), ('API Key（仅本次运行有效）', 'api_key', self.model_key)]:
+        for label, key, default in [('Base URL', 'base_url', 'https://api.deepseek.com'), ('模型名称 / Model ID', 'model', ''), ('API Key', 'api_key', self.model_key)]:
             self.label(box, label, 10)
             entry = ttk.Entry(box, show='•' if key == 'api_key' else '', width=65)
-            entry.insert(0, default if key == 'api_key' else self.model_settings.get(key, default)); entry.pack(fill='x', pady=px((0,8))); fields[key] = entry
+            entry.insert(0, default if key == 'api_key' else (self.model_settings.get(key) or default)); entry.pack(fill='x', pady=px((0,8))); fields[key] = entry
         enabled = tk.BooleanVar(value=self.model_client is not None)
         tk.Checkbutton(box, text='启用模型，并允许向该接口发送我输入的问题文本', variable=enabled, bg=BG, fg=INK).pack(anchor='w', pady=px(8))
-        self.label(box, '问答仅发送问题文本；分类另行确认发送商户、描述和收支类型。\n金额由代码计算，回答保留源记录。测试连接可能产生少量 API 费用。\n密钥不写入配置文件，关闭应用后需重新填写并启用。', 10, MUTED)
-        status = self.label(box, '填写配置后，可先测试连接。', 10, GREEN); status.config(wraplength=px(580))
+        remember = tk.BooleanVar(value=self.model_settings.get('remember_key',True))
+        tk.Checkbutton(box,text='记住密钥和启用状态（本机加密，重启/更新后恢复）',variable=remember,bg=BG,fg=INK).pack(anchor='w',pady=px(4))
+        self.label(box, '密钥使用当前 Windows 用户加密保存；取消记住则仅本次有效。\n问答发送问题文本；分类另行确认发送商户、描述和收支类型。\n启动恢复不会请求接口，测试连接及实际模型调用可能产生费用。', 10, MUTED).configure(wraplength=px(590))
+        status = self.label(box, self.model_notice or '保存设置后生效；已记住的配置将在下次启动时自动恢复。', 10, GREEN); status.config(wraplength=px(580))
+        endpoint_var=tk.StringVar(value=fields['base_url'].get());fields['base_url'].configure(textvariable=endpoint_var)
+        previous_endpoint=[endpoint_var.get().strip().rstrip('/')]
+        def endpoint_changed(*_):
+            base=endpoint_var.get().strip().rstrip('/')
+            if base!=previous_endpoint[0]:
+                fields['api_key'].delete(0,'end')
+                status.config(text='接口地址已更改，请填写该接口的密钥；本地免密接口可留空。')
+                previous_endpoint[0]=base
+        endpoint_var.trace_add('write',endpoint_changed)
         def client():
             base=fields['base_url'].get().strip()
             if base.endswith('/chat/completions'): raise ValueError('请填写 Base URL，不要包含 /chat/completions')
@@ -159,9 +173,10 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         def save():
             try:
                 model = client() if enabled.get() else None
-                self.model_settings = {'base_url': fields['base_url'].get().strip(), 'model': fields['model'].get().strip()}
-                (DATA_DIR/'model-settings.json').write_text(json.dumps(self.model_settings),encoding='utf-8')
-                self.model_key = fields['api_key'].get().strip()
+                saved=self.model_repository.save(fields['base_url'].get(),fields['model'].get(),fields['api_key'].get(),enabled.get(),remember.get())
+                self.model_settings = {'base_url':saved.base_url,'model':saved.model,'remember_key':saved.remember_key,'enabled':saved.enabled}
+                self.model_key = saved.api_key
+                self.model_notice = ''
                 self.model_client = model
                 self.show(self.page); window.destroy()
             except Exception as exc: status.config(text=str(exc))
@@ -181,9 +196,18 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
             try: text=mailbox.get_nowait()
             except queue.Empty: window.poll=window.after(100,poll); return
             status.config(text=text); test_button.config(state='normal')
-        buttons=tk.Frame(box,bg=BG); buttons.pack(fill='x',pady=px(8))
         test_button=self.button(buttons,'测试连接',test)
         self.button(buttons,'保存设置',save)
+        def clear():
+            try:
+                cleared=self.model_repository.clear_key()
+                self.model_key='';self.model_client=None;self.model_notice=cleared.notice
+                self.model_settings.update(remember_key=False,enabled=False)
+                fields['api_key'].delete(0,'end');enabled.set(False);remember.set(False)
+                status.config(text=cleared.notice)
+                self.show(self.page)
+            except OSError:status.config(text='清除失败，请检查本机配置目录是否可写。')
+        self.button(buttons,'清除密钥',clear)
         def cleanup(event):
             if event.widget is window and hasattr(window,'poll'): window.after_cancel(window.poll)
         window.bind('<Destroy>',cleanup)
@@ -714,7 +738,8 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         (DATA_DIR/'preferences.json').write_text(json.dumps(self.preferences),encoding='utf-8')
 
     def settings(self):
-        items=[('大模型接口','配置 Base URL、模型名称和 Key；密钥只在本次运行中保留。',self.show_model_settings,'配置模型'),
+        if self.model_notice:self.label(self.main,self.model_notice,10,'#ae6450').configure(wraplength=px(760))
+        items=[('大模型接口','可记住本机加密密钥及启用状态，重启和更新后自动恢复。',self.show_model_settings,'配置模型'),
                ('版本与更新',f'当前 v{APP_VERSION} · 检查新版与下载安装包。',self.show_updates,'检查更新'),
                ('本机数据','演示空间和我的账本独立保存；备份前退出程序并复制数据目录。',lambda:os.startfile(str(DATA_DIR)),'打开数据目录'),
                ('角色与动画','点击角色挥手，可暂停动画或打开桌面小助手。',self.show_pet,'打开桌面小助手')]
@@ -747,6 +772,9 @@ if __name__ == '__main__':
         app = Desktop()
         if '--self-test' in sys.argv:
             app.update()
+            restored=app.model_repository.load()
+            assert (app.model_client is not None)==restored.enabled
+            assert app.model_key==restored.api_key
             assert len(app.store.transactions()) >= 100
             for page in ['records','budget_page','plan','assistant','settings','home']:
                 app.show(page); app.update()
@@ -754,6 +782,12 @@ if __name__ == '__main__':
             assert app.mode == 'personal'
             app.switch_space(); app.update()
             app.show('assistant'); app.ask('累计结余是多少？')
+            # A restored model enables the async UI path even for local queries.
+            import time
+            deadline=time.monotonic()+5
+            while getattr(app,'chat_busy',False) and time.monotonic()<deadline:
+                app.update();time.sleep(.01)
+            assert not getattr(app,'chat_busy',False)
             assert '结余为' in app.answer.cget('text')
             (DATA_DIR / 'self-test.ok').write_text('Desktop smoke test passed', encoding='utf-8')
             app.destroy()

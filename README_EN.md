@@ -12,7 +12,7 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Optional AI
 
-Settings → model configuration. Enter the provider Base URL, model ID and Key; explicitly enable and consent. Keys are session-only. Questions alone are sent for query interpretation. Classification separately confirms sending merchant/description/kind for at most 20 unresolved rows. Select suggestions to accept; rules/manual labels are protected. Local questions bypass the provider. Unsupported or invalid conditions are refused; models never execute SQL or calculate money.
+Settings → model configuration. Enter the provider Base URL, model ID and Key; explicitly enable and consent. With Remember enabled, keys are protected by Windows current-user DPAPI and activation is restored after restart/update. Unchecking Remember keeps activation/key in this session only. Clear key removes the stored credential and disables the model. Old session-only keys must be entered once again; startup restoration makes no model request. Questions alone are sent for query interpretation. Classification separately confirms sending merchant/description/kind for at most 20 unresolved rows. Select suggestions to accept; rules/manual labels are protected. Local questions bypass the provider. Unsupported or invalid conditions are refused; models never execute SQL or calculate money.
 
 ## Verify
 

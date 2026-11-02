@@ -17,8 +17,8 @@ from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
 from finance.categories import CATEGORIES
-from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer
-from finance.llm import ModelClient
+from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer,update_error_message
+from finance.llm import ModelClient,connection_error_message
 from finance.model_settings import ModelSettings
 import json
 from finance.animation import SpritePlayer
@@ -184,13 +184,11 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         def test():
             try: model=client()
             except Exception as exc: status.config(text=str(exc)); return
-            test_button.config(state='disabled'); status.config(text='正在测试连接…')
+            test_button.config(state='disabled'); status.config(text='正在测试连接…最长约 60 秒，只发送一条测试消息。')
             def worker():
                 try: model.test_connection(); mailbox.put('连接成功，模型返回有效结果。保存并启用后生效。')
                 except Exception as exc:
-                    from urllib.error import HTTPError
-                    if isinstance(exc, HTTPError): mailbox.put(f'连接失败：HTTP {exc.code}。请检查密钥、模型名、额度及接口地址。')
-                    else: mailbox.put('连接失败：网络超时、地址不可达或返回格式不兼容。')
+                    mailbox.put(connection_error_message(exc))
             threading.Thread(target=worker,daemon=True).start(); window.poll=window.after(100,poll)
         def poll():
             try: text=mailbox.get_nowait()
@@ -230,7 +228,7 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         notes.insert('1.0', '发现新版本后可直接下载安装包，显示下载进度并打开下载目录。\n\n下载后请先退出本程序，再运行安装包。覆盖安装保留账单数据。\n\n如网络无法连接 GitHub，可使用浏览器下载链接。')
         notes.config(state='disabled')
         buttons = tk.Frame(content, bg=BG); buttons.pack(fill='x')
-        download = self.button(buttons, '下载新版安装包 ↗', lambda: None)
+        download = self.button(buttons, '下载最新安装包', lambda: None)
         download.config(state='disabled')
         self.button(buttons, '官方发布页面 ↗', lambda: webbrowser.open(RELEASES_URL))
         mailbox = queue.Queue()
@@ -253,9 +251,7 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
             def worker():
                 try: download_box.put(('done',download_installer(download_url[0],DATA_DIR/'downloads',report,cancel_download.is_set,expected_sha256=download_sha[0],verify_release=True)))
                 except Exception as exc:
-                    from urllib.error import HTTPError
-                    message=f'下载失败：HTTP {exc.code}，请重试或使用浏览器备用链接。' if isinstance(exc,HTTPError) else '下载失败：网络不可达、超时或文件不完整。请重试或使用浏览器备用链接。'
-                    download_box.put(('error',message))
+                    download_box.put(('error',update_error_message(exc)))
             threading.Thread(target=worker,daemon=True).start(); window.download_poll=window.after(100,poll_download)
 
         def poll_download():
@@ -285,7 +281,7 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
             status.config(text='正在检查 GitHub 最新版本…')
             def worker():
                 try: mailbox.put(('ok', check_latest()))
-                except Exception: mailbox.put(('error', None))
+                except Exception as exc: mailbox.put(('error',update_error_message(exc,'检查更新')))
             threading.Thread(target=worker, daemon=True).start()
             window.poll = window.after(100, poll)
 
@@ -295,11 +291,13 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
                 window.poll = window.after(100, poll); return
             checking[0] = False; check.config(state='normal')
             if kind == 'error':
-                status.config(text='检查失败：网络不可用或 GitHub 限流。可重试或打开发布页面。')
+                status.config(text=result)
                 return
             status.config(text=f'发现新版本 v{result["version"]}' if result['newer'] else f'当前已是最新版本（GitHub 正式版 v{result["version"]}）。')
+            if result.get('source')=='official_release_page':
+                status.config(text=status.cget('text')+'\nGitHub API 受限，已从官方发布页确认，仍可在应用内下载。')
             notes.config(state='normal'); notes.delete('1.0', 'end'); notes.insert('1.0', result['notes']); notes.config(state='disabled')
-            if result['newer'] and result['installer_url']:
+            if result['installer_url']:
                 download_url[0]=result['installer_url']
                 download_sha[0]=result.get('sha256')
                 download.config(state='normal', command=start_download)

@@ -50,3 +50,15 @@ The actual v0.7.2 packaged EXE passed `scripts/verify_packaged_model_settings.py
 
 A1 design documents were added to version control in a separate commit before this fix. They describe later account/reconciliation/refund work and are not runtime features of v0.7.2.
 
+## DeepSeek and update diagnostics — v0.7.3, 2026-11-03
+
+Full offline regression: **114 passed**. New coverage includes official-only DeepSeek non-thinking JSON options, bounded outputs and60-second timeout, empty/truncated/malformed responses, distinct authentication/balance/timeout messages, trusted release-page fallback when GitHub API times out, and one transient download-connect retry with checksum still required.
+
+`scripts/verify_connection_updates_ui.py` passed in isolated synthetic data: timeout/402 messages, same-version download enabled after public-page fallback, successful download UI with mocked file transfer, and SHA256 mismatch shown accurately. `scripts/verify_dpi_ui.py native` passed current150% checks. Actual packaged EXE passed two fresh encrypted-configuration restore/self-test launches.
+
+With explicit user authorization, a private diagnostic loaded the user's encrypted key only in memory and called the official DeepSeek model listing and a128-output-token connection test. Authentication/model availability and completion succeeded (about0.69seconds), with no ledger transmission. This is a connectivity result, not a live categorization/QA benchmark; credentials and raw provider responses are not published. Old failure's exact exception was not captured, so the20-second/default-thinking mismatch is an identified compatibility risk, not a proven explanation for every prior failure.
+
+The public GitHub release API returned403 with remaining quota0; the official page still resolved and the original in-app download path completed the v0.7.2 installer in43.27seconds with valid SHA256. New UI keeps application downloads available even for the installed current version and when using the official-page fallback. See [diagnostic record](CONNECTION_UPDATE_FIX.md).
+
+Local automatic overwrite installation was attempted after user approval but Windows denied access to the existing uninstaller; Setup rolled back. That attempt does not establish installed-v0.7.3 success. The user was given the completed local installer for manual installation; packaged execution is independently verified above.
+

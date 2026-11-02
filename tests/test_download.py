@@ -38,3 +38,13 @@ def test_verify_release_checksum(tmp_path):
     with patch('finance.updates.published_checksum',return_value=digest) as manifest,patch('finance.updates.urlopen',return_value=response(b'MZtest')):
         _,actual=download_installer(URL,tmp_path,verify_release=True)
         assert actual==digest and manifest.called
+
+
+def test_transient_connect_failure_retries_once_and_preserves_checksum(tmp_path):
+    from urllib.error import URLError
+    import hashlib
+    digest=hashlib.sha256(b'MZtest').hexdigest()
+    with patch('finance.updates.urlopen',side_effect=[URLError(TimeoutError()),response(b'MZtest')]) as request:
+        _,actual=download_installer(URL,tmp_path,expected_sha256=digest,verify_release=True)
+        assert actual==digest and request.call_count==2
+        assert request.call_args.kwargs['timeout']==60

@@ -53,6 +53,15 @@ def test_rate_limit_fallback_and_untrusted_redirect():
         result=check_latest()
         assert result['version']=='9.4.0' and result['newer']
         assert result['installer_url']==f'https://github.com/{REPO}/releases/download/v9.4.0/AIFinanceHelper-9.4.0-Setup-x64.exe'
+        assert result['source']=='official_release_page'
     response.__enter__.return_value.geturl.return_value='https://evil.example/releases/tag/v9.0.0'
     with patch('finance.updates.urlopen',side_effect=[HTTPError('',429,'rate limit',{},None),response]):
         with pytest.raises(ValueError): check_latest()
+
+
+def test_api_timeout_still_allows_verified_official_page_download():
+    response=MagicMock()
+    response.__enter__.return_value.geturl.return_value=f'https://github.com/{REPO}/releases/tag/v9.4.0'
+    with patch('finance.updates.urlopen',side_effect=[TimeoutError(),response]):
+        result=check_latest()
+    assert result['installer_url'] and result['source']=='official_release_page'

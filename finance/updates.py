@@ -5,9 +5,9 @@ import hashlib
 import os
 from pathlib import Path
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
-APP_VERSION = '0.7.2'
+APP_VERSION = '0.7.3'
 REPO = 'Jeffspdf/AI-finance-assistant'
 RELEASES_URL = f'https://github.com/{REPO}/releases/latest'
 API_URL = f'https://api.github.com/repos/{REPO}/releases/latest'
@@ -45,31 +45,53 @@ def check_latest():
                                       'User-Agent': 'AIFinanceHelper/' + APP_VERSION,
                                       'X-GitHub-Api-Version': '2022-11-28'})
     try:
-        with urlopen(request, timeout=8) as response:
+        with urlopen(request, timeout=20) as response:
             content = response.read(1024 * 1024 + 1)
     except HTTPError as exc:
-        if exc.code not in (403, 429): raise
-        # Shared networks can exhaust GitHub's unauthenticated API quota.
-        # The public latest-release redirect still identifies a formal release.
-        with urlopen(Request(RELEASES_URL, headers={'User-Agent': 'AIFinanceHelper/'+APP_VERSION}), timeout=8) as response:
-            final_url = response.geturl()
-        match = re.fullmatch(r'https://github\.com/' + re.escape(REPO) + r'/releases/tag/(v?\d+\.\d+\.\d+)', final_url)
-        if not match: raise ValueError('无法确认官方最新版本')
-        tag = match.group(1)
-        name = f'AIFinanceHelper-{tag.removeprefix("v")}-Setup-x64.exe'
-        result = parse_release({'tag_name': tag, 'assets': [],
-                              'body': 'GitHub API 当前限流，已通过官方发布页确认版本。可尝试官方安装包下载链接，若尚未上传请打开发布页面。'})
-        result['installer_url'] = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
-        return result
+        if exc.code not in (403,429,500,502,503,504):raise
+        return _official_page_release()
+    except (URLError,TimeoutError,ConnectionError):
+        return _official_page_release()
     if len(content) > 1024 * 1024:
         raise ValueError('更新信息过大，请前往发布页面查看')
     return parse_release(json.loads(content))
 
 
+def _official_page_release():
+    # This public GitHub page is independent of the API quota; downloads still
+    # require the official checksum manifest, never an unverified mirror.
+    with urlopen(Request(RELEASES_URL,headers={'User-Agent':'AIFinanceHelper/'+APP_VERSION}),timeout=20) as response:
+        final_url=response.geturl()
+    match=re.fullmatch(r'https://github\.com/'+re.escape(REPO)+r'/releases/tag/(v?\d+\.\d+\.\d+)',final_url)
+    if not match:raise ValueError('无法确认官方最新版本')
+    tag=match.group(1);name=f'AIFinanceHelper-{tag.removeprefix("v")}-Setup-x64.exe'
+    result=parse_release({'tag_name':tag,'assets':[],
+                          'body':'已通过官方 GitHub 发布页确认版本。应用内仍可下载安装包，下载前读取官方 SHA256 清单并校验；无需转到浏览器。'})
+    result.update(installer_url=f'https://github.com/{REPO}/releases/download/{tag}/{name}',source='official_release_page')
+    return result
+
+
+def _open_download(request,timeout):
+    for attempt in range(2):
+        try:return urlopen(request,timeout=timeout)
+        except HTTPError as exc:
+            if attempt or exc.code not in (500,502,503,504):raise
+        except (URLError,TimeoutError,ConnectionError):
+            if attempt:raise
+
+
+def update_error_message(exc,action='下载'):
+    if isinstance(exc,InterruptedError):return '下载已取消，未保存不完整安装包。'
+    if isinstance(exc,ValueError):return f'{action}未完成：{exc}'
+    if isinstance(exc,HTTPError):return f'{action}失败：HTTP {exc.code}。GitHub 可能限流或暂时不可用，可重试或使用官方浏览器链接。'
+    if isinstance(exc,(TimeoutError,URLError,ConnectionError)):return f'{action}网络连接失败或超时，请检查代理并重试；仍可使用官方浏览器链接。'
+    return f'{action}未完成，请检查网络和下载目录是否可写，再重试。'
+
+
 def published_checksum(url):
     filename=url.rsplit('/',1)[-1]
     sums_url=url.rsplit('/',1)[0]+'/SHA256SUMS.txt'
-    with urlopen(Request(sums_url,headers={'User-Agent':'AIFinanceHelper/'+APP_VERSION}),timeout=15) as response:content=response.read(65537)
+    with _open_download(Request(sums_url,headers={'User-Agent':'AIFinanceHelper/'+APP_VERSION,'Cache-Control':'no-cache'}),timeout=30) as response:content=response.read(65537)
     if len(content)>65536:raise ValueError('校验清单异常')
     for line in content.decode('utf-8-sig').splitlines():
         parts=line.split()
@@ -87,7 +109,7 @@ def download_installer(url, directory, progress=lambda received,total: None, can
     partial = target.with_suffix('.exe.part')
     received = 0; digest = hashlib.sha256()
     try:
-        with urlopen(Request(url, headers={'User-Agent':'AIFinanceHelper/'+APP_VERSION}),timeout=20) as response:
+        with _open_download(Request(url, headers={'User-Agent':'AIFinanceHelper/'+APP_VERSION,'Cache-Control':'no-cache'}),timeout=60) as response:
             total = int(response.headers.get('Content-Length',0))
             if total > 512*1024*1024: raise ValueError('安装包大小超出限制')
             with partial.open('wb') as stream:

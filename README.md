@@ -8,7 +8,7 @@
 
 ## Windows 安装
 
-从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.7.2-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
+从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.7.3-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
 
 顶部选择演示空间或我的账本。首次演示默认最近有数据月份；个人账本初始为空。私有数据目录保留为 `%LOCALAPPDATA%\ShiguangLedger`，保证旧版升级兼容，卸载默认保留。请退出程序后备份整个目录；本版尚无一键恢复。
 
@@ -84,3 +84,9 @@ python scripts/verify_review_ui.py
 设置 → 配置模型 → 填写地址、模型和Key → 勾选启用与记住 → 保存设置。后续在同一Windows用户下启动/更新，无需重新填写。地址与模型保存在既有用户数据目录，密钥以DPAPI密文保存，不随安装目录或版本号变化。更改接口地址会清空输入框中的旧Key，避免误发送；更换电脑/Windows用户可能需要重填。取消记住或清除密钥后不会自动启用，免密本地接口也遵循该开关。
 
 验证：`python scripts/verify_model_persistence_ui.py`（虚构Key，独立进程保存/重启/清除/仅本次/地址变化，不请求模型）；`python scripts/verify_packaged_model_settings.py`验证实际打包EXE连续两次恢复。[配置实现与验证](docs/MODEL_SETTINGS.md)。[修订ADR](docs/adr/0001-monthly-review-incremental-plan.md)及[一页计划](docs/A1_IMPLEMENTATION_PLAN.md)记录后续账户/对账/退款设计，这些业务未在本补丁实现。
+
+## DeepSeek连接与更新下载（0.7.3）
+
+官方DeepSeek接口使用非思考JSON输出，测试限128输出token，分类/理解限1024输出token；连接超时60秒。只对api.deepseek.com发送DeepSeek专用参数，不影响其他兼容服务商。错误区分认证、余额、模型/地址、限流、超时、证书及返回格式，不输出密钥/原始错误正文。
+
+GitHub API受限或暂不可达时，改从本项目官方发布页确认版本，应用内仍可下载且校验官方SHA256。已是最新版也可下载最新安装包。下载连接最多等待60秒，连接暂时失败可重试一次，校验失败仍拒绝保存。浏览器入口保留。[本次诊断与验证](docs/CONNECTION_UPDATE_FIX.md)。

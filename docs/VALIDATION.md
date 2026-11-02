@@ -74,3 +74,5 @@ Transport hardening additionally rebuilds proxy handlers per request, switches f
 
 Attempting to add only the missing public resource to the existing installation was also denied by the current automation environment. Existing user config/ledgers were not modified; this is not claimed as installed-client repair. The completed installer must be run manually once to replace the broken local package. Old binaries cannot fetch their own fix without functional HTTPS.
 
+Post-publication verification: the actual0.7.4 EXE detected the published0.7.4 release via the direct GitHub API route, displayed “当前已是最新版本：v0.7.4。”, downloaded37,617,294 bytes and matched both the official SHA256 and the locally built installer (`c8c0922bd22a7e1e05531a1ed361949a48f1a445dbc6f67adc8f81a88224beeb`). The user then manually installed0.7.4 and explicitly confirmed the client displays “当前已是最新版本”. This confirms the user-visible detection result; no screenshot or separate user download-success claim is inferred.
+

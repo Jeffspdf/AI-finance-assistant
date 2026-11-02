@@ -17,7 +17,7 @@ from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
 from finance.categories import CATEGORIES
-from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer,update_error_message
+from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer,update_error_message,version_status,can_download,UpdateDiagnostics
 from finance.llm import ModelClient,connection_error_message
 from finance.model_settings import ModelSettings
 import json
@@ -231,6 +231,11 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         download = self.button(buttons, '下载最新安装包', lambda: None)
         download.config(state='disabled')
         self.button(buttons, '官方发布页面 ↗', lambda: webbrowser.open(RELEASES_URL))
+        diagnostic=UpdateDiagnostics(DATA_DIR)
+        def view_diagnostics():
+            if diagnostic.path.exists():os.startfile(str(diagnostic.path))
+            else:messagebox.showinfo('更新诊断','请先执行一次检查更新或下载。',parent=window)
+        self.button(buttons,'查看更新诊断',view_diagnostics)
         mailbox = queue.Queue()
         checking = [False]
         cancel_download = threading.Event()
@@ -249,7 +254,7 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
             status.config(text='正在连接 GitHub 下载安装包…'); progress['value']=0
             def report(received,total): download_box.put(('progress',(received,total)))
             def worker():
-                try: download_box.put(('done',download_installer(download_url[0],DATA_DIR/'downloads',report,cancel_download.is_set,expected_sha256=download_sha[0],verify_release=True)))
+                try: download_box.put(('done',download_installer(download_url[0],DATA_DIR/'downloads',report,cancel_download.is_set,expected_sha256=download_sha[0],verify_release=True,diagnostic=diagnostic,phase=lambda message:download_box.put(('phase',message)))))
                 except Exception as exc:
                     download_box.put(('error',update_error_message(exc)))
             threading.Thread(target=worker,daemon=True).start(); window.download_poll=window.after(100,poll_download)
@@ -259,7 +264,8 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
             while True:
                 try: kind,value=download_box.get_nowait()
                 except queue.Empty: break
-                if kind=='progress':
+                if kind=='phase':status.config(text=value)
+                elif kind=='progress':
                     received,total=value
                     progress['value']=received/total*100 if total else 0
                     status.config(text=f'已下载 {received/1048576:.1f} MB'+(f' / {total/1048576:.1f} MB' if total else ''))
@@ -278,9 +284,10 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         def start_check():
             if checking[0]: return
             checking[0] = True; check.config(state='disabled'); download.config(state='disabled')
+            download_url[0]=None;download_sha[0]=None
             status.config(text='正在检查 GitHub 最新版本…')
             def worker():
-                try: mailbox.put(('ok', check_latest()))
+                try: mailbox.put(('ok', check_latest(diagnostic=diagnostic)))
                 except Exception as exc: mailbox.put(('error',update_error_message(exc,'检查更新')))
             threading.Thread(target=worker, daemon=True).start()
             window.poll = window.after(100, poll)
@@ -293,11 +300,11 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
             if kind == 'error':
                 status.config(text=result)
                 return
-            status.config(text=f'发现新版本 v{result["version"]}' if result['newer'] else f'当前已是最新版本（GitHub 正式版 v{result["version"]}）。')
+            status.config(text=version_status(result))
             if result.get('source')=='official_release_page':
                 status.config(text=status.cget('text')+'\nGitHub API 受限，已从官方发布页确认，仍可在应用内下载。')
             notes.config(state='normal'); notes.delete('1.0', 'end'); notes.insert('1.0', result['notes']); notes.config(state='disabled')
-            if result['installer_url']:
+            if can_download(result):
                 download_url[0]=result['installer_url']
                 download_sha[0]=result.get('sha256')
                 download.config(state='normal', command=start_download)
@@ -765,11 +772,18 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
 
 
 if __name__ == '__main__':
+    if '--diagnose-updates' in sys.argv:
+        from finance.updates import diagnose_updates
+        result=diagnose_updates(DATA_DIR,download='--download-latest' in sys.argv)
+        sys.exit(0 if result['check_ok'] and ('--download-latest' not in sys.argv or result['download_ok']) else 1)
     import traceback
     try:
         app = Desktop()
         if '--self-test' in sys.argv:
             app.update()
+            import ssl
+            tls_context=ssl.create_default_context()
+            assert tls_context.check_hostname and tls_context.verify_mode==ssl.CERT_REQUIRED
             restored=app.model_repository.load()
             assert (app.model_client is not None)==restored.enabled
             assert app.model_key==restored.api_key

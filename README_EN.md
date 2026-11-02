@@ -38,3 +38,7 @@ No UI dependency was added. Version 0.7.1 corrects the DPI regression: positive 
 Central layout scaling covers windows, dialogs, chart coordinates, meters, tree rows, padding, wrapping and companion images. Body text is at least 10pt; row height is 44 logical pixels and sidebar width is 220. Summary amounts precede responsive 2/3-column insights. Edit/quick-entry forms scroll while their save buttons remain outside the viewport.
 
 `python scripts/verify_dpi_ui.py` checks six pages at default/minimum size and nine dialogs/pet surfaces at simulated 100/125/150/200%, plus the actual native system DPI. Native 150% on the local 2560x1440 display produced an 1800x1200 window and 27px body line height. Other OS scale settings, mixed-DPI monitor switching and clean-VM installation remain unverified. Metrics and screenshots are in docs/screenshots/dpi.
+
+## Update routes (0.7.4)
+
+Update checks use fresh system network settings and then a direct official-GitHub route if needed. Invalid API payloads fall back too. Transfers can restart on the alternate route; SHA256 and official-origin constraints remain. Current-version, unknown-version and older-release states are distinct. Local bounded update diagnostics contain no keys or ledger data. The actual packaged EXE supports --diagnose-updates --download-latest for the same network implementation used by the GUI.

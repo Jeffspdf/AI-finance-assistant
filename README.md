@@ -8,7 +8,7 @@
 
 ## Windows 安装
 
-从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.7.3-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
+从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.7.4-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
 
 顶部选择演示空间或我的账本。首次演示默认最近有数据月份；个人账本初始为空。私有数据目录保留为 `%LOCALAPPDATA%\ShiguangLedger`，保证旧版升级兼容，卸载默认保留。请退出程序后备份整个目录；本版尚无一键恢复。
 
@@ -90,3 +90,13 @@ python scripts/verify_review_ui.py
 官方DeepSeek接口使用非思考JSON输出，测试限128输出token，分类/理解限1024输出token；连接超时60秒。只对api.deepseek.com发送DeepSeek专用参数，不影响其他兼容服务商。错误区分认证、余额、模型/地址、限流、超时、证书及返回格式，不输出密钥/原始错误正文。
 
 GitHub API受限或暂不可达时，改从本项目官方发布页确认版本，应用内仍可下载且校验官方SHA256。已是最新版也可下载最新安装包。下载连接最多等待60秒，连接暂时失败可重试一次，校验失败仍拒绝保存。浏览器入口保留。[本次诊断与验证](docs/CONNECTION_UPDATE_FIX.md)。
+
+## 更新通路修复（0.7.4）
+
+已确认并修复旧本地安装包漏掉TLS公共证书资源，导致EXE在HTTPS请求前就失败的问题。构建现在自动带入所需资源，并强制打包EXE通过安全连接初始化自检，保留完整证书验证。
+
+每次检查重新读取系统网络配置，系统代理失败/限流/返回无效内容后尝试直连GitHub；API均不可用再尝试官方发布页。只访问本仓库官方地址，不改变系统代理设置。元数据和下载请求避免旧缓存；传输中断后可换通路重新下载，仍校验SHA256。
+
+同版本明确显示“当前已是最新版本：vX.Y.Z”；检测失败只显示“未能确认”，不会假称最新版；公开版本低于当前版本不提供降级下载。更新窗口可查看本机 `update-diagnostics.txt`（只有版本、网络阶段/通路、错误类型和校验结果，不含密钥/账单）。
+
+开发验证：实际打包EXE可运行 `--diagnose-updates --download-latest`，使用与界面相同的网络代码生成结果；`scripts/verify_packaged_update_network.py`在临时数据目录执行真实联网下载与SHA256，不读取模型配置。详见[验证记录](docs/UPDATE_ROUTES_074.md)。

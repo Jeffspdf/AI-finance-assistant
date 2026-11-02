@@ -62,3 +62,15 @@ The public GitHub release API returned403 with remaining quota0; the official pa
 
 Local automatic overwrite installation was attempted after user approval but Windows denied access to the existing uninstaller; Setup rolled back. That attempt does not establish installed-v0.7.3 success. The user was given the completed local installer for manual installation; packaged execution is independently verified above.
 
+## Frozen HTTPS root cause — v0.7.4, 2026-11-03
+
+The user subsequently installed0.7.3 manually and still reported failed updates. A diagnostic entry point in the actual frozen EXE reproduced **FileNotFoundError before any request**, in ssl.SSLContext.__new__/load_verify_locations: the local build interpreter expects its adjacent public certificate resource codex-rejected-cas.pem, but earlier local installers omitted it. This is the captured packaging root cause. Earlier live-key and download probes executed in Python, where that resource existed, and did not establish that the prior desktop EXE could use HTTPS.
+
+Packaging now conditionally includes the build runtime's906-byte public TLS resource, with no private keys, trust-code changes, verification bypass or OS certificate-store edits. Official CPython builds without the custom requirement need no extra data. Every installer build must first pass the actual packaged HTTPS-context/UI self-test; CI uses that gate rather than duplicating a second packaged smoke step.
+
+Final offline regression: **123 passed**. UI checks cover explicit current-version status, failure not masquerading as latest, download progress/checksum and no older-version download. Native150% layout and two synthetic encrypted-settings restart/self-tests passed. The fixed actual EXE executed check+complete download+SHA256 successfully; before publishing0.7.4 it correctly detected the then-public0.7.3 and labelled it older than its own build. See [actual executable report](packaged_update_network.json), [root-cause record](UPDATE_ROUTES_074.md).
+
+Transport hardening additionally rebuilds proxy handlers per request, switches from system route to direct official GitHub and then the trusted release page when needed, handles malformed metadata and mid-transfer failure, and retains checksum/cancellation guarantees. The report recorded system-API403, a direct-API timeout, successful official-page fallback and verified full transfer. Bounded local diagnostic events contain no credentials/ledger data.
+
+Attempting to add only the missing public resource to the existing installation was also denied by the current automation environment. Existing user config/ledgers were not modified; this is not claimed as installed-client repair. The completed installer must be run manually once to replace the broken local package. Old binaries cannot fetch their own fix without functional HTTPS.
+

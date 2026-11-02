@@ -35,6 +35,7 @@ with TemporaryDirectory(prefix='.test_connection_update_ui_',dir=ROOT) as temp:
     with patch('desktop.check_latest',return_value=release):
         button(window,'检查更新').invoke();wait(app,lambda:'仍可在应用内下载' in text(window))
     assert str(button(window,'下载最新安装包').cget('state'))=='normal'
+    assert '当前已是最新版本' in text(window)
     received=[]
     def mock_download(url_arg,directory,progress,cancelled,**kwargs):
         received.append((url_arg,kwargs))
@@ -45,5 +46,9 @@ with TemporaryDirectory(prefix='.test_connection_update_ui_',dir=ROOT) as temp:
     assert received[0][0]==url and received[0][1]['verify_release'] is True
     with patch('desktop.download_installer',side_effect=ValueError('SHA256 不匹配')):
         button(window,'下载最新安装包').invoke();wait(app,lambda:'SHA256 不匹配' in text(window))
+    with patch('desktop.check_latest',side_effect=ValueError('未能确认 GitHub 最新版本，不能判断是否需要更新。')):
+        button(window,'检查更新').invoke();wait(app,lambda:'不能判断' in text(window))
+    assert str(button(window,'下载最新安装包').cget('state'))=='disabled'
+    assert '当前已是最新版本' not in text(window)
     window.destroy();app.destroy()
 print('MODEL_DIAGNOSTICS_LATEST_DOWNLOAD_API_FALLBACK_CHECKSUM_UI_OK')

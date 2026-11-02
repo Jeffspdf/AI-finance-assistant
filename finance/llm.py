@@ -17,6 +17,8 @@ class ModelResponseError(ValueError):
 
 def connection_error_message(exc):
     """User-facing diagnostics never echo response bodies, keys or proxy URLs."""
+    if isinstance(exc,FileNotFoundError):
+        return '应用的安全连接运行资源缺失，请重新安装完整程序。'
     if isinstance(exc, HTTPError):
         hints={400:'请求参数不兼容，请核对接口类型和模型名称。',
                401:'API Key 无效或已失效，请核对开放平台的密钥。',

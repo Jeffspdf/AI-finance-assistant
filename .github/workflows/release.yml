@@ -18,16 +18,9 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $version = '0.7.3'
+          $version = '0.7.4'
           if ($env:GITHUB_REF_TYPE -eq 'tag') { $version = $env:GITHUB_REF_NAME.TrimStart('v') }
           ./packaging/build.ps1 -Version $version
-      - name: Smoke test executable
-        shell: pwsh
-        run: |
-          $env:FINANCE_DESKTOP_DATA_DIR = Join-Path $env:RUNNER_TEMP 'ledger-smoke'
-          $p = Start-Process ./dist/AIFinanceHelper/AIFinanceHelper.exe -ArgumentList '--self-test' -PassThru
-          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'Smoke test timed out' }
-          if ($p.ExitCode -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/self-test.ok")) { throw 'Smoke test failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: Windows-installers

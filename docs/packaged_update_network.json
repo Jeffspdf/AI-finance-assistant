@@ -1,0 +1,59 @@
+{
+  "client": "0.7.4",
+  "check_ok": true,
+  "download_ok": true,
+  "events": [
+    {
+      "time": "2026-11-02T17:21:12.386102+00:00",
+      "client": "0.7.4",
+      "stage": "release_api",
+      "route": "system",
+      "result": "failed",
+      "error": "HTTPError",
+      "reason": "str",
+      "http": 403,
+      "os_error": null
+    },
+    {
+      "time": "2026-11-02T17:21:27.455447+00:00",
+      "client": "0.7.4",
+      "stage": "release_api",
+      "route": "direct",
+      "result": "failed",
+      "error": "URLError",
+      "reason": "TimeoutError",
+      "http": null,
+      "os_error": null
+    },
+    {
+      "time": "2026-11-02T17:21:31.891062+00:00",
+      "client": "0.7.4",
+      "stage": "release_page",
+      "route": "system",
+      "result": "ok",
+      "version": "0.7.3"
+    },
+    {
+      "time": "2026-11-02T17:21:33.774089+00:00",
+      "client": "0.7.4",
+      "stage": "checksum",
+      "route": "system",
+      "result": "connected"
+    },
+    {
+      "time": "2026-11-02T17:22:00.941697+00:00",
+      "client": "0.7.4",
+      "stage": "installer",
+      "route": "system",
+      "result": "verified",
+      "bytes": 37614862,
+      "sha256": "48aca224875714b6a19bdcddb63327a7e51c994af5faedd9ab5a0e2768f8706f"
+    }
+  ],
+  "version": "0.7.3",
+  "route": "system",
+  "status": "当前版本 v0.7.4 高于公开发布版 v0.7.3，无需降级。",
+  "source": "official_release_page",
+  "bytes": 37614862,
+  "sha256": "48aca224875714b6a19bdcddb63327a7e51c994af5faedd9ab5a0e2768f8706f"
+}

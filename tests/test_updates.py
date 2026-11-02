@@ -3,7 +3,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from unittest.mock import MagicMock
 import pytest
-from finance.updates import parse_release, version_tuple, check_latest, REPO
+from finance.updates import parse_release, version_tuple, check_latest, REPO,version_status,can_download,UpdateDiagnostics
 
 
 def release(version='0.3.0'):
@@ -36,32 +36,66 @@ def test_untrusted_or_missing_download():
 
 
 def test_network_success_and_failure():
-    with patch('finance.updates.urlopen') as opener:
+    with patch('finance.updates._request') as opener:
         opener.return_value.__enter__.return_value.read.return_value=json.dumps(release()).encode()
         assert check_latest()['version']=='0.3.0'
         request=opener.call_args.args[0]
         assert request.data is None
         assert 'Authorization' not in request.headers
-    with patch('finance.updates.urlopen', side_effect=TimeoutError):
-        with pytest.raises(TimeoutError): check_latest()
+    with patch('finance.updates._request', side_effect=TimeoutError):
+        with pytest.raises(ValueError,match='未能确认'): check_latest()
 
 
 def test_rate_limit_fallback_and_untrusted_redirect():
     response=MagicMock()
     response.__enter__.return_value.geturl.return_value=f'https://github.com/{REPO}/releases/tag/v9.4.0'
-    with patch('finance.updates.urlopen',side_effect=[HTTPError('',403,'rate limit',{},None),response]):
+    with patch('finance.updates._request',side_effect=[HTTPError('',403,'rate limit',{},None),HTTPError('',403,'rate limit',{},None),response]):
         result=check_latest()
         assert result['version']=='9.4.0' and result['newer']
         assert result['installer_url']==f'https://github.com/{REPO}/releases/download/v9.4.0/AIFinanceHelper-9.4.0-Setup-x64.exe'
         assert result['source']=='official_release_page'
     response.__enter__.return_value.geturl.return_value='https://evil.example/releases/tag/v9.0.0'
-    with patch('finance.updates.urlopen',side_effect=[HTTPError('',429,'rate limit',{},None),response]):
+    with patch('finance.updates._request',side_effect=[HTTPError('',429,'rate limit',{},None),HTTPError('',429,'rate limit',{},None),response,response]):
         with pytest.raises(ValueError): check_latest()
 
 
 def test_api_timeout_still_allows_verified_official_page_download():
     response=MagicMock()
     response.__enter__.return_value.geturl.return_value=f'https://github.com/{REPO}/releases/tag/v9.4.0'
-    with patch('finance.updates.urlopen',side_effect=[TimeoutError(),response]):
+    with patch('finance.updates._request',side_effect=[TimeoutError(),TimeoutError(),response]):
         result=check_latest()
     assert result['installer_url'] and result['source']=='official_release_page'
+
+
+def test_proxy_limit_switches_to_direct_api_without_changing_settings():
+    response=MagicMock();response.__enter__.return_value.read.return_value=json.dumps(release('9.4.0')).encode()
+    events=[]
+    with patch('finance.updates._request',side_effect=[HTTPError('',403,'sensitive-error',{},None),response]) as request:
+        result=check_latest(diagnostic=events.append)
+    assert result['version']=='9.4.0' and result['route']=='direct'
+    assert [c.kwargs['route'] for c in request.call_args_list]==['system','direct']
+    assert 'check=' in request.call_args.args[0].full_url
+    assert 'sensitive-error' not in json.dumps(events)
+
+
+def test_invalid_proxy_json_uses_direct_instead_of_aborting():
+    bad=MagicMock();bad.__enter__.return_value.read.return_value=b'<html>Proxy unavailable</html>'
+    good=MagicMock();good.__enter__.return_value.read.return_value=json.dumps(release('9.4.0')).encode()
+    with patch('finance.updates._request',side_effect=[bad,good]):
+        assert check_latest()['route']=='direct'
+
+
+def test_version_messages_never_call_failure_or_older_release_latest():
+    same=parse_release(release('0.7.3'),'0.7.3')
+    assert version_status(same,'0.7.3')=='当前已是最新版本：v0.7.3。'
+    assert can_download(same,'0.7.3')
+    assert not can_download(same,'0.7.4')
+    assert '无需降级' in version_status(same,'0.7.4')
+    assert '发现新版本' in version_status(same,'0.7.2')
+
+
+def test_local_diagnostics_are_nonfatal_if_not_writable(tmp_path):
+    log=UpdateDiagnostics(tmp_path)
+    log({'stage':'release_api','result':'ok','version':'0.7.3'})
+    assert json.loads(log.path.read_text())['version']=='0.7.3'
+    with patch('pathlib.Path.open',side_effect=PermissionError):log({'result':'failed'})

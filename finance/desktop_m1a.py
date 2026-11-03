@@ -2,6 +2,8 @@
 import json
 import queue
 import threading
+import os
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox
@@ -98,6 +100,7 @@ class M1Features:
 
     def reconciliation_window(self,store=None,demo=False):
         store=store or self.store
+        writable=not store.read_only
         window=tk.Toplevel(self);window.title('独立六行合成演示' if demo else '跨来源对账 · 人工确认');set_window_geometry(window,990,750);window.configure(bg=BG)
         box=scrollable_form(window,padx=18,pady=12)
         self.label(box,'同一笔消费，只统计一次',18,bold=True)
@@ -116,9 +119,10 @@ class M1Features:
             for child in holder.winfo_children():child.destroy()
             for child in details.winfo_children():child.destroy()
             state['rows']=store.reconciliation_groups()[:200]
-            state['tree']=self.table(holder,['状态','等级','金额 / 元','来源','依据'],[[labels.get(g['status'],g['status']),g['confidence'],yuan(g['members'][0]['amount_cents']) if g['members'] else '', ' + '.join(r['channel'] for r in g['members']),g['reason']] for g in state['rows']],7)
+            state['tree']=self.table(holder,['状态','等级','金额 / 元','来源','依据'],[['待修复（已恢复计数）' if g['repair_pending'] else labels.get(g['status'],g['status']),g['confidence'],yuan(g['members'][0]['amount_cents']) if g['members'] else '', ' + '.join(r['channel'] for r in g['members']),g['reason']] for g in state['rows']],7)
             state['tree'].bind('<<TreeviewSelect>>',show_details)
             confirm_button.config(state='disabled')
+            repair_button.config(state='disabled');reopen_button.config(state='disabled')
         def chosen():
             selection=state['tree'].selection()
             return state['rows'][self.row_index(state['tree'],selection[0])] if selection else None
@@ -126,18 +130,23 @@ class M1Features:
             for child in details.winfo_children():child.destroy()
             group=chosen()
             if not group:return
-            confirm_button.config(state='normal' if group['status']=='candidate' and group['confidence'] in ('A','B') and not state['scanning'] else 'disabled')
+            active=writable and not state['scanning']
+            confirm_button.config(state='normal' if active and group['status']=='candidate' and group['confidence'] in ('A','B') else 'disabled')
+            repair_button.config(state='normal' if active and group['repair_pending'] else 'disabled')
+            reopen_button.config(state='normal' if active and not group['repair_pending'] and group['status']!='confirmed' else 'disabled')
             self.label(details,group['reason'],10,PRIMARY).configure(wraplength=px(900))
+            if group['repair_pending']:
+                self.label(details,'此组存储状态仍为已确认，但当前来源已失效；统计已恢复独立计数。请先点“修复此组”保存待复核状态，再核对来源。',10,DANGER).configure(wraplength=px(900))
             diagnostics=store.group_diagnostics(group['id'])
             if group['confidence']=='C' or diagnostics['wallet_count']==0:
                 self.label(details,'\n'.join('• '+g['message'] for g in diagnostics['gaps']),10,MUTED).configure(wraplength=px(900))
                 guidance=tk.Frame(details,bg=BG);guidance.pack(fill='x')
-                self.button(guidance,'去账户与支付绑定',lambda:self.account_window(store))
-                self.button(guidance,'重新生成候选',scan)
+                self.button(guidance,'去账户与支付绑定',lambda:self.account_window(store)).config(state='normal' if active else 'disabled')
+                self.button(guidance,'重新生成候选',scan).config(state='normal' if active else 'disabled')
                 if diagnostics['requires_reimport']:self.label(details,'已导入记录没有账户时，仅创建绑定不会补写旧记录。请按上面的重导步骤处理。',10,MUTED).configure(wraplength=px(900))
             self.table(details,['时间','商户 / 描述','金额 / 元','来源文件','行号','角色'],[[r['date'],r['merchant']+' / '+r['description'],yuan(r['amount_cents']),r['source_file'],r['source_row'],'消费代表' if r['role']=='purchase' else '资金来源腿'] for r in group['members']],4)
         def scan():
-            if state['scanning']:return
+            if state['scanning'] or not writable:return
             state['scanning']=True
             for button in controls:button.config(state='disabled')
             status.config(text='正在核对来源并生成候选，尚未改变统计。')
@@ -177,16 +186,30 @@ class M1Features:
             if group and messagebox.askyesno('重新核对','撤回原决定并重新列为候选？不会自动确认，也不会立即排重。',parent=window):
                 try:store.reopen_group(group['id']);scan()
                 except ValueError as exc:status.config(text=str(exc),fg=DANGER)
-        controls.append(self.button(actions,'重新核对',reopen))
+        reopen_button=self.button(actions,'重新核对',reopen);controls.append(reopen_button)
         def clean():
             count=store.clean_stale_candidates();refresh();status.config(text=f'已清理 {count} 组未决定的过期候选，人工决定与来源证据保留。')
         extra=tk.Frame(box,bg=BG);extra.pack(fill='x')
+        self.button(extra,'刷新显示（只读）',refresh)
+        def repair():
+            group=chosen()
+            if not group or not group['repair_pending']:return
+            if not messagebox.askyesno('保存失效组修复','将此组保存为待复核并清空关联缓存？统计已恢复独立计数；不会修改交易或自动确认。',parent=window):return
+            try:
+                count=store.repair_invalid_groups(identifier=group['id'],source='user_selected')
+                refresh();status.config(text='此组已保存为待复核，请核对来源后重新核对。' if count else '此组无需修复，请重新选择查看。',fg=PRIMARY)
+            except (ValueError,OSError) as exc:status.config(text=str(exc),fg=DANGER)
+        repair_button=self.button(extra,'修复此组',repair);controls.append(repair_button)
         controls.append(self.button(extra,'清理过期候选',clean))
-        refresh();window.initial_scan=window.after_idle(scan)
+        refresh()
+        if writable:window.initial_scan=window.after_idle(scan)
+        else:
+            for control in controls:control.config(state='disabled')
+            status.config(text='只读查看：未扫描或修复；操作需用可写模式打开。')
         def cleanup(event):
             if event.widget is window:
                 if hasattr(window,'poll'):window.after_cancel(window.poll)
-                window.after_cancel(window.initial_scan)
+                if hasattr(window,'initial_scan'):window.after_cancel(window.initial_scan)
         window.bind('<Destroy>',cleanup)
 
     def import_history_window(self):
@@ -236,3 +259,50 @@ class M1Features:
                     before=store.restore(path,confirmed=True);self.show(self.page);status.config(text='恢复完成；恢复前快照：'+str(before))
             except Exception as exc:status.config(text='恢复未完成：'+str(exc),fg=DANGER)
         self.button(row,'创建备份',backup);self.button(row,'选择备份并预览恢复',restore)
+
+    def semantic_backups_window(self):
+        store=self.store
+        window=tk.Toplevel(self);window.title('修复明细与自动备份');set_window_geometry(window,940,740);window.configure(bg=BG)
+        footer=tk.Frame(window,bg=BG,padx=px(18),pady=px(10));footer.pack(side='bottom',fill='x')
+        box=scrollable_form(window,padx=18,pady=12)
+        self.label(box,'当前空间的修复与自动备份',18,bold=True)
+        self.label(box,'修复历史只记录分类变更，收支类型和金额不变。不会自动清理备份；旧版/通用快照未记录用途，不能一概视为语义修复备份。',10,MUTED).configure(wraplength=px(870))
+        self.label(box,'最近200条语义修复历史（修复时分类，之后的人工修改不覆盖此记录）',11,bold=True)
+        history=store.semantic_repair_history()
+        self.table(box,['时间','商户','原类型','原分类','修复为'],[[r['created_at'],r['merchant'],r['detail'].get('kind',''),r['detail'].get('old_category',''),r['detail'].get('category','')] for r in history],4)
+        summary=self.label(box,'',10,MUTED);summary.configure(wraplength=px(870))
+        holder=tk.Frame(box,bg=BG);holder.pack(fill='both',expand=True)
+        status=self.label(box,'选择快照可预览版本、记录数、大小与完整位置。',10,MUTED);status.configure(wraplength=px(870))
+        state={'rows':[],'tree':None}
+        def refresh():
+            for child in holder.winfo_children():child.destroy()
+            try:rows=store.managed_backups()
+            except (ValueError,OSError) as exc:status.config(text=str(exc),fg=DANGER);rows=[]
+            state['rows']=rows[:200]
+            summary.config(text=f'当前空间 {len(rows)} 个自动快照，共 {sum(r["bytes"] for r in rows):,} 字节；显示最近200个。')
+            state['tree']=self.table(holder,['时间（本机）','用途','大小 / KiB','文件'],[[datetime.fromtimestamp(r['modified']).strftime('%Y-%m-%d %H:%M:%S'),r['purpose'],f'{r["bytes"]/1024:,.1f}',r['name']] for r in state['rows']],7)
+        def chosen():
+            selected=state['tree'].selection()
+            return state['rows'][self.row_index(state['tree'],selected[0])] if selected else None
+        def preview():
+            row=chosen()
+            if not row:return
+            try:
+                info=store.preview_managed_backup(row['path'])
+                status.config(text=f'版本 {info["version"]} · {info["bytes"]:,} 字节 · 记录数 {info["counts"]}\n位置：{info["path"]}',fg=PRIMARY)
+            except (ValueError,OSError) as exc:status.config(text='预览未完成：'+str(exc),fg=DANGER)
+        def remove():
+            row=chosen()
+            if not row:return
+            if not messagebox.askyesno('删除选中快照',f'{row["name"]}\n{row["bytes"]:,} 字节；{row["purpose"]}\n这是独立备份。删除后无法用它回滚分类修复或恢复旧数据，当前账本不变。确定删除？',parent=window):return
+            try:store.delete_managed_backup(row['path'],confirmed=True);refresh();status.config(text='选中快照已删除，当前账本与其他备份未变。',fg=PRIMARY)
+            except (ValueError,OSError) as exc:status.config(text='未删除：'+str(exc),fg=DANGER)
+        def open_folder():
+            try:
+                folder=store.managed_backup_folder()
+                if not folder.is_dir():raise ValueError('当前空间尚无自动备份目录')
+                os.startfile(str(folder))
+            except (ValueError,OSError) as exc:status.config(text=str(exc),fg=DANGER)
+        self.button(footer,'预览选中快照',preview);self.button(footer,'打开备份目录',open_folder)
+        self.button(footer,'删除选中快照',remove).config(state='disabled' if store.read_only else 'normal')
+        refresh()

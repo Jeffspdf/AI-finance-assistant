@@ -11,7 +11,7 @@ from urllib.request import Request, build_opener,ProxyHandler
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-APP_VERSION = '0.8.3'
+APP_VERSION = '0.8.4'
 REPO = 'Jeffspdf/AI-finance-assistant'
 RELEASES_URL = f'https://github.com/{REPO}/releases/latest'
 API_URL = f'https://api.github.com/repos/{REPO}/releases/latest'

@@ -1,0 +1,11 @@
+{
+  "data": "synthetic only",
+  "income_category_filtered": true,
+  "mixed_kind_batch_blocked": true,
+  "pending_group_repair_action": true,
+  "repair_cancel_did_not_write": true,
+  "readonly_dialog_did_not_scan": true,
+  "backup_history_and_preview": true,
+  "backup_cancel_and_explicit_delete": true,
+  "callback_errors": []
+}

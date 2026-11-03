@@ -1,0 +1,11 @@
+{
+  "data": "synthetic only",
+  "income_expense_categories_guarded": true,
+  "targeted_repair_only_selected": true,
+  "query_bytes_unchanged": true,
+  "legacy_income_expense_preserved": true,
+  "backup_discoverable_after_restart": true,
+  "backup_preview_and_explicit_delete": true,
+  "read_only_delete_rejected": true,
+  "execution": "actual packaged Windows EXE"
+}

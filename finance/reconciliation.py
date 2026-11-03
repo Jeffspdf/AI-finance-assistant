@@ -126,16 +126,21 @@ class Reconciliation:
         frame.attrs['invalid_groups']=invalid_groups
         return frame
 
-    def repair_invalid_groups(self,*,db=None,source='manual'):
+    def repair_invalid_groups(self,*,db=None,source='manual',identifier=None):
         """Explicit write operation; ordinary readers never persist repairs or audit."""
         if self.read_only:raise ValueError('只读账本不能执行关联修复，请用可写模式打开')
         if db is None:
-            with self.connect() as connection:return self.repair_invalid_groups(db=connection,source=source)
+            with self.connect() as connection:return self.repair_invalid_groups(db=connection,source=source,identifier=identifier)
+        if identifier is not None and not db.execute('SELECT 1 FROM link_groups WHERE id=?',(identifier,)).fetchone():
+            raise ValueError('关联组不存在')
         invalid=self._source_frame(db).attrs['invalid_groups']
+        repaired=0
         for gid,reason in invalid.items():
-            db.execute("UPDATE link_groups SET status='needs_review',decided_at=CURRENT_TIMESTAMP,decided_by='system' WHERE id=? AND status='confirmed'",(gid,))
-            audit(db,'link_invalidated',gid,dict(reason=reason,algorithm_version=ALGORITHM,trigger=source))
-        return len(invalid)
+            if identifier is not None and gid!=identifier:continue
+            changed=db.execute("UPDATE link_groups SET status='needs_review',decided_at=CURRENT_TIMESTAMP,decided_by='system' WHERE id=? AND status='confirmed'",(gid,)).rowcount
+            if changed:
+                audit(db,'link_invalidated',gid,dict(reason=reason,algorithm_version=ALGORITHM,trigger=source));repaired+=1
+        return repaired
 
     def source_transactions(self):
         """All active source legs, including refunds and excluded funding legs."""

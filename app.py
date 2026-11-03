@@ -128,6 +128,7 @@ elif page=='导入与分类':
         except Exception as exc:
             st.error(f'无法导入：{exc}')
     st.subheader('确认与修正分类')
+    st.caption('收入限工资/生活费/其他收入，支出使用支出分类，转账只用转账分类。保存时逐行校验，冲突不会写入。')
     if tx.empty: st.info('导入后即可在这里修改分类。')
     else:
         only_pending=st.checkbox('只看待确认记录')

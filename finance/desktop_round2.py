@@ -5,7 +5,7 @@ import re
 import tkinter as tk
 from tkinter import ttk,messagebox,filedialog
 from .importer import money_to_cents
-from .categories import CATEGORIES
+from .categories import CATEGORIES,category_options
 from .insights import make_insights,suggested_budgets
 from .analytics import yuan
 from .qa import month_shift
@@ -61,7 +61,7 @@ class RoundTwo:
         kind=ttk.Combobox(row,values=['支出','收入','转账'],state='readonly',width=10);kind.set('支出');kind.pack(side='left',padx=px((0,10)))
         category=ttk.Combobox(row,values=CATEGORIES,state='readonly',width=13);category.set('餐饮');category.pack(side='left')
         def match_kind(_=None):
-            permitted=['工资','生活费','其他收入'] if kind.get()=='收入' else ['转账'] if kind.get()=='转账' else [c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']]
+            permitted=category_options(kind.get())
             category.configure(values=permitted)
             if category.get() not in permitted:category.set(permitted[0])
         kind.bind('<<ComboboxSelected>>',match_kind);match_kind()
@@ -84,7 +84,7 @@ class RoundTwo:
         if same_merchant:
             pairs={(r['merchant'],r['kind']) for r in selected};all_rows=self.store.transactions()
             ids=[r.id for r in all_rows.itertuples() if (r.merchant,r.kind) in pairs]
-        if not self.category.get():messagebox.showinfo('分类与类型冲突','请分开选择转账和收入/支出记录。转账类型只能使用转账分类。');return
+        if not self.category.get():messagebox.showinfo('分类与类型冲突','请按相同收支类型分开选择记录，收入、支出、转账各有对应分类。');return
         if not messagebox.askyesno('确认批量分类',f'将 {len(ids)} 笔改为“{self.category.get()}”？'+('覆盖当前空间相同商户的全部记录。' if same_merchant else '可撤销本次批量操作。')):return
         try:self.last_batch=(self.store.path,self.store.batch_category(ids,self.category.get()))
         except ValueError as exc:messagebox.showerror('未修改分类',str(exc));return

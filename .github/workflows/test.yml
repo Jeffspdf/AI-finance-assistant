@@ -24,4 +24,6 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/round5-self-test.json")) { throw 'Round-five acceptance failed' }
           python desktop.py --self-test-round6
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/round6-self-test.json")) { throw 'Round-six acceptance failed' }
+          python desktop.py --self-test-round7
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/round7-self-test.json")) { throw 'Round-seven acceptance failed' }
       - run: python scripts/evaluate_ai.py

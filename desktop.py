@@ -454,6 +454,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.label(self.main, subtitle, 10, MUTED)
         if self.store.semantic_backup:
             self.label(self.main,'旧记录的转账类型/分类冲突已按原收支类型修正，金额不变，分类标为待确认；修复前已保存备份。',10,'#ae6450').configure(wraplength=px(760))
+            self.button(self.main,'查看修复明细与备份',self.semantic_backups_window)
         if self.mode=='demo':
             demo_actions=tk.Frame(self.main,bg=BG);demo_actions.pack(fill='x',pady=px((0,6)))
             self.button(demo_actions,'生成演示账单',self.demo_generator_window)
@@ -605,7 +606,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
     def update_category_choices(self,event=None):
         selected=[self.record_rows[self.row_index(self.tree,item)] for item in self.tree.selection()]
         kinds={r['kind'] for r in selected}
-        choices=[] if '转账' in kinds and len(kinds)>1 else category_options('转账' if kinds=={'转账'} else '支出')
+        choices=category_options(next(iter(kinds))) if len(kinds)==1 else [] if kinds else category_options('支出')
         self.category.configure(values=choices)
         if self.category.get() not in choices:self.category.set(choices[0] if choices else '')
 
@@ -637,7 +638,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
             choices=category_options(fields['kind'].get());fields['category'].configure(values=choices)
             if fields['category'].get() not in choices:fields['category'].set(choices[0])
         fields['kind'].bind('<<ComboboxSelected>>',match_category);match_category()
-        status=self.label(box,'转账类型只能使用转账分类，收入/支出不能选转账分类。修改类型或分类后，关联将待复核。',9,MUTED);status.configure(wraplength=px(455))
+        status=self.label(box,'收入、支出、转账各有对应分类。修改类型或分类后，关联将待复核；旧错分类仅在你保存后更正。',9,MUTED);status.configure(wraplength=px(455))
         def save():
             try:
                 values={k:e.get().strip() for k,e in fields.items()};values['amount_cents']=money_to_cents(values['amount_cents'])
@@ -782,6 +783,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
                ('版本与更新',f'当前 v{APP_VERSION} · 检查新版与下载安装包。',self.show_updates,'检查更新'),
                ('账户与支付绑定','声明钱包与银行卡账户，建立带有效期的支付绑定；不会自动合并交易。',self.account_window,'管理账户与绑定'),
                ('备份与恢复','当前空间一致备份；恢复前预览并再次快照，保留旧数据身份。',self.backup_window,'备份与恢复'),
+               ('修复明细与自动备份','查看当前空间的分类修复历史、备份位置和大小；清理前确认，不自动删除。',self.semantic_backups_window,'查看修复与备份'),
                ('本机数据','账单、原始必要字段和审计留在本机；演示与个人空间独立。',lambda:os.startfile(str(DATA_DIR)),'打开数据目录'),
                ('角色与动画','点击角色挥手，可暂停动画或打开桌面小助手。',self.show_pet,'打开桌面小助手')]
         items.append(('分类记忆',f'当前空间已记住 {len(self.store.merchant_rules())} 条商户规则，可查看并删除。',self.learned_rules_window,'管理分类记忆'))
@@ -809,6 +811,11 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
 
 
 if __name__ == '__main__':
+    if '--self-test-round7' in sys.argv:
+        if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
+        from finance.round7_acceptance import verify_round7
+        verify_round7(DATA_DIR)
+        sys.exit(0)
     if '--self-test-round6' in sys.argv:
         if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
         from finance.round6_acceptance import verify_round6

@@ -8,7 +8,7 @@ import ssl
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 from urllib.error import HTTPError, URLError
-from .categories import CATEGORIES
+from .categories import CATEGORIES,category_options
 
 
 class ModelResponseError(ValueError):
@@ -98,8 +98,7 @@ class ModelClient:
             raise ModelResponseError('接口已响应，但返回格式不是有效的 Chat Completions JSON。') from None
 
     def suggest_category(self, merchant, description, kind):
-        permitted=[c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']]
-        if kind=='收入': permitted=['工资','生活费','其他收入']
+        permitted=category_options(kind)
         if kind=='转账': return '转账'
         result=self._json('Classify the transaction. Return {"category": one permitted label}. Labels: '+json.dumps(permitted,ensure_ascii=False),{'merchant':merchant,'description':description,'kind':kind})
         category=result.get('category')

@@ -4,7 +4,7 @@ Requirements: Windows x64, Python 3.12 with Tk, Inno Setup 6.
 
 ```powershell
 python -m pip install -r requirements-desktop.txt
-.\packaging\build.ps1 -Python python -Version '0.8.3' -Iscc 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+.\packaging\build.ps1 -Python python -Version '0.8.4' -Iscc 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 ```
 
 Outputs in release/: Setup EXE, portable ZIP, SHA256SUMS.txt. The source archive is an explicit allowlist of code, public documentation, generated assets and synthetic test evidence; no user DB, Key, venv or logs. The Windows AppId and legacy private data directory remain stable for upgrades.

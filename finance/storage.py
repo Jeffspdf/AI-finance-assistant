@@ -10,8 +10,9 @@ from hashlib import sha256
 from .migrations import ensure_schema, assert_supported, backup_database, inspect_database
 from .reconciliation import Reconciliation, audit
 from .categories import validate_kind_category
+from .backup_management import BackupManagement
 
-class Store(Reconciliation):
+class Store(Reconciliation,BackupManagement):
     def __init__(self, path, *, read_only=False):
         self.path = str(path)
         self._lock=threading.RLock()
@@ -46,7 +47,7 @@ class Store(Reconciliation):
             count=db.execute("SELECT COUNT(*) FROM transactions WHERE (kind='转账')<>(category='转账')").fetchone()[0]
             rules=[dict(r) for r in db.execute("SELECT * FROM merchant_rules WHERE (kind='转账')<>(category='转账')")]
         if not count and not rules:return
-        self.semantic_backup=self.backup()
+        self.semantic_backup=self.create_semantic_backup()
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             db.execute('CREATE TABLE IF NOT EXISTS transaction_edits(id INTEGER PRIMARY KEY,transaction_id TEXT,old_values TEXT,changed_at TEXT DEFAULT CURRENT_TIMESTAMP)')

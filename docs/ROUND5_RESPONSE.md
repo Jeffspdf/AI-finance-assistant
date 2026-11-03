@@ -41,6 +41,12 @@
 
 所有账单、账户与密钥测试值均为合成数据，未调用付费模型、未读取或覆盖用户个人账本。公开发布与下载验证另行记录，不能从本地构建推定。
 
-## 仍在后续阶段
+## 发布后复核
+
+[GitHub v0.8.2](https://github.com/Jeffspdf/AI-finance-assistant/releases/tag/v0.8.2)已正式公开，四个资产的大小及SHA256已核对。代码提交4d07aeb的[Windows Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41625401844)已成功完成。
+
+实际v0.8.2 EXE再次识别公开版本0.8.2，显示“当前已是最新版本”，完整下载37,699,268字节，并匹配本地/官方SHA256 `d1418edd3818f6a8c2c9fca16d7fd343397045bdfc77512b4eae2910fc787e30`。[联网验证记录](packaged_update_network_v082.json)。本轮没有覆盖用户安装版，也不推定用户已经升级。公开发布后的提交只补验证文档/记录，不替换已公开安装包。
+
+## 剩余范围
 
 支付宝专用导出适配器/golden、退款净额及两种跨月口径、批量/三成员编辑UI、真实50正50负与双人标注P/R、5万行性能及完整迁移故障矩阵仍未完成。TLS维持既有安全资源和官方CPython CI方案，安装包仍未代码签名。本轮没有把合成回归宣称为真实准确率。

@@ -111,6 +111,29 @@ def test_corrupt_cipher_disables_without_deleting_file(tmp_path):
     assert previous==store.path.read_bytes()
 
 
+@pytest.mark.parametrize('endpoint',['https://example.com/v1','https://api.deepseek.com'])
+def test_remote_empty_key_never_enables_or_tests(tmp_path,endpoint):
+    from finance.llm import ModelClient
+    store=repository(tmp_path)
+    with patch('finance.llm.urlopen',side_effect=AssertionError('No request allowed')):
+        with pytest.raises(ValueError,match='API Key'):store.save(endpoint,'test','  ')
+        with pytest.raises(ValueError,match='API Key'):ModelClient(endpoint,'test',enabled=True)
+    assert not store.path.exists()
+    store.save(endpoint,'test','',enabled=False)
+    assert not store.load().enabled
+
+
+def test_legacy_empty_remote_key_forces_disabled_without_rewriting(tmp_path):
+    store=repository(tmp_path)
+    for version in (None,1,2):
+        data=dict(base_url=URL,model='test',enabled=True)
+        if version is not None:data['version']=version
+        store.path.write_text(json.dumps(data));original=store.path.read_bytes()
+        config=store.load()
+        assert not config.enabled and '密钥' in config.notice
+        assert store.path.read_bytes()==original
+
+
 @pytest.mark.skipif(os.name!='nt',reason='Windows DPAPI integration')
 def test_real_windows_dpapi_reopens_from_fresh_process(tmp_path):
     store=ModelSettings(tmp_path);store.save(URL,'synthetic-model',SECRET)

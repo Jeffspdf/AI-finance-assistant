@@ -46,6 +46,7 @@ class ConversationFeatures:
             bubble.bind('<Configure>',lambda event,widget=label:widget.configure(wraplength=max(px(100),event.width-px(32))))
             evidence=message.get('evidence',[])
             if evidence:self.button(bubble,f'查看 {len(evidence)} 笔计算依据',lambda rows=evidence:self.chat_evidence(rows))
+            if message.get('trace'):self.button(bubble,'公式与关联决定',lambda trace=message['trace']:self.show_calculation_trace(trace))
             if not mine:
                 followups=tk.Frame(bubble,bg='white');followups.pack(fill='x',pady=px((4,0)))
                 self.button(followups,'本月结余',lambda:self.ask('本月结余是多少？'))
@@ -56,8 +57,8 @@ class ConversationFeatures:
         self.label(window,'显示回答当时的源记录快照；后续修改不会重写历史答案。',10,MUTED)
         self.table(window,['日期','商户','类型','金额 / 元','分类','源文件','行号'],[[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:,.2f}",r['category'],r['source_file'],r['source_row']] for r in rows],8)
 
-    def _chat_reply(self,text,evidence=None,mode=None):
-        mode=mode or self.mode;self.chat_histories[mode].append(dict(role='assistant',text=text,evidence=evidence or []))
+    def _chat_reply(self,text,evidence=None,mode=None,trace=None):
+        mode=mode or self.mode;self.chat_histories[mode].append(dict(role='assistant',text=text,evidence=evidence or [],trace=trace))
         self.chat_histories[mode]=self.chat_histories[mode][-20:]
         if self.mode==mode and self.page=='assistant':
             self.draw_chat();self.after_idle(lambda:self.content_canvas.yview_moveto(1))
@@ -78,7 +79,11 @@ class ConversationFeatures:
             try:cents=money_to_cents(value,allow_zero=True)
             except ValueError as exc:self._chat_reply(str(exc));return
             if messagebox.askyesno('确认预算修改',f'将 {month} 的{category}预算设为 ¥{cents/100:,.2f}？'+('（未指定月份，默认本月）' if period is None else '')):
-                self.store.save_budget(month,category,cents);self._chat_reply(f'已设置 {month} {category}预算 ¥{cents/100:,.2f}。可在预算页修改。')
+                self.store.save_budget(month,category,cents)
+                from .evidence import calculation
+                trace=calculation('action','budget.user_confirmed',self.store.transactions().iloc[:0],
+                                  inputs={'user_confirmed':True},extra=[dict(type='Budget',id=month+'/'+category,snapshot=dict(month=month,category=category,amount_cents=cents))])
+                self._chat_reply(f'已设置 {month} {category}预算 ¥{cents/100:,.2f}。可在预算页修改。',trace=trace)
             else:self._chat_reply('已取消，预算没有改变。')
             return
         if self.pending_clarification and self.pending_clarification[0]==self.mode:
@@ -112,7 +117,7 @@ class ConversationFeatures:
         else:self.finish_chat(answer_question(frame,q,budgets=budgets),mode)
 
     def finish_chat(self,result,mode):
-        self._chat_reply(result['answer'],result.get('evidence'),mode)
+        self._chat_reply(result['answer'],result.get('evidence'),mode,trace=result.get('trace'))
         if self.page=='assistant' and self.mode==mode:
             self.answer.config(text=result['answer']);self.chat_status.config(text='已按本机记录核对。' if result['status']=='ok' else '可以补充条件，或尝试下方问题。')
             self.animate_character('success' if result['status']=='ok' else 'idle')

@@ -50,7 +50,7 @@ def test_response_failures_are_specific(body,message):
     with patch('finance.llm.urlopen') as request:
         request.return_value.__enter__.return_value.read.return_value=json.dumps(body).encode()
         with pytest.raises(ModelResponseError,match=message):
-            ModelClient('https://example.com/v1','test',enabled=True).test_connection()
+            ModelClient('https://example.com/v1','test','synthetic-test-only',enabled=True).test_connection()
 
 
 def test_error_messages_distinguish_auth_balance_timeout_and_format_without_secrets():

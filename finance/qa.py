@@ -4,6 +4,7 @@ import pandas as pd
 from .categories import category_in_question
 from .analytics import yuan
 from .categories import CATEGORIES
+from .evidence import effective_frame,calculation
 
 def month_shift(today, offset):
     index=today.year*12+today.month-1+offset
@@ -87,6 +88,7 @@ def validate_model_intent(question, intent):
     return intent
 
 def answer_question(frame, question, today=None, budgets=None, model=None):
+    frame=effective_frame(frame)
     today=today or date.today(); budgets=budgets or {}
     intent=parse_question(question)
     source='本地解析'
@@ -129,6 +131,7 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     total=int(tx.amount_cents.sum()); item=category or ''
     if metric=='compare':
         names=intent['compare_categories'];tx=tx[tx.category.isin(names)]
+        if tx.empty:return {'answer':'所比较分类没有可追溯的记录，无法提供金额，请先导入对应账单。','evidence':[],'status':'missing','parser':source}
         totals={c:int(tx.loc[tx.category==c,'amount_cents'].sum()) for c in names}
         answer=f'{label}：'+ '；'.join(c+' '+yuan(totals[c])+' 元' for c in names)+f'。差额（{names[0]} − {names[1]}）为 {yuan(totals[names[0]]-totals[names[1]])} 元。计算方式：分别逐笔汇总再相减；零值仅代表已导入匹配记录的汇总。'
     elif metric in ['average_expense','average_income']:
@@ -164,4 +167,12 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         answer=f'{label}的{category}支出 {yuan(total)} 元，已设置预算 {yuan(budget)} 元，超支 {yuan(over)} 元，剩余 {yuan(budget-total)} 元。预算是用户设置值，支出是源记录汇总值。'
     answer+=' 数据范围：'+label+'。假设：导入记录与人工修正有效。缺失信息：无法识别未导入交易，不能代表完整账户余额。下方列出全部计算依据。'
     evidence=tx[['id','external_id','date','amount_cents','kind','category','merchant','source_file','source_row']].to_dict('records')
-    return {'answer':answer,'evidence':evidence,'status':'ok','parser':source}
+    extra=[]
+    if metric=='budget':extra=[dict(type='Budget',id=month+'/'+category,snapshot=dict(month=month,category=category,amount_cents=budget))]
+    trace=calculation('answer','query.'+metric,tx,inputs=intent,extra=extra)
+    if trace['evidence'] and any(e['type']=='LinkDecision' for e in trace['evidence']):
+        answer+=' 已按人工确认的关联组排除重复资金腿；关联决定可在对账中撤销。'
+    refund=frame.attrs.get('refund_pending',{})
+    if refund.get('count'):
+        answer+=f' 退款仍待处理（{refund["count"]} 笔），当前支出未扣退款，净支出待定。'
+    return {'answer':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}

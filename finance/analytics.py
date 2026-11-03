@@ -2,14 +2,17 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_CEILING
 import pandas as pd
+from .evidence import effective_frame
 
 def yuan(cents):
     return f'{int(cents)/100:,.2f}'
 
 def month_records(frame, month):
+    frame=effective_frame(frame)
     return frame[frame['date'].str.startswith(month)].copy()
 
 def overview(frame):
+    frame=effective_frame(frame)
     if frame.empty: return pd.DataFrame(columns=['月份','收入','支出','结余']), pd.DataFrame(columns=['分类','支出','占比'])
     tx=frame.copy(); tx['月份']=tx['date'].str[:7]
     rows=[]
@@ -56,6 +59,7 @@ def plan_savings(target_cents, saved_cents, start_date, deadline, income_cents, 
     return dict(months=n,monthly_available=available,required_monthly=required,projected=projected,deficit=deficit,feasible=projected>=target_cents,negative_cashflow=income_cents<budget_cents,contribution_dates=contribution_dates)
 
 def estimate_from_records(frame,today=None,months=3):
+    frame=effective_frame(frame)
     from .qa import month_shift
     today=today or date.today()
     requested=[month_shift(today,-i) for i in range(months,0,-1)]

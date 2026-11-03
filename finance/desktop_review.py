@@ -71,6 +71,10 @@ class ReviewFeatures:
         self.button(controls,'查看对应账单与源记录',lambda:self.open_category(category,self.budget_month))
         frame=self.store.transactions();tx=frame[(frame.date.str.startswith(self.budget_month))&(frame.kind=='支出')&(frame.category==category)]
         self.table(self.budget_details,['日期','商户','金额','源文件','行号'],[[r.date[:10],r.merchant,yuan(r.amount_cents),r.source_file,r.source_row] for r in tx.itertuples()],4)
+        from .evidence import calculation
+        trace=calculation('budget','budget.spent_minus_limit',tx,inputs={'month':self.budget_month,'category':category},
+                          extra=[dict(type='Budget',id=self.budget_month+'/'+category,snapshot=dict(amount_cents=self.store.budgets(self.budget_month)[category]))])
+        self.button(controls,'公式与关联决定',lambda:self.show_calculation_trace(trace))
 
     def show_goal_gaps(self,parent):
         gaps=[]

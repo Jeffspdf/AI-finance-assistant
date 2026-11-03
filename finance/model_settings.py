@@ -109,14 +109,14 @@ class ModelSettings:
                 self._validate(config.base_url, config.model, config.api_key)
                 config.enabled = True
             except ValueError:
-                config.notice = '已保存的模型配置不完整，请打开设置核对后启用。'
+                config.notice = '已保存的模型配置不完整或缺少 API Key，请重新填写密钥并启用。'
         return config
 
     @staticmethod
-    def _validate(base_url, model, api_key):
+    def _validate(base_url, model, api_key, require_key=True):
         if base_url.endswith('/chat/completions'):
             raise ValueError('请填写 Base URL，不要包含 /chat/completions')
-        return ModelClient(base_url, model, api_key, enabled=True)
+        return ModelClient(base_url, model, api_key, enabled=True,require_key=require_key)
 
     def _write(self, data):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,7 +141,7 @@ class ModelSettings:
         if enabled:
             self._validate(base_url, model, api_key)
         elif base_url:
-            self._validate(base_url, model or 'disabled', api_key)
+            self._validate(base_url, model or 'disabled', api_key,require_key=False)
         data = dict(version=2, base_url=base_url, model=model, enabled=bool(enabled and remember_key),
                     remember_key=bool(remember_key), requires_key=bool(api_key))
         if remember_key and api_key:

@@ -50,6 +50,8 @@ if workspace=='演示数据' and store.transactions().empty:
     store.save_budget(DEMO_MONTH,'餐饮',10000)
     store.save_budget(DEMO_MONTH,'交通',15000)
 tx=store.transactions()
+pending_refund=store.pending_refunds()
+if pending_refund['count']:st.warning(f'退款待处理 {pending_refund["count"]} 笔 / ¥{yuan(pending_refund["amount_cents"])}。当前支出未扣退款，净支出待定。')
 record_version=hash(tuple(tx[['id','category','kind','amount_cents']].itertuples(index=False,name=None)))
 if st.session_state.get('record_version')!=record_version:
     st.session_state.pop('answer',None)
@@ -103,9 +105,11 @@ elif page=='导入与分类':
     st.download_button('下载导入模板',(ROOT/'samples'/'template.csv').read_bytes(),'账单模板.csv','text/csv')
     st.download_button('下载异常演示账单',(ROOT/'samples'/'demo_with_errors.csv').read_bytes(),'异常演示账单.csv','text/csv')
     uploaded=st.file_uploader('选择账单',type=['csv','xlsx'])
+    accounts={'未指定账户':None,**{r['label']+' · '+r['id'][-6:]:r['id'] for r in store.accounts()}}
+    import_account=st.selectbox('账单所属账户（不确定时标未指定）',list(accounts))
     if uploaded:
         try:
-            parsed=parse_statement(uploaded.getvalue(),uploaded.name)
+            parsed=parse_statement(uploaded.getvalue(),uploaded.name,retain_source=True,account_id=accounts[import_account])
             a,b,c=st.columns(3)
             a.metric('有效行（含待去重）',len(parsed.rows)); b.metric('异常行',len(parsed.issues)); c.metric('跳过行',parsed.skipped)
             for warning in parsed.warnings: st.warning(warning)
@@ -119,7 +123,7 @@ elif page=='导入与分类':
                 st.dataframe(view_records(preview.drop(columns=['signature'])),hide_index=True,width='stretch')
                 st.caption('优先按平台与原始交易 ID 去重。同一 ID 内容冲突会标记，不覆盖原记录。没有 ID 时按组合字段识别重复，请核对。')
                 if st.button('确认导入',type='primary'):
-                    added,duplicates,conflicts=store.import_rows(parsed.rows)
+                    added,duplicates,conflicts=store.import_statement(parsed)
                     st.success(f'已保存 {added} 笔，跳过重复 {duplicates} 笔。')
                     if conflicts: st.dataframe(pd.DataFrame(conflicts),hide_index=True)
                     tx=store.transactions()

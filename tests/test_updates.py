@@ -99,3 +99,12 @@ def test_local_diagnostics_are_nonfatal_if_not_writable(tmp_path):
     log({'stage':'release_api','result':'ok','version':'0.7.3'})
     assert json.loads(log.path.read_text())['version']=='0.7.3'
     with patch('pathlib.Path.open',side_effect=PermissionError):log({'result':'failed'})
+
+
+@pytest.mark.parametrize('suffix',['?check=123','#release','?check=123#release'])
+def test_official_page_redirect_can_preserve_query(suffix):
+    from finance.updates import _official_page_release
+    response=MagicMock()
+    response.__enter__.return_value.geturl.return_value=f'https://github.com/{REPO}/releases/tag/v9.4.0'+suffix
+    with patch('finance.updates._request',return_value=response):
+        assert _official_page_release()['version']=='9.4.0'

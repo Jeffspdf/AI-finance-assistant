@@ -9,8 +9,9 @@ from datetime import datetime,timezone
 from pathlib import Path
 from urllib.request import Request, build_opener,ProxyHandler
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 
-APP_VERSION = '0.7.4'
+APP_VERSION = '0.8.0'
 REPO = 'Jeffspdf/AI-finance-assistant'
 RELEASES_URL = f'https://github.com/{REPO}/releases/latest'
 API_URL = f'https://api.github.com/repos/{REPO}/releases/latest'
@@ -109,7 +110,9 @@ def _official_page_release(route='system',diagnostic=None):
     # require the official checksum manifest, never an unverified mirror.
     with _request(_fresh_request(RELEASES_URL),timeout=15,route=route) as response:
         final_url=response.geturl()
-    match=re.fullmatch(r'https://github\.com/'+re.escape(REPO)+r'/releases/tag/(v?\d+\.\d+\.\d+)',final_url)
+    parsed=urlparse(final_url)
+    match=re.fullmatch('/'+re.escape(REPO)+r'/releases/tag/(v?\d+\.\d+\.\d+)',parsed.path)
+    if parsed.scheme!='https' or parsed.netloc!='github.com':match=None
     if not match:raise ValueError('无法确认官方最新版本')
     tag=match.group(1);name=f'AIFinanceHelper-{tag.removeprefix("v")}-Setup-x64.exe'
     result=parse_release({'tag_name':tag,'assets':[],

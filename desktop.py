@@ -25,6 +25,7 @@ from finance.animation import SpritePlayer
 from finance.desktop_review import ReviewFeatures
 from finance.desktop_round2 import RoundTwo
 from finance.conversation import ConversationFeatures
+from finance.desktop_m1a import M1Features
 from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form
 enable_dpi_awareness()
 
@@ -37,7 +38,7 @@ BLUE = '#0f766e'
 GREEN = '#0f766e'
 
 
-class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
+class Desktop(M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
     def __init__(self):
         super().__init__()
         init_scale(self)
@@ -424,7 +425,7 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         self.guide_action.config(text=action, command=lambda p=target: self.show(p))
         for child in self.main.winfo_children(): child.destroy()
         self.content_canvas.yview_moveto(0)
-        self.frame = self.store.transactions()
+        self.frame = self.store.source_transactions() if page=='records' else self.store.transactions()
         titles = {'home': ('把生活记好，把小目标存好。', '财务概览  /  每一笔记录，都让计划更清楚一点。'), 'records': ('好好记账，心里有数。', '交易账本  /  导入、核对与修正，每笔都有来源。'), 'plan': ('给下一个愿望，留点预算。', '储蓄规划  /  试试不同的预算，找到舒服的节奏。'), 'assistant': ('关于钱的小疑问，一起理清。', '本地规则模式  /  回答来自已导入账单，不向外发送数据。')}
         titles['budget_page']=('预算有边界，花钱更安心。','设置分类预算，查看超支和目标缺口。')
         titles['settings']=('按你的习惯，设置小助手。','模型、更新、数据和角色，集中管理。')
@@ -450,6 +451,10 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         self.label(self.main,short_titles[page],20,bold=True)
         subtitle = '问题文本发送至你配置的接口；账单查询与金额由本机代码处理。' if page == 'assistant' and self.model_client else titles[page][1]
         self.label(self.main, subtitle, 10, MUTED)
+        if page in ('home','records','budget_page','plan','assistant'):
+            refund=self.store.pending_refunds(self.selected_month if page in ('home','records','budget_page') else None)
+            if refund['count']:
+                self.label(self.main,f'退款待处理 {refund["count"]} 笔 / ¥{yuan(refund["amount_cents"])} · 当前支出未扣退款，净支出待定。',10,'#ae6450')
         if page == 'assistant':
             self.label(self.main, '已连接模型 · 条件理解与本机计算' if self.model_client else '本地助手 · 无需联网即可查询', 10, GREEN)
         getattr(self, page)()
@@ -539,13 +544,15 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         more=tk.Frame(self.main,bg=BG);more.pack(fill='x')
         self.button(more,'同商户全部应用',lambda:self.batch_correct(True))
         self.button(more,'撤销上次批量',self.undo_batch)
+        self.button(more,'跨来源对账',self.reconciliation_window)
+        self.button(more,'导入批次',self.import_history_window)
         filters=tk.Frame(self.main,bg=BG);filters.pack(fill='x',pady=px(8))
         self.search_var=tk.StringVar(value=self.search_text)
         ttk.Entry(filters,textvariable=self.search_var,width=32).pack(side='left',padx=px((0,10)))
         self.filter_picker=ttk.Combobox(filters,values=['全部分类','待确认分类',*CATEGORIES],state='readonly',width=12)
         self.filter_picker.set(self.category_filter);self.filter_picker.pack(side='left')
         self.result_count=tk.Label(filters,bg=BG,fg=MUTED);self.result_count.pack(side='right')
-        self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源'],[],12)
+        self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源','统计口径'],[],12)
         self.tree.bind('<Double-1>',lambda _:self.edit_selected())
         self.search_var.trace_add('write',lambda *_:self.reset_record_filter())
         self.filter_picker.bind('<<ComboboxSelected>>',lambda _:self.reset_record_filter())
@@ -581,8 +588,10 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         self.tree.configure(height=max(2,len(self.record_rows)))
         self.page_info.config(text=f'第 {self.record_page+1} / {pages} 页 · 每页 200 笔')
         for item in self.tree.get_children():self.tree.delete(item)
-        for i,r in enumerate(self.record_rows):self.tree.insert('','end',iid=str(i),values=[r['date'][:10],r['merchant'],r['kind'],yuan(r['amount_cents']),r['category'],r['category_source']],tags=('alternate',) if i%2 else ())
-        self.result_count.config(text=f'{total} 笔匹配 / {len(self.frame)} 笔期间记录')
+        for i,r in enumerate(self.record_rows):self.tree.insert('','end',iid=str(i),values=[r['date'][:10],r['merchant'],r['kind'],yuan(r['amount_cents']),r['category'],r['category_source'],r['counting_note']],tags=('alternate',) if i%2 else ())
+        counted=frame[frame.included_in_stats]
+        cost=int(counted.loc[counted.kind=='支出','amount_cents'].sum())
+        self.result_count.config(text=f'{total} 笔来源 · 计入消费 ¥{yuan(cost)}')
 
     def change_record_page(self,delta):
         self.record_page=max(0,self.record_page+delta);self.refresh_records()
@@ -627,13 +636,18 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
     def source(self):
         r = self.selected()
         if r:
-            messagebox.showinfo('源记录', f"交易 ID：{r['external_id']}\n文件：{r['source_file']}\n原始行号：{r['source_row']}\n时间：{r['date']}\n描述：{r['description']}\n分类来源：{r['category_source']}")
+            source=self.store.transaction_source(r['id'])
+            window=tk.Toplevel(self);window.title('源记录与导入证据');set_window_geometry(window,750,580);window.configure(bg=BG)
+            text=tk.Text(window,wrap='word',font=point_font());text.pack(fill='both',expand=True,padx=px(14),pady=px(14))
+            evidence={k:source.get(k) for k in ('external_id','source_file','source_row','date','description','category_source','account_id','status','source_document_id','raw_row_id','sha256','parser_version','parse_status')}
+            evidence['原始必要字段']=json.loads(source['raw_json']) if source.get('raw_json') else '旧数据：没有原文件，不伪造原始行或哈希'
+            text.insert('1.0',json.dumps(evidence,ensure_ascii=False,indent=2));text.config(state='disabled')
 
     def correct(self):
         self.batch_correct()
 
     def import_file(self):
-        return self.import_async()
+        return self.select_import()
 
     def plan(self):
         form = tk.Frame(self.main, bg='white', padx=px(16), pady=px(8)); form.pack(fill='x', pady=px(10))
@@ -746,9 +760,12 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         if self.model_notice:self.label(self.main,self.model_notice,10,'#ae6450').configure(wraplength=px(760))
         items=[('大模型接口','可记住本机加密密钥及启用状态，重启和更新后自动恢复。',self.show_model_settings,'配置模型'),
                ('版本与更新',f'当前 v{APP_VERSION} · 检查新版与下载安装包。',self.show_updates,'检查更新'),
-               ('本机数据','演示空间和我的账本独立保存；备份前退出程序并复制数据目录。',lambda:os.startfile(str(DATA_DIR)),'打开数据目录'),
+               ('账户与支付绑定','声明钱包与银行卡账户，建立带有效期的支付绑定；不会自动合并交易。',self.account_window,'管理账户与绑定'),
+               ('备份与恢复','当前空间一致备份；恢复前预览并再次快照，保留旧数据身份。',self.backup_window,'备份与恢复'),
+               ('本机数据','账单、原始必要字段和审计留在本机；演示与个人空间独立。',lambda:os.startfile(str(DATA_DIR)),'打开数据目录'),
                ('角色与动画','点击角色挥手，可暂停动画或打开桌面小助手。',self.show_pet,'打开桌面小助手')]
         items.append(('分类记忆',f'当前空间已记住 {len(self.store.merchant_rules())} 条商户规则，可查看并删除。',self.learned_rules_window,'管理分类记忆'))
+        items.append(('六行对账示例','独立合成空间，体验确认后120→60元、拆分后恢复120元。退款另列待处理。',self.six_row_demo,'打开六行示例'))
         for title,description,action,caption in items:
             card=tk.Frame(self.main,bg='white',padx=px(18),pady=px(8));card.pack(fill='x',pady=px(6))
             self.label(card,title,13,bold=True);self.label(card,description,10,MUTED);self.button(card,caption,action)
@@ -772,6 +789,11 @@ class Desktop(RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
 
 
 if __name__ == '__main__':
+    if '--self-test-m1a' in sys.argv:
+        if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
+        from finance.m1a_demo import verify_six
+        verify_six(DATA_DIR)
+        sys.exit(0)
     if '--diagnose-updates' in sys.argv:
         from finance.updates import diagnose_updates
         result=diagnose_updates(DATA_DIR,download='--download-latest' in sys.argv)

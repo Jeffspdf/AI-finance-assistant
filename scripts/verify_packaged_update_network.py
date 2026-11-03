@@ -16,7 +16,7 @@ with TemporaryDirectory(prefix='.test_packaged_update_net_',dir=ROOT) as temp:
     if local.is_file():assert report['sha256']==hashlib.sha256(local.read_bytes()).hexdigest()
     if report['version']==report['client']:assert '当前已是最新版本' in report['status']
     # The report is public release metadata and allowlisted network events only.
-    destination=ROOT/'docs'/'packaged_update_network.json'
+    destination=ROOT/'docs'/('packaged_update_network_v'+report['client'].replace('.','')+'.json')
     destination.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps({k:v for k,v in report.items() if k!='events'},ensure_ascii=False),flush=True)
     print('PACKAGED_UPDATER_NETWORK_AND_SHA256_OK',flush=True)

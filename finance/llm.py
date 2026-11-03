@@ -46,7 +46,7 @@ def connection_error_message(exc):
 
 
 class ModelClient:
-    def __init__(self, base_url, model, api_key='', enabled=False):
+    def __init__(self, base_url, model, api_key='', enabled=False, *, require_key=True):
         if not enabled: raise ValueError('模型未获启用')
         parsed=urlparse(base_url)
         if parsed.scheme not in ['http','https'] or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
@@ -54,6 +54,8 @@ class ModelClient:
         if parsed.scheme=='http' and parsed.hostname not in ['localhost','127.0.0.1','::1']:
             raise ValueError('远程模型 API 必须使用 HTTPS')
         if not model.strip(): raise ValueError('请填写模型名称')
+        if require_key and parsed.hostname not in ['localhost','127.0.0.1','::1'] and not api_key.strip():
+            raise ValueError('请填写 API Key 后再启用或测试远程模型；本机接口可留空。')
         self.endpoint=base_url.rstrip('/')+'/chat/completions'
         self.model=model; self.api_key=api_key
 

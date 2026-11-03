@@ -50,14 +50,14 @@ with TemporaryDirectory(prefix='.test_round2_ui_',dir=root) as temp:
     # Async parse/preview/cancel must not write; confirm must commit.
     path=Path(temp)/'import.csv';path.write_text('交易ID,日期,商户,描述,金额,类型\nASYNC,2026-09-11,新店,商品,10,支出\nBAD,bad,新店,商品,10,支出\n',encoding='utf-8-sig')
     count=len(a.store.transactions())
-    with patch('finance.desktop_round2.filedialog.askopenfilename',return_value=str(path)):a.import_file()
+    with patch('finance.desktop_round2.filedialog.askopenfilename',return_value=str(path)):a.import_async()
     a.update();w=top(a)
-    wait(a,lambda:any(c.winfo_class()=='Button' and c.cget('text')=='确认导入有效行' for c in children(w)))
+    wait(a,lambda:any(c.winfo_class()=='Button' and c.cget('text')=='确认导入并保存来源' for c in children(w)))
     button(w,'取消导入').invoke();a.update();assert len(a.store.transactions())==count
-    with patch('finance.desktop_round2.filedialog.askopenfilename',return_value=str(path)):a.import_file()
+    with patch('finance.desktop_round2.filedialog.askopenfilename',return_value=str(path)):a.import_async()
     a.update();w=top(a)
-    wait(a,lambda:any(c.winfo_class()=='Button' and c.cget('text')=='确认导入有效行' for c in children(w)))
-    button(w,'确认导入有效行').invoke()
+    wait(a,lambda:any(c.winfo_class()=='Button' and c.cget('text')=='确认导入并保存来源' for c in children(w)))
+    button(w,'确认导入并保存来源').invoke()
     wait(a,lambda:any(c.winfo_class()=='Button' and c.cget('text')=='完成' for c in children(w)))
     assert len(a.store.transactions())==count+1
     button(w,'完成').invoke();a.update()

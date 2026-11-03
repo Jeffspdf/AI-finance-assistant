@@ -44,6 +44,7 @@ class RoundTwo:
         self.label(window,card['title']+' · '+card['value'],16,bold=True)
         note=self.label(window,card['why'],10,MUTED);note.configure(wraplength=px(710))
         self.table(window,['日期','商户','分类','金额 / 元','来源','行号'],[[r.date[:10],r.merchant,r.category,yuan(r.amount_cents),r.source_file,r.source_row] for r in tx.itertuples()],8)
+        if card.get('trace'):self.button(window,'查看公式、关联与参数',lambda:self.show_calculation_trace(card['trace']))
         self.button(window,'进入账本筛选',lambda:(window.destroy(),self.open_category(card['category'] or '全部分类',card['month'])))
 
     def quick_entry(self):
@@ -138,12 +139,12 @@ class RoundTwo:
         self.button(window,'查找 / 前往',run);self.button(window,'快速记一笔',lambda:(window.destroy(),self.quick_entry()))
         entry.bind('<Return>',lambda _:run());entry.focus_set()
 
-    def import_async(self):
+    def import_async(self,filename=None,adapter='generic',account_id=None):
         from pathlib import Path
         import threading,queue,csv
         from .importer import parse_statement
         from .analytics import budget_report
-        filename=filedialog.askopenfilename(filetypes=[('账单文件','*.csv *.xlsx')])
+        filename=filename or filedialog.askopenfilename(filetypes=[('账单文件','*.csv *.xlsx')])
         if not filename:return
         store=self.store;mode=self.mode
         window=tk.Toplevel(self);window.title('导入账单');set_window_geometry(window, 800, 630);window.configure(bg=BG)
@@ -162,7 +163,7 @@ class RoundTwo:
             try:
                 path=Path(filename)
                 if path.stat().st_size>20*1024*1024:raise ValueError('文件超过 20 MB')
-                result=parse_statement(path.read_bytes(),path.name)
+                result=parse_statement(path.read_bytes(),path.name,retain_source=True,adapter=adapter,account_id=account_id)
                 mailbox.put(('parsed',result))
             except Exception as exc:mailbox.put(('error',str(exc)))
         def export_issues(result):
@@ -185,10 +186,10 @@ class RoundTwo:
                 state['writing']=True;commit_button.config(state='disabled');cancel_button.config(state='disabled')
                 status.config(text='正在保存有效记录…完成前请勿关闭。')
                 def writer():
-                    try:mailbox.put(('saved',(store.import_rows(result.rows),result)))
+                    try:mailbox.put(('saved',(store.import_statement(result),result)))
                     except Exception as exc:mailbox.put(('error',str(exc)))
                 threading.Thread(target=writer,daemon=True).start()
-            if result.rows:commit_button=self.button(actions,'确认导入有效行',commit)
+            if result.raw_rows:commit_button=self.button(actions,'确认导入并保存来源',commit)
         def poll():
             if cancel.is_set() or not window.winfo_exists():return
             try:kind,value=mailbox.get_nowait()

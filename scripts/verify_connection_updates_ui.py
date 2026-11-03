@@ -26,6 +26,7 @@ with TemporaryDirectory(prefix='.test_connection_update_ui_',dir=ROOT) as temp:
         app.show_model_settings();app.update()
         window=next(c for c in app.winfo_children() if c.winfo_class()=='Toplevel')
         entries=[c for c in children(window) if c.winfo_class()=='TEntry'];entries[1].insert(0,'synthetic-model')
+        entries[2].insert(0,'synthetic-test-key')
         with patch('finance.llm.ModelClient.test_connection',side_effect=error):
             button(window,'测试连接').invoke();wait(app,lambda:expected in text(window))
         window.destroy();app.update()

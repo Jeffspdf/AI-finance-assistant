@@ -1,0 +1,38 @@
+{
+  "data": "synthetic only",
+  "before_cents": 12000,
+  "confirmed_cents": 6000,
+  "split_cents": 12000,
+  "source_rows": 6,
+  "dialogs": {
+    "accounts": {
+      "size": [
+        1275,
+        1110
+      ],
+      "clipped": []
+    },
+    "batches": {
+      "size": [
+        1380,
+        960
+      ],
+      "clipped": []
+    },
+    "backup": {
+      "size": [
+        975,
+        705
+      ],
+      "clipped": []
+    },
+    "six_demo": {
+      "size": [
+        1485,
+        1125
+      ],
+      "clipped": []
+    }
+  },
+  "callback_errors": []
+}

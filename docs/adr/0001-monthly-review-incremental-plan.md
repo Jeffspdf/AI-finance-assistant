@@ -1,6 +1,6 @@
 # ADR-0001：账户、对账与证据规则（A1修订）
 
-状态：修订提案，以下数据模型尚未实施。日期：2026-11-01。基线：v0.7.1 / fa84b40。
+状态：M1a最小闭环已实施于v0.8.0，退款净额、扩展格式与真实评测仍为后续提案。原设计日期：2026-11-01；实施更新：2026-11-03。详见[第四轮处理](../ROUND4_IMPLEMENTATION.md)。
 
 依据用户提供的ADR修订说明，替代初稿相应口径。关联：[差距分析](../DIRECTION_GAP_ANALYSIS.md)、[一页计划](../A1_IMPLEMENTATION_PLAN.md)。用户本轮明确要求的API密钥持久化作为独立修复先行交付，不扩大为整套对账重构。
 
@@ -66,7 +66,7 @@ schema_migrations(version PK, applied_at, checksum)
 transactions增加source_document_id、raw_row_id、account_id、link_group_id、currency、status
 ```
 
-kind=purchase_duplicate/transfer_pair/refund_pair，role=purchase/funding/refund。link_group_id与成员关系同事务维护，有效成员跨组唯一性需约束/事务测试。M2/A7再新增refund_links(refund_txn_id,original_txn_id,amount_cents,basis,created_at)，金额为正整数分分配，禁止重复分配/超额。
+kind=purchase_duplicate/transfer_pair/refund_pair，role=purchase/funding/refund。link_members是事实源，transactions.link_group_id仅为缓存，由事务内触发器同步；投影不信任缓存。同hash复用唯一SourceDocument，每次导入记ImportBatch，批次账户是本次选择。旧交易account_id=NULL，新导入必须选择账户或明确标未指定，A层仅限双方有账户。link_group_id与成员关系同事务维护，有效成员跨组唯一性需约束/事务测试。M2/A7再新增refund_links(refund_txn_id,original_txn_id,amount_cents,basis,created_at)，金额为正整数分分配，禁止重复分配/超额。
 
 RawRow只存追溯必要字段，不默认存原文件字节，无关敏感字段剔除；数据/审计留本机，不进公开仓库。批次提供保留与删除策略：先撤销/软删除并刷新关联/投影，物理清理明确范围，保留审计不能被称为隐私已彻底清除。
 
@@ -86,4 +86,4 @@ M1a：最小模式/一致备份/有限迁移→账户链路→微信CSV+指定�
 
 保留Windows/Python/Tkinter/SQLite、整数分、规则优先、显式商户学习与模型白名单。按用户本轮要求，密钥独立改为可选Windows当前用户加密保存及启用状态恢复，启动不请求模型，保留清除和仅本次使用，不把密钥放进原始行或公开文档。
 
-本轮A1为文档，密钥为单独授权修复；账户/导入/对账/退款按后续阶段小步实施，不以一次大改替换全链路。
+A1最初只交付文档与独立密钥修复；第四轮实现了A2–A6的两来源、逐组人工对账最小闭环。退款净额与M1b扩展没有提前宣称完成。99% precision是讨论默认自动化的必要条件之一，当前未实测达标，自动化不可默认开启。

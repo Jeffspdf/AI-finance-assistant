@@ -1,5 +1,7 @@
 # Validation record — 2026-11-01
 
+Latest implementation: [v0.8.0 M1a validation, 2026-11-03](VALIDATION_M1A.md). Earlier sections below remain chronological records of their releases.
+
 ## Completed locally
 
 - Full regression: **86 passed**, Python 3.12 / Windows; includes original Streamlit UI tests. Run: `python -m pytest -q`. The first sandbox run stalled on local socket setup; the same suite passed in the normal local execution environment. This is not recorded as an application failure or a skipped test pass.

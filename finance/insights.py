@@ -4,8 +4,10 @@ from decimal import Decimal
 from math import ceil
 from .analytics import estimate_from_records,goal_progress,yuan,plan_savings
 from .qa import month_shift
+from .evidence import effective_frame,calculation
 
 def make_insights(frame,month,goals=None,contributions=None,today=None):
+    frame=effective_frame(frame)
     today=today or date.today();goals=goals or [];contributions=contributions or {}
     if month=='全部月份' or frame.empty:return []
     target=date.fromisoformat(month+'-01');previous=month_shift(target,-1)
@@ -32,7 +34,7 @@ def make_insights(frame,month,goals=None,contributions=None,today=None):
             baseline=int(historical.loc[historical.category==category,'amount_cents'].sum())/len(used)
             if baseline>0 and total>baseline*1.5:
                 rows=current[current.category==category]
-                cards.append(dict(kind='unusual',title=category+'高于历史均值',value=f'{total/baseline:.1f} 倍',why=f'本期 ¥{yuan(total)} ÷ 前 {len(used)} 个有记录月份均值 ¥{baseline/100:,.2f}。对比月份：'+ '、'.join(used)+'。本月可能尚未结束，账单可能不完整。',category=category,month=month,ids=rows.id.tolist()))
+                cards.append(dict(kind='unusual',title=category+'高于历史均值',value=f'{total/baseline:.1f} 倍',why=f'本期 ¥{yuan(total)} ÷ 前 {len(used)} 个有记录月份均值 ¥{baseline/100:,.2f}。对比月份：'+ '、'.join(used)+'。本月可能尚未结束，账单可能不完整。',category=category,month=month,ids=rows.id.tolist()+historical.loc[historical.category==category,'id'].tolist()))
                 break
     try:estimate=estimate_from_records(frame,today)
     except ValueError:estimate=None
@@ -55,9 +57,19 @@ def make_insights(frame,month,goals=None,contributions=None,today=None):
             else:value='当前结余不足';explanation='近三个完整月的平均结余不为正，无法据此推算达成时间。'
             cards.insert(0,dict(kind='goal',title=goal['name']+' · 情景估算',value=value,why=explanation,category=None,month='全部月份',ids=frame.loc[frame.date.str[:7].isin(estimate['months']),'id'].tolist(),goal_id=goal['id']))
             break
-    return cards[:3]
+    for card in cards:
+        evidence_frame=frame[frame.id.isin(card['ids'])]
+        extra=[]
+        if card['kind']=='goal':
+            goal=next(g for g in goals if g['id']==card['goal_id'])
+            extra.append(dict(type='Goal',id=str(goal['id']),snapshot=dict(goal)))
+            extra.extend(dict(type='Contribution',id=str(e.get('id',i)),snapshot=e) for i,e in enumerate(contributions[goal['id']].to_dict('records')))
+        card['trace']=calculation('insight','insight.'+card['kind'],evidence_frame,
+                                  inputs=dict(month=month,today=today.isoformat(),assumption='仅已导入记录；未扣待处理退款'),extra=extra)
+    return [c for c in cards[:3] if c['trace']['evidence']]
 
 def suggested_budgets(frame,today=None):
+    frame=effective_frame(frame)
     today=today or date.today();estimate=estimate_from_records(frame,today)
     expenses=frame[frame.date.str[:7].isin(estimate['months'])&(frame.kind=='支出')]
     return {c:int((Decimal(int(total))/len(estimate['months'])*Decimal('.9')).quantize(Decimal('1'))) for c,total in expenses.groupby('category').amount_cents.sum().items()}

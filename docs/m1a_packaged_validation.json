@@ -1,0 +1,20 @@
+{
+  "data": "synthetic only",
+  "before_cents": 12000,
+  "confirmed_cents": 6000,
+  "split_cents": 12000,
+  "pending_refund_cents": 1000,
+  "transfer_cents": 50000,
+  "source_rows": 6,
+  "automatic": false,
+  "checks": [
+    "overview",
+    "ledger",
+    "budget",
+    "question",
+    "planning_estimate",
+    "link_evidence",
+    "split_persistence"
+  ],
+  "execution": "actual packaged Windows EXE"
+}

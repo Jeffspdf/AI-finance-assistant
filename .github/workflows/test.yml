@@ -18,4 +18,6 @@ jobs:
           $env:FINANCE_DESKTOP_DATA_DIR = Join-Path $env:RUNNER_TEMP 'review-smoke'
           python desktop.py --self-test
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/self-test.ok")) { throw 'Desktop self-test failed' }
+          python desktop.py --self-test-m1a
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$env:FINANCE_DESKTOP_DATA_DIR/m1a-self-test.json")) { throw 'M1a acceptance failed' }
       - run: python scripts/evaluate_ai.py

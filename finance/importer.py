@@ -37,6 +37,8 @@ class ImportResult:
     issues: list = field(default_factory=list)
     skipped: int = 0
     warnings: list = field(default_factory=list)
+    raw_rows: list = field(default_factory=list)
+    document: dict = field(default_factory=dict)
 
 def map_columns(columns):
     clean = {str(c).strip().lstrip('\ufeff'):c for c in columns}
@@ -49,7 +51,7 @@ def read_statement(content: bytes, filename: str):
         raw = pd.read_excel(BytesIO(content), header=None, dtype=str, keep_default_na=False, engine='openpyxl')
         for idx in range(min(60,len(raw))):
             mapping = map_columns(raw.iloc[idx].tolist())
-            if mapping['date'] and mapping['amount']:
+            if mapping['date'] and (mapping['amount'] or {'借方发生额','贷方发生额'}<=set(raw.iloc[idx])):
                 frame = raw.iloc[idx+1:].copy()
                 frame.columns = [str(v).strip() for v in raw.iloc[idx]]
                 return frame.reset_index(drop=True), idx+2
@@ -74,11 +76,35 @@ def read_statement(content: bytes, filename: str):
             return frame, idx+2
     raise ValueError('缺少日期或金额列，请使用模板；银行自定义格式需先转换列名')
 
-def parse_statement(content, filename):
+def parse_statement(content, filename, *, retain_source=False, adapter='generic', account_id=None):
     frame, first_row = read_statement(content, filename)
+    original_frame=frame.copy() if retain_source or adapter!='generic' else None
     if len(frame)>50000: raise ValueError('单次最多导入 50000 行')
+    if adapter not in ('generic','wechat_csv','bank_template_v1'):raise ValueError('不支持的账单格式')
+    if adapter=='wechat_csv':
+        if not filename.lower().endswith('.csv') or not {'交易时间','交易对方','收/支','金额(元)','当前状态','交易单号'}<=set(frame.columns):
+            raise ValueError('微信格式需含交易时间、交易对方、收/支、金额(元)、当前状态、交易单号列')
+        frame=frame.copy();frame['平台']='微信'
+    if adapter=='bank_template_v1':
+        required={'流水号','交易时间','借方发生额','贷方发生额','对方名称','摘要','币种','业务类型'}
+        if not filename.lower().endswith('.xlsx') or not required<=set(frame.columns):
+            raise ValueError('请选择银行模板 v1 XLSX（借方发生额/贷方发生额），其他银行格式需先转换')
+        frame=frame.copy();amounts=[];kinds=[]
+        for _,r in frame.iterrows():
+            try:
+                debit=money_to_cents(r['借方发生额'] or '0',True);credit=money_to_cents(r['贷方发生额'] or '0',True)
+                if debit<0 or credit<0 or bool(debit)==bool(credit):raise ValueError('借贷必须且仅有一项为正')
+                value=debit or credit;amounts.append(f'{value//100}.{value%100:02d}')
+                kinds.append('退款' if r['业务类型']=='退款' else '转账' if r['业务类型'] in ('转账','信用卡还款','充值','提现') else '支出' if debit else '收入')
+            except ValueError:amounts.append('借贷金额无效');kinds.append('')
+        frame['金额']=amounts;frame['类型']=kinds;frame['平台']='银行'
+    if adapter!='generic':retain_source=True
     mapping = map_columns(frame.columns)
     result = ImportResult()
+    if retain_source:
+        result.document=dict(sha256=sha256(content).hexdigest(),filename=__import__('pathlib').Path(filename).name,
+                             channel={'wechat_csv':'微信','bank_template_v1':'银行'}.get(adapter,'通用'),
+                             account_id=account_id,parser_version='m1a-'+adapter+'-1')
     if not mapping['kind']:
         result.warnings.append('缺少收支类型列：正金额按收入、负金额按支出。请核对导入预览。')
     if not mapping['external_id']:
@@ -88,13 +114,25 @@ def parse_statement(content, filename):
         def get(key):
             col=mapping.get(key)
             return str(source[col]).strip() if col is not None else ''
+        raw=None
+        if retain_source:
+            # Allowlist only the fields needed for reconciliation. Never retain arbitrary
+            # exported columns (full card numbers, names, account balances, etc.).
+            raw=dict(row_no=row_number,fields={k:get(k)[:500] for k in ALIASES if mapping.get(k) is not None},parse_status='parsed')
+            if adapter=='bank_template_v1':
+                raw['fields']={k:str(original_frame.iloc[offset][k])[:500] for k in ('流水号','交易时间','借方发生额','贷方发生额','对方名称','摘要','币种','业务类型')}
+            result.raw_rows.append(raw)
         try:
             if not get('date') and not get('amount'):
+                if raw:raw['parse_status']='skipped'
                 result.skipped += 1; continue
             status = get('status')
-            if any(w in status for w in ['失败','关闭','已撤销','已退款','退款成功']):
+            refund=retain_source and ('退款' in get('kind') or ('退款' in status and get('kind') in ('收入','收')))
+            review=retain_source and not refund and '退款' in status
+            if any(w in status for w in (['失败','关闭','已撤销'] if retain_source else ['失败','关闭','已撤销','已退款','退款成功'])):
+                if raw:raw['parse_status']='skipped'
                 result.skipped += 1; continue
-            if '退款' in status or '退款' in get('kind'):
+            if not retain_source and ('退款' in status or '退款' in get('kind')):
                 raise ValueError('退款记录需人工核对，当前不自动计入')
             currency=get('currency').upper()
             if currency and currency not in ['CNY','RMB','人民币','元','¥','￥']:
@@ -110,7 +148,8 @@ def parse_statement(content, filename):
             date = dt.strftime('%Y-%m-%d %H:%M:%S')
             signed = money_to_cents(get('amount'))
             kind_text=get('kind')
-            if kind_text in ['收入','收','income','Income']: kind='收入'
+            if refund:kind='收入'
+            elif kind_text in ['收入','收','income','Income']: kind='收入'
             elif kind_text in ['支出','支','expense','Expense']: kind='支出'
             elif kind_text in ['转账','不计收支','中性交易','transfer','Transfer','/']: kind='转账'
             elif not kind_text: kind='收入' if signed>0 else '支出'
@@ -118,13 +157,19 @@ def parse_statement(content, filename):
             merchant, description=get('merchant'),get('description')
             if not merchant and not description: raise ValueError('商户与描述至少填写一项')
             ext=get('external_id'); channel=get('channel') or '未指定'
+            if retain_source and kind!='转账' and any(w in merchant+description for w in ('信用卡还款','余额充值','提现')):
+                review=True
             category, origin=classify(merchant,description,kind)
             if ext:
                 identity=f'external|{channel}|{ext}'
             else:
                 identity='fingerprint|'+'|'.join([date,str(abs(signed)),kind,merchant,description,channel])
+            if retain_source:identity+='|account|'+(account_id or 'unspecified')
             signature=sha256(identity.encode()).hexdigest()
-            result.rows.append(dict(id='TX-'+signature[:20],external_id=ext,date=date,merchant=merchant,description=description,amount_cents=abs(signed),kind=kind,category=category,category_source=origin,channel=channel,source_file=filename,source_row=row_number,signature=signature))
+            result.rows.append(dict(id='TX-'+signature[:20],external_id=ext,date=date,merchant=merchant,description=description,amount_cents=abs(signed),kind=kind,category=category,category_source=origin,channel=channel,source_file=filename,source_row=row_number,signature=signature,
+                                    currency='CNY',status='refund_pending' if refund else 'review' if review else 'normal',account_id=account_id))
+            if raw:raw['parse_status']=result.rows[-1]['status']
         except (ValueError, TypeError) as exc:
+            if raw:raw['parse_status']='issue'
             result.issues.append({'行号':row_number,'原因':str(exc),'日期':get('date'),'金额':get('amount'),'商户':get('merchant')})
     return result

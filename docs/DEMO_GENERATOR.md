@@ -33,3 +33,9 @@
 `scripts/verify_packaged_demo_generator.py` 已执行实际v0.8.1 EXE：14笔生成、指定月份替换7→8笔、个人空间拒写和生成窗口构造通过。[实际EXE记录](demo_generator_packaged_validation.json)。实际EXE两次加密配置恢复自检也通过；运行本轮验收没有覆盖用户安装目录。
 
 本轮所有数据和测试Key均为合成值，不读取个人账单，不调用付费模型。
+
+## 发布复核（2026-11-03）
+
+[v0.8.1](https://github.com/Jeffspdf/AI-finance-assistant/releases/tag/v0.8.1)已正式发布，四个资产的字节数和SHA256已核对。代码提交a4ef020的[GitHub Windows测试](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41607776759)成功。
+
+发布后实际v0.8.1 EXE识别同版本，显示“当前已是最新版本”，完整下载37,685,557字节，匹配本地与官方SHA256 `ac65eb88335405eb77cc7ca110eb40c4297730b1336ca4294747f89bd519b100`。[联网验证记录](packaged_update_network_v081.json)。未覆盖用户安装版，不推定用户已升级。

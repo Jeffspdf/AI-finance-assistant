@@ -1,0 +1,10 @@
+{
+  "data": "synthetic only",
+  "legacy_conflicts_discovered_readonly": true,
+  "no_startup_income_expense_rewrite": true,
+  "explicit_correction_preserves_kind_amount": true,
+  "stale_snapshot_identity_rejected": true,
+  "fresh_confirmation_deletes_only_selected": true,
+  "live_database_unchanged_by_cleanup": true,
+  "execution": "actual packaged Windows EXE"
+}

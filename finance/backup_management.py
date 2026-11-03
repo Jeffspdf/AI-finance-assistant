@@ -1,11 +1,24 @@
 """Explicit management of snapshots belonging to one ledger; never auto-delete."""
 from datetime import datetime,timezone
 from pathlib import Path
-import json,re,uuid,sqlite3
+import json,re,uuid,sqlite3,stat
 from .migrations import inspect_database,SCHEMA_VERSION
 
 
 class BackupManagement:
+    @staticmethod
+    def _backup_identity(info):
+        return (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+
+    def _checked_backup_stat(self,path):
+        folder=self.managed_backup_folder()
+        info=path.lstat()
+        if (path.parent!=folder or not stat.S_ISREG(info.st_mode) or
+            getattr(info,'st_file_attributes',0)&getattr(stat,'FILE_ATTRIBUTE_REPARSE_POINT',0x400) or
+            path.resolve().parent!=folder):
+            raise ValueError('备份文件或路径已变化，请刷新列表后重新确认；未删除文件')
+        return info
+
     def managed_backup_folder(self):
         folder=Path(self.path).resolve().parent/'backups'
         if folder.resolve()!=folder:raise ValueError('备份目录是重定向路径，请在文件管理器中核对；未读取或清理文件')
@@ -23,9 +36,10 @@ class BackupManagement:
         rows=[]
         if not folder.is_dir():return rows
         for path in folder.iterdir():
-            if not pattern.fullmatch(path.name) or path.is_symlink() or not path.is_file() or path.resolve().parent!=folder:continue
-            stat=path.stat()
-            rows.append(dict(path=str(path),name=path.name,bytes=stat.st_size,modified=stat.st_mtime,
+            if not pattern.fullmatch(path.name):continue
+            try:info=self._checked_backup_stat(path)
+            except (ValueError,OSError):continue
+            rows.append(dict(path=str(path),name=path.name,bytes=info.st_size,modified=info.st_mtime,identity=self._backup_identity(info),
                              purpose='语义修复前' if path.name.startswith(Path(self.path).stem+'-semantic-') else '旧版/通用快照（用途未记录）'))
         return sorted(rows,key=lambda r:(r['modified'],r['name']),reverse=True)
 
@@ -40,11 +54,17 @@ class BackupManagement:
         try:return dict(row,**inspect_database(row['path']))
         except sqlite3.Error:raise ValueError('快照无法作为有效SQLite备份读取；未修改文件') from None
 
-    def delete_managed_backup(self,path,*,confirmed=False):
+    def delete_managed_backup(self,path,*,confirmed=False,expected_identity=None):
         if self.read_only:raise ValueError('只读账本不能清理备份')
         if confirmed is not True:raise ValueError('请先确认删除此修复前快照；删除后无法用它回滚')
-        row=self._managed_backup(path)
-        with self._lock:Path(row['path']).unlink()
+        with self._lock:
+            row=self._managed_backup(path)
+            if expected_identity is not None and tuple(expected_identity)!=tuple(row['identity']):
+                raise ValueError('选中快照在确认期间已变化，请刷新列表后重新确认；未删除文件')
+            target=Path(row['path']);current=self._checked_backup_stat(target)
+            if self._backup_identity(current)!=tuple(row['identity']):
+                raise ValueError('备份文件在删除前已变化，请刷新列表后重新确认；未删除文件')
+            target.unlink()
         return row['bytes']
 
     def semantic_repair_history(self):

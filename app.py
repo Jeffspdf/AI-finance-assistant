@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 from finance.storage import Store
 from finance.importer import parse_statement, money_to_cents
-from finance.categories import CATEGORIES
+from finance.categories import CATEGORIES,category_options
 from finance.analytics import overview, budget_report, plan_savings, yuan, month_records
 from finance.qa import answer_question, month_shift
 from finance.llm import ModelClient
@@ -133,9 +133,11 @@ elif page=='导入与分类':
     else:
         only_pending=st.checkbox('只看待确认记录')
         selected=tx[tx.category_source=='待确认'] if only_pending else tx
+        correction_kind=st.selectbox('修正的收支类型',['支出','收入','转账'],key='correction_kind_'+workspace)
+        selected=selected[selected.kind==correction_kind]
         display=view_records(selected[['id','date','merchant','description','amount_cents','kind','category','category_source']])
-        with st.form('edit_categories'):
-            edited=st.data_editor(display,hide_index=True,width='stretch',disabled=[c for c in display if c!='分类'],column_config={'分类':st.column_config.SelectboxColumn('分类',options=CATEGORIES,required=True)})
+        with st.form('edit_categories_'+workspace+'_'+correction_kind):
+            edited=st.data_editor(display,key='categories_'+workspace+'_'+correction_kind,hide_index=True,width='stretch',disabled=[c for c in display if c!='分类'],column_config={'分类':st.column_config.SelectboxColumn('分类',options=category_options(correction_kind),required=True)})
             if st.form_submit_button('保存分类修正'):
                 original=selected.set_index('id').category.to_dict()
                 corrections=[(r['交易 ID'],r['分类']) for r in edited.to_dict('records') if r['分类']!=original[r['交易 ID']]]

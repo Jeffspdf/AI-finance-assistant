@@ -1,0 +1,12 @@
+{
+  "data": "synthetic only",
+  "legacy_conflicts_visible_across_months": true,
+  "read_only_discovery": true,
+  "exact_record_located_on_second_page": true,
+  "explicit_edit_required": true,
+  "other_space_guarded": true,
+  "readonly_editor_disabled": true,
+  "scan_boundary_notice": true,
+  "changed_snapshot_not_deleted": true,
+  "callback_errors": []
+}

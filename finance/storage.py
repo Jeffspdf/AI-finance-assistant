@@ -9,7 +9,7 @@ import uuid
 from hashlib import sha256
 from .migrations import ensure_schema, assert_supported, backup_database, inspect_database
 from .reconciliation import Reconciliation, audit
-from .categories import validate_kind_category
+from .categories import validate_kind_category,category_options
 from .backup_management import BackupManagement
 
 class Store(Reconciliation,BackupManagement):
@@ -70,6 +70,14 @@ class Store(Reconciliation,BackupManagement):
 
     def import_rows(self, rows):
         with self.connect() as db:return self._insert_rows(db,rows)
+
+    def category_conflicts(self):
+        """Expose invalid legacy classifications, including non-counting source legs."""
+        frame=self.source_transactions()
+        invalid=pd.Series(False,index=frame.index)
+        for kind in ('收入','支出','转账'):
+            invalid|=(frame.kind==kind)&~frame.category.isin(category_options(kind))
+        return frame.loc[invalid].copy()
 
     def _insert_rows(self, db, rows):
         added, duplicates, conflicts = 0, 0, []

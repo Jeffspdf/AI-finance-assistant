@@ -18,7 +18,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $version = '0.8.4'
+          $version = '0.8.5'
           if ($env:GITHUB_REF_TYPE -eq 'tag') { $version = $env:GITHUB_REF_NAME.TrimStart('v') }
           ./packaging/build.ps1 -Version $version
       - uses: actions/upload-artifact@v4

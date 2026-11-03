@@ -1,5 +1,7 @@
 from pathlib import Path
 from streamlit.testing.v1 import AppTest
+import json
+import pytest
 
 APP=Path(__file__).resolve().parents[1]/'app.py'
 
@@ -45,3 +47,16 @@ def test_ui_budget_persistence(tmp_path,monkeypatch):
     fresh.sidebar.radio[1].set_value('预算与提醒').run()
     report=fresh.dataframe[0].value
     assert report[report['分类']=='餐饮'].iloc[0]['预算']==200
+
+
+@pytest.mark.parametrize('kind,expected',[
+    ('收入',['工资','生活费','其他收入']),
+    ('支出',['餐饮','交通','购物','居住','生活缴费','教育','医疗','娱乐','其他支出']),
+    ('转账',['转账'])])
+def test_web_category_editor_limits_rows_and_options_by_kind(tmp_path,monkeypatch,kind,expected):
+    at=run_app(tmp_path,monkeypatch);at.sidebar.radio[1].set_value('导入与分类').run()
+    picker=next(s for s in at.selectbox if s.label=='修正的收支类型')
+    picker.set_value(kind).run();assert not at.exception
+    editor=at.dataframe[0]
+    assert json.loads(editor.proto.columns)['分类']['type_config']['options']==expected
+    assert set(editor.value['收支'])<={kind}

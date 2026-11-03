@@ -106,6 +106,7 @@ class M1Features:
         self.label(box,'同一笔消费，只统计一次',18,bold=True)
         if demo:self.label(box,'独立示例空间：两对20/40元、退款10元、转账500元。确认120→60，拆分60→120；不会写入你的账本。',10,PRIMARY).configure(wraplength=px(920))
         self.label(box,'A 有绑定且唯一 / B 描述相近，需人工确认；C 仅金额日期相近，不允许直接确认。',10,MUTED).configure(wraplength=px(930))
+        self.label(box,'打开后自动扫描：生成候选并维护失效组状态；不会自动确认或合并消费。' if writable else '只读查看：不生成候选、不修复存储状态。',10,MUTED).configure(wraplength=px(930))
         total=self.label(box,'',12,PRIMARY)
         actions=tk.Frame(box,bg=BG);actions.pack(fill='x')
         status=self.label(box,'选中关联组，可查看下方全部来源。',10,MUTED)
@@ -149,7 +150,7 @@ class M1Features:
             if state['scanning'] or not writable:return
             state['scanning']=True
             for button in controls:button.config(state='disabled')
-            status.config(text='正在核对来源并生成候选，尚未改变统计。')
+            status.config(text='正在扫描来源并生成候选；可能保存失效组状态，不会自动确认或合并。')
             def worker():
                 try:mailbox.put(('done',store.generate_candidates()))
                 except Exception:mailbox.put(('error',None))
@@ -161,7 +162,7 @@ class M1Features:
             for button in controls:button.config(state='normal')
             refresh()
             if kind=='error':status.config(text='候选生成未完成，账单未改变，请重试。',fg=DANGER)
-            else:status.config(text=f'发现 {result["candidates"]} 组候选；{result["overflow"]} 笔超过候选上限，需要缩小范围。未改变统计。')
+            else:status.config(text=f'发现 {result["candidates"]} 组候选；{result["overflow"]} 笔超过候选上限，需要缩小范围。未自动确认或合并。')
         def decide(decision):
             group=chosen()
             if not group:return
@@ -295,7 +296,7 @@ class M1Features:
             row=chosen()
             if not row:return
             if not messagebox.askyesno('删除选中快照',f'{row["name"]}\n{row["bytes"]:,} 字节；{row["purpose"]}\n这是独立备份。删除后无法用它回滚分类修复或恢复旧数据，当前账本不变。确定删除？',parent=window):return
-            try:store.delete_managed_backup(row['path'],confirmed=True);refresh();status.config(text='选中快照已删除，当前账本与其他备份未变。',fg=PRIMARY)
+            try:store.delete_managed_backup(row['path'],confirmed=True,expected_identity=row['identity']);refresh();status.config(text='选中快照已删除，当前账本与其他备份未变。',fg=PRIMARY)
             except (ValueError,OSError) as exc:status.config(text='未删除：'+str(exc),fg=DANGER)
         def open_folder():
             try:
@@ -306,3 +307,39 @@ class M1Features:
         self.button(footer,'预览选中快照',preview);self.button(footer,'打开备份目录',open_folder)
         self.button(footer,'删除选中快照',remove).config(state='disabled' if store.read_only else 'normal')
         refresh()
+
+    def category_conflicts_window(self):
+        store=self.store
+        window=tk.Toplevel(self);window.title('历史分类待修正');set_window_geometry(window,960,720);window.configure(bg=BG)
+        footer=tk.Frame(window,bg=BG,padx=px(18),pady=px(10));footer.pack(side='bottom',fill='x')
+        box=scrollable_form(window,padx=18,pady=12)
+        self.label(box,'历史分类待修正',18,bold=True)
+        self.label(box,'此列表只检查当前空间的未删除来源，不受主页月份限制，包含不重复计数的资金腿。不会自动改写；请核对原记录后选择正确分类。',10,MUTED).configure(wraplength=px(890))
+        filters=tk.Frame(box,bg=BG);filters.pack(fill='x')
+        kind=ttk.Combobox(filters,state='readonly',values=['全部类型','收入','支出','转账'],width=12);kind.set('全部类型');kind.pack(side='left')
+        summary=self.label(box,'',11,PRIMARY)
+        holder=tk.Frame(box,bg=BG);holder.pack(fill='both',expand=True)
+        status=self.label(box,'选择一条后定位到账本，或定位并打开编辑器。只有保存修改才会写库。',10,MUTED);status.configure(wraplength=px(890))
+        state={'rows':[],'page':0,'tree':None}
+        def refresh(reset=False):
+            if reset:state['page']=0
+            frame=store.category_conflicts().sort_values('date',ascending=False)
+            if kind.get()!='全部类型':frame=frame[frame.kind==kind.get()]
+            total=len(frame);pages=max(1,(total+199)//200);state['page']=min(state['page'],pages-1)
+            state['rows']=frame.iloc[state['page']*200:(state['page']+1)*200].to_dict('records')
+            summary.config(text=f'{total} 笔分类待修正 · 第 {state["page"]+1} / {pages} 页 · 每页200笔')
+            for child in holder.winfo_children():child.destroy()
+            state['tree']=self.table(holder,['时间','商户','类型','原分类','金额 / 元','来源文件'],[[r['date'],r['merchant'],r['kind'],r['category'],yuan(r['amount_cents']),r['source_file']] for r in state['rows']],8)
+        def page(delta):state['page']=max(0,state['page']+delta);refresh()
+        def go(edit=False):
+            selected=state['tree'].selection()
+            if not selected:status.config(text='请先选择一条待修正记录。');return
+            record=state['rows'][self.row_index(state['tree'],selected[0])]
+            if self.locate_transaction(record['id'],expected_path=store.path):
+                window.destroy()
+                if edit:self.edit_selected()
+        self.button(filters,'刷新列表（只读）',lambda:refresh(True))
+        self.button(footer,'上一页',lambda:page(-1));self.button(footer,'下一页',lambda:page(1))
+        self.button(footer,'定位到账本',go)
+        self.button(footer,'定位并编辑',lambda:go(True)).config(state='disabled' if store.read_only else 'normal')
+        kind.bind('<<ComboboxSelected>>',lambda _:refresh(True));refresh()

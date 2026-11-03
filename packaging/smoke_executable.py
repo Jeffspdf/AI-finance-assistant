@@ -8,7 +8,7 @@ def main():
     env=os.environ.copy();env['FINANCE_DESKTOP_DATA_DIR']=str(data)
     checks=[('--self-test','self-test.ok'),('--self-test-m1a','m1a-self-test.json'),
             ('--self-test-round5','round5-self-test.json'),('--self-test-round6','round6-self-test.json'),
-            ('--self-test-round7','round7-self-test.json')]
+            ('--self-test-round7','round7-self-test.json'),('--self-test-round8','round8-self-test.json')]
     for flag,marker in checks:
         target=data/marker;target.unlink(missing_ok=True)
         result=subprocess.run([str(exe),flag],env=env,shell=False,timeout=60,

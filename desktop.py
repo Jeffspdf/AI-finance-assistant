@@ -554,6 +554,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.button(more,'撤销上次批量',self.undo_batch)
         self.button(more,'跨来源对账',self.reconciliation_window)
         self.button(more,'导入批次',self.import_history_window)
+        self.button(more,'历史分类待修正',self.category_conflicts_window)
         filters=tk.Frame(self.main,bg=BG);filters.pack(fill='x',pady=px(8))
         self.search_var=tk.StringVar(value=self.search_text)
         ttk.Entry(filters,textvariable=self.search_var,width=32).pack(side='left',padx=px((0,10)))
@@ -625,6 +626,9 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         actions=tk.Frame(window,bg=BG);actions.pack(side='bottom',fill='x',padx=px(24),pady=px(4))
         box=scrollable_form(window)
         self.label(box,'修正这笔交易',18,bold=True)
+        legacy_conflict=record['category'] not in category_options(record['kind'])
+        if legacy_conflict:
+            self.label(box,f'原记录为“{record["kind"]} / {record["category"]}”，分类不在该类型范围内。请选择正确分类；保存前不会修改记录。',10,'#ae6450').configure(wraplength=px(455))
         fields={}
         for title,key,value in [('日期时间 YYYY-MM-DD HH:MM:SS','date',record['date']),('商户','merchant',record['merchant']),('描述','description',record['description']),('金额 / 元','amount_cents',f"{record['amount_cents']/100:.2f}"),('收支类型','kind',record['kind']),('分类','category',record['category'])]:
             self.label(box,title,10,MUTED)
@@ -637,16 +641,35 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         def match_category(_=None):
             choices=category_options(fields['kind'].get());fields['category'].configure(values=choices)
             if fields['category'].get() not in choices:fields['category'].set(choices[0])
-        fields['kind'].bind('<<ComboboxSelected>>',match_category);match_category()
+        fields['kind'].bind('<<ComboboxSelected>>',match_category)
+        if legacy_conflict:fields['category'].set('')
+        else:match_category()
         status=self.label(box,'收入、支出、转账各有对应分类。修改类型或分类后，关联将待复核；旧错分类仅在你保存后更正。',9,MUTED);status.configure(wraplength=px(455))
         def save():
             try:
+                if not fields['category'].get().strip():raise ValueError('请先选择与收支类型对应的正确分类，再保存修改。')
                 values={k:e.get().strip() for k,e in fields.items()};values['amount_cents']=money_to_cents(values['amount_cents'])
                 store.edit_transaction(record['id'],values)
                 if remember.get():store.correct_categories([(record['id'],values['category'])],learn=True)
                 window.destroy();self.show('records');self.animate_character('success')
             except Exception as exc:status.config(text=str(exc),fg='#b45f50')
         self.button(actions,'保存修改',save)
+
+    def locate_transaction(self,identifier,*,expected_path=None):
+        if expected_path and Path(expected_path).resolve()!=Path(self.store.path).resolve():
+            messagebox.showinfo('空间已切换','请先回到打开待修正列表时的空间，再定位或编辑。');return False
+        self.selected_month='全部月份';self.search_text='';self.category_filter='全部分类';self.show('records')
+        ordered=self.frame.sort_values('date',ascending=False).id.tolist()
+        if identifier not in ordered:
+            messagebox.showinfo('记录已变化','该来源已删除或不在当前空间，请刷新待修正列表。');return False
+        self.record_page=ordered.index(identifier)//200;self.refresh_records()
+        index=next(i for i,r in enumerate(self.record_rows) if r['id']==identifier);item=str(index)
+        self.tree.selection_set(item);self.tree.focus(item);self.tree.see(item);self.update_idletasks()
+        bounds=self.tree.bbox(item);region=self.content_canvas.bbox('all')
+        if bounds and region:
+            position=self.tree.winfo_rooty()-self.main.winfo_rooty()+bounds[1]-px(60)
+            self.content_canvas.yview_moveto(max(0,position/max(1,region[3]-region[1])))
+        return True
 
     def selected(self):
         sel = self.tree.selection()
@@ -784,6 +807,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
                ('账户与支付绑定','声明钱包与银行卡账户，建立带有效期的支付绑定；不会自动合并交易。',self.account_window,'管理账户与绑定'),
                ('备份与恢复','当前空间一致备份；恢复前预览并再次快照，保留旧数据身份。',self.backup_window,'备份与恢复'),
                ('修复明细与自动备份','查看当前空间的分类修复历史、备份位置和大小；清理前确认，不自动删除。',self.semantic_backups_window,'查看修复与备份'),
+               ('历史分类待修正','查看收入/支出等旧错分类，定位原交易后由你明确修正，不自动改金额或类型。',self.category_conflicts_window,'历史分类待修正'),
                ('本机数据','账单、原始必要字段和审计留在本机；演示与个人空间独立。',lambda:os.startfile(str(DATA_DIR)),'打开数据目录'),
                ('角色与动画','点击角色挥手，可暂停动画或打开桌面小助手。',self.show_pet,'打开桌面小助手')]
         items.append(('分类记忆',f'当前空间已记住 {len(self.store.merchant_rules())} 条商户规则，可查看并删除。',self.learned_rules_window,'管理分类记忆'))
@@ -811,6 +835,11 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
 
 
 if __name__ == '__main__':
+    if '--self-test-round8' in sys.argv:
+        if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
+        from finance.round8_acceptance import verify_round8
+        verify_round8(DATA_DIR)
+        sys.exit(0)
     if '--self-test-round7' in sys.argv:
         if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
         from finance.round7_acceptance import verify_round7

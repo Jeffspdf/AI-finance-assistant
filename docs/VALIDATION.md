@@ -2,6 +2,8 @@
 
 Latest: [v0.8.4 seventh-review assessment and E1–E3](ROUND7_RESPONSE.md), **235 tests passed**, with dedicated real-widget and packaged-EXE verification. Historical sections below describe their own releases. All new data is synthetic; no paid model or personal ledger was used.
 
+Code commit `75548de` passed [remote Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41665415832). The published0.8.4 installer was downloaded by the actual EXE's updater:37,716,876 bytes, verified SHA256 and explicit current-version status. [Network evidence](packaged_update_network_v084.json). This does not establish code signing or installation on a clean VM.
+
 Previous: [v0.8.3 sixth-round D1–D4](ROUND6_RESPONSE.md), **217 tests passed**. Includes read-only database/audit invariance, legacy semantic backup/repair, transfer validation, explicit zero-wallet acknowledgement and evidence diagnostics. Dedicated GUI checks and actual packaged-EXE checks are recorded there. All new fixtures are synthetic; no paid model or personal ledger was used.
 
 The v0.8.3 code commit `52cffea` passed [remote Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41657424224). After publication the actual EXE detected the same version, reported the explicit latest-version status and downloaded all 37,713,629 installer bytes with SHA256 matching official metadata and the local artifact. See [public-metadata-only network evidence](packaged_update_network_v083.json). No installed-client replacement or clean-VM certification is inferred.

@@ -39,3 +39,11 @@
 - 实际0.8.4 EXE经直接进程自检通过TLS/UI、M1a、第五/六/七轮五阶段；第七轮结果见[打包记录](round7_packaged_validation.json)。`scripts/verify_packaged_model_settings.py`使用虚构DPAPI凭据连续两次重启恢复，未请求模型。
 
 全部新测试使用临时合成数据库与虚构Key，备份删除只操作临时快照。六行120→60→120、退款待处理和转账不计消费保持。退款净额、支付宝专用导出、真实双人标注P/R、批量/三成员UI及五万行性能仍未完成；没有扩展演示生成器。
+
+## 发布后验收
+
+代码`75548de84c39e37c4c563b405578b6ae338b0787`通过[GitHub独立Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41665415832)。[v0.8.4](https://github.com/Jeffspdf/AI-finance-assistant/releases/tag/v0.8.4)已公开安装包、便携包、源码包与校验清单；远端上传资产大小/可用摘要已逐一核对。
+
+实际0.8.4 EXE使用与GUI相同的更新代码，通过直连官方GitHub API识别0.8.4，明确显示“当前已是最新版本：v0.8.4。”，完整下载**37,716,876字节**，SHA256为`9792587308a899838dc43d6b9e3d150c42200076bb1b0b216048194e920f3a2c`，与官方元数据及本地构建一致。[联网记录](packaged_update_network_v084.json)。没有覆盖用户当前安装版。
+
+本节与联网JSON为发布后补记，公开源码包对应发布前已验收代码/文档，未替换任何已公开资产。公开安装包依然未签名，不能把更新下载校验等同于Authenticode签名或无安全提示保证。

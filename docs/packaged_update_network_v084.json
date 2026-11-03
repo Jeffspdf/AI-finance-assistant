@@ -1,0 +1,41 @@
+{
+  "client": "0.8.4",
+  "check_ok": true,
+  "download_ok": true,
+  "events": [
+    {
+      "time": "2026-11-03T15:38:07.267475+00:00",
+      "client": "0.8.4",
+      "stage": "release_api",
+      "route": "system",
+      "result": "failed",
+      "error": "HTTPError",
+      "reason": "str",
+      "http": 403,
+      "os_error": null
+    },
+    {
+      "time": "2026-11-03T15:38:07.919994+00:00",
+      "client": "0.8.4",
+      "stage": "release_api",
+      "route": "direct",
+      "result": "ok",
+      "version": "0.8.4"
+    },
+    {
+      "time": "2026-11-03T15:38:14.073609+00:00",
+      "client": "0.8.4",
+      "stage": "installer",
+      "route": "system",
+      "result": "verified",
+      "bytes": 37716876,
+      "sha256": "9792587308a899838dc43d6b9e3d150c42200076bb1b0b216048194e920f3a2c"
+    }
+  ],
+  "version": "0.8.4",
+  "route": "direct",
+  "status": "当前已是最新版本：v0.8.4。",
+  "source": "github_api",
+  "bytes": 37716876,
+  "sha256": "9792587308a899838dc43d6b9e3d150c42200076bb1b0b216048194e920f3a2c"
+}

@@ -48,7 +48,7 @@ with TemporaryDirectory(prefix='.test_round5_ui_',dir=ROOT) as temp:
     assert expense()==6000;window.destroy();app.update()
     group=next(g for g in store.reconciliation_groups() if g['members'][0]['amount_cents']==2000)
     member=next(r for r in group['members'] if r['role']=='purchase')
-    store.correct_categories([(member['id'],'转账')]);app.show('records');app.update()
+    store.correct_categories([(member['id'],'教育')]);app.show('records');app.update()
     assert expense()==8000 and any('待复核' in r['counting_note'] for r in app.record_rows)
     app.reconciliation_window();app.update();window=top(app);ready(window)
     item=next(i for i in tree(window).get_children() if tree(window).item(i,'values')[0]=='待复核')

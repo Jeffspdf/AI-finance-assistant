@@ -84,13 +84,17 @@ class RoundTwo:
         if same_merchant:
             pairs={(r['merchant'],r['kind']) for r in selected};all_rows=self.store.transactions()
             ids=[r.id for r in all_rows.itertuples() if (r.merchant,r.kind) in pairs]
+        if not self.category.get():messagebox.showinfo('分类与类型冲突','请分开选择转账和收入/支出记录。转账类型只能使用转账分类。');return
         if not messagebox.askyesno('确认批量分类',f'将 {len(ids)} 笔改为“{self.category.get()}”？'+('覆盖当前空间相同商户的全部记录。' if same_merchant else '可撤销本次批量操作。')):return
-        self.last_batch=(self.store.path,self.store.batch_category(ids,self.category.get()))
+        try:self.last_batch=(self.store.path,self.store.batch_category(ids,self.category.get()))
+        except ValueError as exc:messagebox.showerror('未修改分类',str(exc));return
         self.show('records')
 
     def undo_batch(self):
         if not self.last_batch or self.last_batch[0]!=self.store.path:messagebox.showinfo('撤销','当前空间没有可撤销的批量分类。');return
-        count=self.store.undo_category_batch(self.last_batch[1]);self.last_batch=None;self.show('records')
+        try:count=self.store.undo_category_batch(self.last_batch[1])
+        except ValueError as exc:messagebox.showerror('未撤销分类',str(exc));return
+        self.last_batch=None;self.show('records')
         messagebox.showinfo('已撤销',f'恢复 {count} 笔。后续已改为其他类别的记录不覆盖。')
 
     def copy_previous_budget(self):

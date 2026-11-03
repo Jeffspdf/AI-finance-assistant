@@ -20,8 +20,8 @@ class M1Features:
         text.configure(yscrollcommand=scroll.set);text.pack(fill='both',expand=True)
         text.insert('1.0',json.dumps(trace,ensure_ascii=False,indent=2));text.configure(state='disabled')
 
-    def account_window(self):
-        store=self.store
+    def account_window(self,store=None):
+        store=store or self.store
         window=tk.Toplevel(self);window.title('账户与支付绑定');set_window_geometry(window,850,740);window.configure(bg=BG)
         box=scrollable_form(window,padx=18,pady=12)
         self.label(box,'声明账户与支付绑定',18,bold=True)
@@ -99,7 +99,7 @@ class M1Features:
     def reconciliation_window(self,store=None,demo=False):
         store=store or self.store
         window=tk.Toplevel(self);window.title('独立六行合成演示' if demo else '跨来源对账 · 人工确认');set_window_geometry(window,990,750);window.configure(bg=BG)
-        box=tk.Frame(window,bg=BG,padx=px(18),pady=px(12));box.pack(fill='both',expand=True)
+        box=scrollable_form(window,padx=18,pady=12)
         self.label(box,'同一笔消费，只统计一次',18,bold=True)
         if demo:self.label(box,'独立示例空间：两对20/40元、退款10元、转账500元。确认120→60，拆分60→120；不会写入你的账本。',10,PRIMARY).configure(wraplength=px(920))
         self.label(box,'A 有绑定且唯一 / B 描述相近，需人工确认；C 仅金额日期相近，不允许直接确认。',10,MUTED).configure(wraplength=px(930))
@@ -128,6 +128,13 @@ class M1Features:
             if not group:return
             confirm_button.config(state='normal' if group['status']=='candidate' and group['confidence'] in ('A','B') and not state['scanning'] else 'disabled')
             self.label(details,group['reason'],10,PRIMARY).configure(wraplength=px(900))
+            diagnostics=store.group_diagnostics(group['id'])
+            if group['confidence']=='C' or diagnostics['wallet_count']==0:
+                self.label(details,'\n'.join('• '+g['message'] for g in diagnostics['gaps']),10,MUTED).configure(wraplength=px(900))
+                guidance=tk.Frame(details,bg=BG);guidance.pack(fill='x')
+                self.button(guidance,'去账户与支付绑定',lambda:self.account_window(store))
+                self.button(guidance,'重新生成候选',scan)
+                if diagnostics['requires_reimport']:self.label(details,'已导入记录没有账户时，仅创建绑定不会补写旧记录。请按上面的重导步骤处理。',10,MUTED).configure(wraplength=px(900))
             self.table(details,['时间','商户 / 描述','金额 / 元','来源文件','行号','角色'],[[r['date'],r['merchant']+' / '+r['description'],yuan(r['amount_cents']),r['source_file'],r['source_row'],'消费代表' if r['role']=='purchase' else '资金来源腿'] for r in group['members']],4)
         def scan():
             if state['scanning']:return
@@ -153,8 +160,12 @@ class M1Features:
                 status.config(text='C级证据不足，请补充账户、绑定或来源后重新核对。',fg=DANGER);return
             prompt={'confirmed':'确认这些来源属于同一笔消费？确认后仅统计消费代表。','rejected':'拒绝此候选？重跑会保留决定。','split':'拆分此组并恢复每条来源的独立计数？'}[decision]
             if not messagebox.askyesno('核对对账决定',prompt+'\n'+group['reason'],parent=window):return
+            acknowledge=False
+            if decision=='confirmed' and store.group_diagnostics(group['id'])['wallet_count']==0:
+                acknowledge=messagebox.askyesno('再次核对：本组没有钱包记录','本组记录均非钱包消费，可能是两笔真实消费。请核对原始流水，确认它们只是同一消费的重复来源。仍要合并计数吗？',parent=window)
+                if not acknowledge:return
             try:
-                store.decide_group(group['id'],decision);refresh();self.show(self.page)
+                store.decide_group(group['id'],decision,acknowledge_no_wallet=acknowledge);refresh();self.show(self.page)
                 status.config(text='决定已保存，所有页面使用相同统计口径。')
             except ValueError as exc:status.config(text=str(exc),fg=DANGER)
         controls=[self.button(actions,'生成 / 刷新候选',scan)]

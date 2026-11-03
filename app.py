@@ -138,8 +138,10 @@ elif page=='导入与分类':
             if st.form_submit_button('保存分类修正'):
                 original=selected.set_index('id').category.to_dict()
                 corrections=[(r['交易 ID'],r['分类']) for r in edited.to_dict('records') if r['分类']!=original[r['交易 ID']]]
-                store.correct_categories(corrections); st.success(f'已保存 {len(corrections)} 项修正。')
-                st.rerun()
+                try:store.correct_categories(corrections)
+                except ValueError as exc:st.error(str(exc))
+                else:
+                    st.success(f'已保存 {len(corrections)} 项修正。');st.rerun()
         pending=tx[tx.category_source=='待确认']
         if st.button('让 AI 建议待确认分类（每次最多 20 笔）',disabled=model is None or pending.empty):
             done,failed=0,0

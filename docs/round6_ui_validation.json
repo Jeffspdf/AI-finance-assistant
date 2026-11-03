@@ -1,0 +1,10 @@
+{
+  "data": "synthetic only",
+  "transfer_category_linked": true,
+  "no_wallet_second_confirmation": true,
+  "cancelled_second_confirmation_preserved_count": true,
+  "C_missing_binding_named": true,
+  "C_binding_action": true,
+  "rescan_upgraded_C_to_A": true,
+  "callback_errors": []
+}

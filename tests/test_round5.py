@@ -96,9 +96,9 @@ def test_all_category_writes_invalidate_groups_and_clear_cache(tmp_path,route):
     group=next(g for g in groups if g['members'][0]['amount_cents']==2000)
     row=next(r for r in group['members'] if r['role']=='purchase')
     assert expense(store)==6000
-    if route=='single':store.correct_categories([(row['id'],'转账')])
-    elif route=='batch':store.batch_category([row['id']],'转账')
-    elif route=='edit':store.edit_transaction(row['id'],dict(row,category='转账'))
+    if route=='single':store.correct_categories([(row['id'],'教育')])
+    elif route=='batch':store.batch_category([row['id']],'教育')
+    elif route=='edit':store.edit_transaction(row['id'],dict(row,category='教育'))
     elif route=='model':
         with store.connect() as db:db.execute("UPDATE transactions SET category_source='待确认' WHERE id=?",(row['id'],))
         assert store.apply_model_category(row['id'],'教育')
@@ -221,7 +221,7 @@ def test_category_invalidation_and_cache_rollback_are_atomic(tmp_path):
     groups=store.reconciliation_groups()
     for group in groups:store.decide_group(group['id'],'confirmed')
     row=store.transactions().query("kind=='支出'").iloc[0]
-    with pytest.raises(ValueError):store.correct_categories([(row.id,'转账'),(row.id,'不存在')])
+    with pytest.raises(ValueError):store.correct_categories([(row.id,'教育'),(row.id,'不存在')])
     assert expense(store)==6000 and all(g['status']=='confirmed' for g in store.reconciliation_groups())
     assert store.source_transactions().link_group_id.notna().sum()==4
 

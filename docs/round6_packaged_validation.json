@@ -1,0 +1,14 @@
+{
+  "data": "synthetic only",
+  "invalid_transfer_category_rejected": true,
+  "confirmed_expense_cents": 6000,
+  "valid_category_change_expense_cents": 8000,
+  "read_queries_unchanged": true,
+  "read_only_view": true,
+  "explicit_repair_cleared_cache": true,
+  "no_wallet_ack_required": true,
+  "C_binding_gap_named": true,
+  "C_upgraded_to_A": true,
+  "legacy_category_backup_and_normalization": true,
+  "execution": "actual packaged Windows EXE"
+}

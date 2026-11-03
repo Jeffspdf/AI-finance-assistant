@@ -16,7 +16,7 @@ from finance.demo import demo_bytes,initialize_demo
 from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
-from finance.categories import CATEGORIES
+from finance.categories import CATEGORIES,category_options
 from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer,update_error_message,version_status,can_download,UpdateDiagnostics
 from finance.llm import ModelClient,connection_error_message
 from finance.model_settings import ModelSettings
@@ -452,6 +452,8 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.label(self.main,short_titles[page],20,bold=True)
         subtitle = '问题文本发送至你配置的接口；账单查询与金额由本机代码处理。' if page == 'assistant' and self.model_client else titles[page][1]
         self.label(self.main, subtitle, 10, MUTED)
+        if self.store.semantic_backup:
+            self.label(self.main,'旧记录的转账类型/分类冲突已按原收支类型修正，金额不变，分类标为待确认；修复前已保存备份。',10,'#ae6450').configure(wraplength=px(760))
         if self.mode=='demo':
             demo_actions=tk.Frame(self.main,bg=BG);demo_actions.pack(fill='x',pady=px((0,6)))
             self.button(demo_actions,'生成演示账单',self.demo_generator_window)
@@ -540,7 +542,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         bar = tk.Frame(self.main, bg=BG); bar.pack(fill='x')
         self.button(bar, '＋ 导入账单', self.import_file)
         self.button(bar, '查看源记录', self.source)
-        self.category = ttk.Combobox(bar, values=CATEGORIES, state='readonly', width=12)
+        self.category = ttk.Combobox(bar, values=category_options('支出'), state='readonly', width=12)
         self.category.set('餐饮'); self.category.pack(side='left', padx=px(8))
         self.button(bar,'批量设为分类',self.correct)
         self.button(bar,'编辑交易',self.edit_selected)
@@ -559,6 +561,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.result_count=tk.Label(filters,bg=BG,fg=MUTED);self.result_count.pack(side='right')
         self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源','统计口径'],[],12)
         self.tree.bind('<Double-1>',lambda _:self.edit_selected())
+        self.tree.bind('<<TreeviewSelect>>',self.update_category_choices)
         self.search_var.trace_add('write',lambda *_:self.reset_record_filter())
         self.filter_picker.bind('<<ComboboxSelected>>',lambda _:self.reset_record_filter())
         self.record_page=0
@@ -597,6 +600,14 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         counted=frame[frame.included_in_stats]
         cost=int(counted.loc[counted.kind=='支出','amount_cents'].sum())
         self.result_count.config(text=f'{total} 笔来源 · 计入消费 ¥{yuan(cost)}')
+        self.update_category_choices()
+
+    def update_category_choices(self,event=None):
+        selected=[self.record_rows[self.row_index(self.tree,item)] for item in self.tree.selection()]
+        kinds={r['kind'] for r in selected}
+        choices=[] if '转账' in kinds and len(kinds)>1 else category_options('转账' if kinds=={'转账'} else '支出')
+        self.category.configure(values=choices)
+        if self.category.get() not in choices:self.category.set(choices[0] if choices else '')
 
     def change_record_page(self,delta):
         self.record_page=max(0,self.record_page+delta);self.refresh_records()
@@ -617,12 +628,16 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         for title,key,value in [('日期时间 YYYY-MM-DD HH:MM:SS','date',record['date']),('商户','merchant',record['merchant']),('描述','description',record['description']),('金额 / 元','amount_cents',f"{record['amount_cents']/100:.2f}"),('收支类型','kind',record['kind']),('分类','category',record['category'])]:
             self.label(box,title,10,MUTED)
             if key in ('kind','category'):
-                entry=ttk.Combobox(box,state='readonly',values=['收入','支出','转账'] if key=='kind' else CATEGORIES);entry.set(value)
+                entry=ttk.Combobox(box,state='readonly',values=['收入','支出','转账'] if key=='kind' else category_options(record['kind']));entry.set(value)
             else:entry=ttk.Entry(box);entry.insert(0,value)
             entry.pack(fill='x',pady=px((0,7)));fields[key]=entry
         remember=tk.BooleanVar(value=False)
         tk.Checkbutton(box,text='记住此商户分类，用于以后新导入的同类收支',variable=remember,bg=BG).pack(anchor='w')
-        status=self.label(box,'分类修改会使相关对账待复核。是否计入收支取决于“收支类型”，不是分类名称。',9,MUTED);status.configure(wraplength=px(455))
+        def match_category(_=None):
+            choices=category_options(fields['kind'].get());fields['category'].configure(values=choices)
+            if fields['category'].get() not in choices:fields['category'].set(choices[0])
+        fields['kind'].bind('<<ComboboxSelected>>',match_category);match_category()
+        status=self.label(box,'转账类型只能使用转账分类，收入/支出不能选转账分类。修改类型或分类后，关联将待复核。',9,MUTED);status.configure(wraplength=px(455))
         def save():
             try:
                 values={k:e.get().strip() for k,e in fields.items()};values['amount_cents']=money_to_cents(values['amount_cents'])
@@ -794,6 +809,11 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
 
 
 if __name__ == '__main__':
+    if '--self-test-round6' in sys.argv:
+        if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
+        from finance.round6_acceptance import verify_round6
+        verify_round6(DATA_DIR)
+        sys.exit(0)
     if '--self-test-round5' in sys.argv:
         if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
         from finance.round5_acceptance import verify_round5

@@ -21,7 +21,7 @@ def verify_round5(directory):
         frame=s.transactions();return int(frame.loc[frame.kind=='支出','amount_cents'].sum())
     store.generate_candidates();group=store.reconciliation_groups()[0];assert group['confidence']=='A'
     store.decide_group(group['id'],'confirmed');assert expense(store)==2000
-    store.correct_categories([(rows[0]['id'],'转账')]);assert expense(store)==4000
+    store.correct_categories([(rows[0]['id'],'教育')]);assert expense(store)==4000
     assert store.reconciliation_groups()[0]['status']=='needs_review'
     with store.connect() as db:assert not db.execute('SELECT 1 FROM transactions WHERE link_group_id IS NOT NULL').fetchone()
 
@@ -36,6 +36,7 @@ def verify_round5(directory):
     else:raise AssertionError('Two wallets were accepted')
     assert expense(wallets)==4000
     with wallets.connect() as db:db.execute("UPDATE link_groups SET status='confirmed' WHERE id='legacy'")
+    wallets.repair_invalid_groups(source='acceptance_explicit')
     assert expense(wallets)==4000 and wallets.reconciliation_groups()[0]['status']=='needs_review'
 
     source=Store(folder/'source.sqlite3')

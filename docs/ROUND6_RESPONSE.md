@@ -24,6 +24,14 @@
 
 全部新数据为合成样本、临时数据库；未读取个人账本、未使用真实Key、未调用付费模型。原生GUI与实际打包EXE运行不等于干净Windows虚拟机安装认证，发布联网结果另行记录。
 
+## 发布后观察
+
+代码提交`52cffea7706f54bb8ee0f545028693bf6e2b5671`已通过[GitHub独立Tests运行](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41657424224)。[v0.8.3](https://github.com/Jeffspdf/AI-finance-assistant/releases/tag/v0.8.3)已公开安装包、便携包、源码包和SHA256清单；上传后逐一核对远端大小与可用的SHA256元数据。
+
+`python scripts/verify_packaged_update_network.py`使用实际0.8.3 EXE、临时空间及与GUI相同网络代码，直连GitHub API识别0.8.3并显示“当前已是最新版本：v0.8.3。”，完整下载**37,713,629字节**安装包，SHA256为`92e09976bb84836bc8493ae2108eacf726e2d76fa2c91b9ef515d0d97f5e5046`，与官方元数据及本地构建一致。[结构化联网记录](packaged_update_network_v083.json)。未自动覆盖用户当前安装版；请关闭旧版后安装，或从客户端检查更新入口获取。
+
+公开发布源包对应已验收代码和发布前工程文档；此节及联网JSON是发布后补记，没有替换已公开资产。
+
 ## 尚未完成的里程碑
 
 D5退款全额/部分/多次及现金/原消费月两口径；D6支付宝专用导出适配器与golden；D7真实50正/50负双人标注及P/R；D8批量确认/三成员编辑UI；D9五万行性能与完整迁移故障矩阵。当前合成回归不代表真实准确率。TLS运行时资源保持原策略，安装包仍未代码签名。模式仍为4，稳定用户目录、AppId及独立API配置不变。

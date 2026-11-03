@@ -2,6 +2,8 @@
 
 Latest: [v0.8.3 sixth-round D1–D4](ROUND6_RESPONSE.md), **217 tests passed**. Includes read-only database/audit invariance, legacy semantic backup/repair, transfer validation, explicit zero-wallet acknowledgement and evidence diagnostics. Dedicated GUI checks and actual packaged-EXE checks are recorded there. All new fixtures are synthetic; no paid model or personal ledger was used.
 
+The v0.8.3 code commit `52cffea` passed [remote Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41657424224). After publication the actual EXE detected the same version, reported the explicit latest-version status and downloaded all 37,713,629 installer bytes with SHA256 matching official metadata and the local artifact. See [public-metadata-only network evidence](packaged_update_network_v083.json). No installed-client replacement or clean-VM certification is inferred.
+
 Previous: [v0.8.2 fifth-round correctness fixes](ROUND5_RESPONSE.md), **198 tests passed**. Historical category-invalidation cases now use a legal expense-category change; new tests separately reject expense + transfer category. Earlier sections remain chronological records of their releases.
 
 Earlier releases: [v0.8.1 configurable demo generation](DEMO_GENERATOR.md), **169 tests passed**, and [v0.8.0 M1a validation, 2026-11-03](VALIDATION_M1A.md). Earlier sections below remain chronological records of their releases.

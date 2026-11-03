@@ -1,0 +1,30 @@
+{
+  "client": "0.7.4",
+  "check_ok": true,
+  "download_ok": false,
+  "events": [
+    {
+      "time": "2026-11-03T08:41:20.836501+00:00",
+      "client": "0.7.4",
+      "stage": "release_api",
+      "route": "system",
+      "result": "failed",
+      "error": "HTTPError",
+      "reason": "str",
+      "http": 403,
+      "os_error": null
+    },
+    {
+      "time": "2026-11-03T08:41:21.473935+00:00",
+      "client": "0.7.4",
+      "stage": "release_api",
+      "route": "direct",
+      "result": "ok",
+      "version": "0.8.0"
+    }
+  ],
+  "version": "0.8.0",
+  "route": "direct",
+  "status": "发现新版本 v0.8.0（当前 v0.7.4）。",
+  "source": "github_api"
+}

@@ -2,6 +2,8 @@
 
 Latest: [v0.8.5 eighth-review assessment and F1–F4](ROUND8_RESPONSE.md), **247 tests passed**. Includes actual Streamlit column/row constraints, read-only legacy conflict discovery and snapshot confirmation/final checks, with a real hardlink retention case. Dedicated GUI and packaged-EXE evidence are recorded there. All new data is synthetic; no personal ledger or paid model was used.
 
+Final code `686a6c7` passed [remote Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41670611996). The actual0.8.5 EXE detected the published version with an explicit latest-version status and downloaded all 37,737,239 installer bytes with SHA256 matching official metadata and the local artifact. [Network evidence](packaged_update_network_v085.json). No installed-client replacement, code-signing or clean-VM certification is inferred.
+
 Previous: [v0.8.4 seventh-review assessment and E1–E3](ROUND7_RESPONSE.md), **235 tests passed**, with dedicated real-widget and packaged-EXE verification. Historical sections below describe their own releases. All new data is synthetic; no paid model or personal ledger was used.
 
 Code commit `75548de` passed [remote Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41665415832). The published0.8.4 installer was downloaded by the actual EXE's updater:37,716,876 bytes, verified SHA256 and explicit current-version status. [Network evidence](packaged_update_network_v084.json). This does not establish code signing or installation on a clean VM.

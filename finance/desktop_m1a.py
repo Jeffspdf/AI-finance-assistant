@@ -1,5 +1,7 @@
 """Small desktop entry points for accounts, import history and manual reconciliation."""
 import json
+import queue
+import threading
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox
@@ -76,7 +78,7 @@ class M1Features:
         box=scrollable_form(window,padx=20,pady=14)
         self.label(box,Path(filename).name,14,bold=True)
         self.label(box,'账单格式',10,MUTED)
-        adapter=ttk.Combobox(box,values=['通用 CSV/XLSX','微信 CSV','银行模板 v1 XLSX'],state='readonly');adapter.current(0);adapter.pack(fill='x')
+        adapter=ttk.Combobox(box,values=['自动检测（推荐）','通用 CSV/XLSX','微信 CSV','银行模板 v1 XLSX'],state='readonly');adapter.current(0);adapter.pack(fill='x')
         accounts={'未指定账户（只能提供人工核对线索）':None}
         accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in self.store.accounts()})
         self.label(box,'属于哪个账户？',10,MUTED)
@@ -84,7 +86,7 @@ class M1Features:
         self.label(box,'不确定时明确选“未指定”。同一文件再次导入会复用来源文档，保留本次批次记录。',10,MUTED).configure(wraplength=px(510))
         row=tk.Frame(box,bg=BG);row.pack(fill='x')
         def proceed():
-            choice={'通用 CSV/XLSX':'generic','微信 CSV':'wechat_csv','银行模板 v1 XLSX':'bank_template_v1'}[adapter.get()]
+            choice={'自动检测（推荐）':'auto','通用 CSV/XLSX':'generic','微信 CSV':'wechat_csv','银行模板 v1 XLSX':'bank_template_v1'}[adapter.get()]
             selected=accounts[account.get()];window.destroy();self.import_async(filename,choice,selected)
         self.button(row,'开始预览',proceed);self.button(row,'管理账户',self.account_window)
 
@@ -100,14 +102,14 @@ class M1Features:
         box=tk.Frame(window,bg=BG,padx=px(18),pady=px(12));box.pack(fill='both',expand=True)
         self.label(box,'同一笔消费，只统计一次',18,bold=True)
         if demo:self.label(box,'独立示例空间：两对20/40元、退款10元、转账500元。确认120→60，拆分60→120；不会写入你的账本。',10,PRIMARY).configure(wraplength=px(920))
-        self.label(box,'A 有绑定且唯一 / B 描述相近 / C 仅金额日期相近。所有等级都需人工核对；不自动合并。',10,MUTED).configure(wraplength=px(930))
+        self.label(box,'A 有绑定且唯一 / B 描述相近，需人工确认；C 仅金额日期相近，不允许直接确认。',10,MUTED).configure(wraplength=px(930))
         total=self.label(box,'',12,PRIMARY)
         actions=tk.Frame(box,bg=BG);actions.pack(fill='x')
         status=self.label(box,'选中关联组，可查看下方全部来源。',10,MUTED)
         holder=tk.Frame(box,bg=BG);holder.pack(fill='both',expand=True)
         details=tk.Frame(box,bg=BG);details.pack(fill='both',expand=True)
-        state={'rows':[],'tree':None}
-        labels={'candidate':'待确认','confirmed':'已确认','rejected':'已拒绝','split':'已拆分','stale':'候选已过期','needs_review':'编辑后需复核'}
+        state={'rows':[],'tree':None,'scanning':False};mailbox=queue.Queue()
+        labels={'candidate':'待确认','confirmed':'已确认','rejected':'已拒绝','split':'已拆分','stale':'候选已过期','needs_review':'待复核'}
         def refresh():
             f=store.transactions();pending=store.pending_refunds()
             total.config(text=f'当前消费 ¥{yuan(int(f.loc[f.kind=="支出","amount_cents"].sum()))} · 退款待处理 ¥{yuan(pending["amount_cents"])}（未扣退款，净支出待定）')
@@ -116,6 +118,7 @@ class M1Features:
             state['rows']=store.reconciliation_groups()[:200]
             state['tree']=self.table(holder,['状态','等级','金额 / 元','来源','依据'],[[labels.get(g['status'],g['status']),g['confidence'],yuan(g['members'][0]['amount_cents']) if g['members'] else '', ' + '.join(r['channel'] for r in g['members']),g['reason']] for g in state['rows']],7)
             state['tree'].bind('<<TreeviewSelect>>',show_details)
+            confirm_button.config(state='disabled')
         def chosen():
             selection=state['tree'].selection()
             return state['rows'][self.row_index(state['tree'],selection[0])] if selection else None
@@ -123,30 +126,57 @@ class M1Features:
             for child in details.winfo_children():child.destroy()
             group=chosen()
             if not group:return
+            confirm_button.config(state='normal' if group['status']=='candidate' and group['confidence'] in ('A','B') and not state['scanning'] else 'disabled')
             self.label(details,group['reason'],10,PRIMARY).configure(wraplength=px(900))
             self.table(details,['时间','商户 / 描述','金额 / 元','来源文件','行号','角色'],[[r['date'],r['merchant']+' / '+r['description'],yuan(r['amount_cents']),r['source_file'],r['source_row'],'消费代表' if r['role']=='purchase' else '资金来源腿'] for r in group['members']],4)
         def scan():
-            result=store.generate_candidates();refresh()
-            status.config(text=f'发现 {result["candidates"]} 组候选；{result["overflow"]} 笔超过候选上限，需要缩小范围。未改变统计。')
+            if state['scanning']:return
+            state['scanning']=True
+            for button in controls:button.config(state='disabled')
+            status.config(text='正在核对来源并生成候选，尚未改变统计。')
+            def worker():
+                try:mailbox.put(('done',store.generate_candidates()))
+                except Exception:mailbox.put(('error',None))
+            threading.Thread(target=worker,daemon=True).start();window.poll=window.after(80,poll)
+        def poll():
+            try:kind,result=mailbox.get_nowait()
+            except queue.Empty:window.poll=window.after(80,poll);return
+            state['scanning']=False
+            for button in controls:button.config(state='normal')
+            refresh()
+            if kind=='error':status.config(text='候选生成未完成，账单未改变，请重试。',fg=DANGER)
+            else:status.config(text=f'发现 {result["candidates"]} 组候选；{result["overflow"]} 笔超过候选上限，需要缩小范围。未改变统计。')
         def decide(decision):
             group=chosen()
             if not group:return
+            if decision=='confirmed' and group['confidence']=='C':
+                status.config(text='C级证据不足，请补充账户、绑定或来源后重新核对。',fg=DANGER);return
             prompt={'confirmed':'确认这些来源属于同一笔消费？确认后仅统计消费代表。','rejected':'拒绝此候选？重跑会保留决定。','split':'拆分此组并恢复每条来源的独立计数？'}[decision]
             if not messagebox.askyesno('核对对账决定',prompt+'\n'+group['reason'],parent=window):return
             try:
                 store.decide_group(group['id'],decision);refresh();self.show(self.page)
                 status.config(text='决定已保存，所有页面使用相同统计口径。')
             except ValueError as exc:status.config(text=str(exc),fg=DANGER)
-        self.button(actions,'生成 / 刷新候选',scan)
-        self.button(actions,'确认同笔消费',lambda:decide('confirmed'))
-        self.button(actions,'拒绝候选',lambda:decide('rejected'))
-        self.button(actions,'拆分已确认组',lambda:decide('split'))
+        controls=[self.button(actions,'生成 / 刷新候选',scan)]
+        confirm_button=self.button(actions,'确认同笔消费',lambda:decide('confirmed'));controls.append(confirm_button)
+        controls.append(self.button(actions,'拒绝候选',lambda:decide('rejected')))
+        controls.append(self.button(actions,'拆分已确认组',lambda:decide('split')))
         def reopen():
             group=chosen()
             if group and messagebox.askyesno('重新核对','撤回原决定并重新列为候选？不会自动确认，也不会立即排重。',parent=window):
-                try:store.reopen_group(group['id']);refresh();status.config(text='已重新列为候选，请再次核对后确认。')
+                try:store.reopen_group(group['id']);scan()
                 except ValueError as exc:status.config(text=str(exc),fg=DANGER)
-        self.button(actions,'重新核对',reopen);refresh()
+        controls.append(self.button(actions,'重新核对',reopen))
+        def clean():
+            count=store.clean_stale_candidates();refresh();status.config(text=f'已清理 {count} 组未决定的过期候选，人工决定与来源证据保留。')
+        extra=tk.Frame(box,bg=BG);extra.pack(fill='x')
+        controls.append(self.button(extra,'清理过期候选',clean))
+        refresh();window.initial_scan=window.after_idle(scan)
+        def cleanup(event):
+            if event.widget is window:
+                if hasattr(window,'poll'):window.after_cancel(window.poll)
+                window.after_cancel(window.initial_scan)
+        window.bind('<Destroy>',cleanup)
 
     def import_history_window(self):
         store=self.store;window=tk.Toplevel(self);window.title('导入批次与来源');set_window_geometry(window,920,640);window.configure(bg=BG)

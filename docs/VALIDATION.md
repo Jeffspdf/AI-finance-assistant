@@ -1,6 +1,8 @@
 # Validation record — 2026-11-01
 
-Latest implementation: [v0.8.1 configurable demo generation](DEMO_GENERATOR.md), **169 tests passed**, and [v0.8.0 M1a validation, 2026-11-03](VALIDATION_M1A.md). Earlier sections below remain chronological records of their releases.
+Latest: [v0.8.2 fifth-round correctness fixes](ROUND5_RESPONSE.md), **198 tests passed**. Earlier sections remain chronological records of their releases.
+
+Earlier releases: [v0.8.1 configurable demo generation](DEMO_GENERATOR.md), **169 tests passed**, and [v0.8.0 M1a validation, 2026-11-03](VALIDATION_M1A.md). Earlier sections below remain chronological records of their releases.
 
 ## Completed locally
 

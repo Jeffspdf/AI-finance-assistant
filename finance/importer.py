@@ -39,6 +39,18 @@ class ImportResult:
     warnings: list = field(default_factory=list)
     raw_rows: list = field(default_factory=list)
     document: dict = field(default_factory=dict)
+    adapter: str = 'generic'
+
+
+WECHAT_COLUMNS={'交易时间','交易对方','收/支','金额(元)','当前状态','交易单号'}
+BANK_COLUMNS={'流水号','交易时间','借方发生额','贷方发生额','对方名称','摘要','币种','业务类型'}
+
+
+def detect_adapter(columns,filename):
+    columns={str(c).strip() for c in columns}
+    if filename.lower().endswith('.csv') and WECHAT_COLUMNS<=columns:return 'wechat_csv'
+    if filename.lower().endswith('.xlsx') and BANK_COLUMNS<=columns:return 'bank_template_v1'
+    return 'generic'
 
 def map_columns(columns):
     clean = {str(c).strip().lstrip('\ufeff'):c for c in columns}
@@ -80,13 +92,15 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
     frame, first_row = read_statement(content, filename)
     original_frame=frame.copy() if retain_source or adapter!='generic' else None
     if len(frame)>50000: raise ValueError('单次最多导入 50000 行')
+    if adapter=='auto':
+        adapter=detect_adapter(frame.columns,filename);retain_source=True
     if adapter not in ('generic','wechat_csv','bank_template_v1'):raise ValueError('不支持的账单格式')
     if adapter=='wechat_csv':
-        if not filename.lower().endswith('.csv') or not {'交易时间','交易对方','收/支','金额(元)','当前状态','交易单号'}<=set(frame.columns):
+        if not filename.lower().endswith('.csv') or not WECHAT_COLUMNS<=set(frame.columns):
             raise ValueError('微信格式需含交易时间、交易对方、收/支、金额(元)、当前状态、交易单号列')
         frame=frame.copy();frame['平台']='微信'
     if adapter=='bank_template_v1':
-        required={'流水号','交易时间','借方发生额','贷方发生额','对方名称','摘要','币种','业务类型'}
+        required=BANK_COLUMNS
         if not filename.lower().endswith('.xlsx') or not required<=set(frame.columns):
             raise ValueError('请选择银行模板 v1 XLSX（借方发生额/贷方发生额），其他银行格式需先转换')
         frame=frame.copy();amounts=[];kinds=[]
@@ -100,7 +114,7 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
         frame['金额']=amounts;frame['类型']=kinds;frame['平台']='银行'
     if adapter!='generic':retain_source=True
     mapping = map_columns(frame.columns)
-    result = ImportResult()
+    result = ImportResult(adapter=adapter)
     if retain_source:
         result.document=dict(sha256=sha256(content).hexdigest(),filename=__import__('pathlib').Path(filename).name,
                              channel={'wechat_csv':'微信','bank_template_v1':'银行'}.get(adapter,'通用'),

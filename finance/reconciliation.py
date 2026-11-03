@@ -8,12 +8,16 @@ import json
 import re
 import uuid
 
-ALGORITHM = 'm1a-1'
+ALGORITHM = 'm1a-2'
 ACTIVE = ('normal','legacy')
 
 
 def eligible(row):
     return row['status'] in ACTIVE and row['kind']=='支出' and row['category']!='转账'
+
+
+def is_wallet(row,accounts):
+    return row['channel'] in ('微信','支付宝') or accounts.get(row['account_id'],{}).get('type')=='wallet'
 
 
 def representative(rows, accounts):
@@ -25,8 +29,10 @@ def representative(rows, accounts):
     return min(rows,key=rank)
 
 
-def valid_group(rows):
+def valid_group(rows,accounts=None):
+    accounts=accounts or {}
     return (len(rows)>=2 and all(eligible(r) for r in rows)
+            and sum(is_wallet(r,accounts) for r in rows)<=1
             and len({(r['currency'],r['kind'],r['amount_cents']) for r in rows})==1)
 
 
@@ -89,7 +95,12 @@ class Reconciliation:
         frame.loc[frame.kind=='转账','counting_note']='转账 · 不计收支'
         groups=[dict(r) for r in db.execute("SELECT * FROM link_groups WHERE status='confirmed' AND kind='purchase_duplicate'")]
         byid={r['id']:r for r in frame.to_dict('records')}
+        accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
         decisions=[];notes={};excluded=set()
+        for row in db.execute("""SELECT DISTINCT t.id FROM transactions t JOIN link_members m ON m.transaction_id=t.id
+            JOIN link_groups g ON g.id=m.group_id WHERE g.status='needs_review'
+            AND t.status IN ('normal','legacy') AND t.kind='支出'"""):
+            notes[row['id']]='关联待复核 · 独立计数'
         members_by_group=defaultdict(list)
         for member in db.execute("SELECT m.* FROM link_members m JOIN link_groups g ON g.id=m.group_id WHERE g.status='confirmed' AND g.kind='purchase_duplicate'"):
             members_by_group[member['group_id']].append(dict(member))
@@ -97,7 +108,10 @@ class Reconciliation:
             members=members_by_group[group['id']]
             rows=[byid[m['transaction_id']] for m in members if m['transaction_id'] in byid]
             purchases=[m['transaction_id'] for m in members if m['role']=='purchase']
-            if len(rows)!=len(members) or not valid_group(rows) or len(purchases)!=1:
+            if len(rows)!=len(members) or not valid_group(rows,accounts) or len(purchases)!=1:
+                db.execute("UPDATE link_groups SET status='needs_review',decided_at=CURRENT_TIMESTAMP,decided_by='system' WHERE id=?",(group['id'],))
+                audit(db,'link_invalidated',group['id'],{'reason':'当前来源不再符合排重约束','algorithm_version':ALGORITHM})
+                frame.loc[frame.id.isin([r['id'] for r in rows]),'link_group_id']=None
                 notes.update({r['id']:'关联失效 · 已恢复计数，请复核' for r in rows})
                 continue
             rep=purchases[0]
@@ -124,6 +138,7 @@ class Reconciliation:
 
     def reconciliation_groups(self):
         with self.connect() as db:
+            self._source_frame(db)  # Repair legacy invalid confirmations before displaying state.
             groups=[dict(r) for r in db.execute('SELECT * FROM link_groups ORDER BY created_at DESC,id')]
             for g in groups:
                 g['members']=[dict(r) for r in db.execute('''SELECT t.*,m.role FROM link_members m
@@ -152,8 +167,9 @@ class Reconciliation:
                     nearby=sorted((bucket[i] for i in indices if bucket[i]['id']!=left['id']),key=lambda r:(abs(r['_time']-left['_time']),r['id']))
                     if hi-lo-1>20:overflow.add(left['id'])
                     for right in nearby[:20]:
-                        if left['channel']==right['channel']:continue
+                        if left['channel']==right['channel'] and not (left['account_id'] and right['account_id'] and left['account_id']!=right['account_id']):continue
                         if left['account_id'] and left['account_id']==right['account_id']:continue
+                        if is_wallet(left,accounts) and is_wallet(right,accounts):continue
                         pair=tuple(sorted([left['id'],right['id']]))
                         if pair in pairs:continue
                         a,b=left,right
@@ -162,7 +178,10 @@ class Reconciliation:
                             l['wallet_account_id']==a['account_id'] and l['bank_account_id']==b['account_id']
                             and l['active_from']<=min(a['date'][:10],b['date'][:10])
                             and (not l['active_to'] or l['active_to']>=max(a['date'][:10],b['date'][:10])) for l in links))
-                        channel_ok=(a['channel']=='微信' and any(s in b['merchant']+b['description'] for s in ('财付通','微信支付')))
+                        bank_text=(b['merchant']+' '+b['description']).casefold()
+                        wallet_channel=a['channel'] if a['channel'] in ('微信','支付宝') else accounts.get(a['account_id'],{}).get('channel')
+                        channel_ok=(wallet_channel=='微信' and any(s in bank_text for s in ('财付通','微信支付'))
+                                    or wallet_channel=='支付宝' and any(s in bank_text for s in ('支付宝','alipay')))
                         strong_match=binding and channel_ok and abs(a['_time']-b['_time'])<=120
                         if strong_match:
                             strong[left['id']].add(right['id']);strong[right['id']].add(left['id'])
@@ -182,7 +201,7 @@ class Reconciliation:
                         'B':'同额同向、一天内且商户/描述相近；请人工核对',
                         'C':'仅金额与日期相近，证据不足；不建议直接确认'}[level]
                 if prior:
-                    db.execute("UPDATE link_groups SET status='candidate',reason=?,confidence=? WHERE id=?",(reason,level,gid))
+                    db.execute("UPDATE link_groups SET status='candidate',reason=?,confidence=?,algorithm_version=? WHERE id=?",(reason,level,ALGORITHM,gid))
                 else:
                     db.execute("INSERT INTO link_groups(id,kind,status,reason,confidence,algorithm_version) VALUES (?,'purchase_duplicate','candidate',?,?,?)",(gid,reason,level,ALGORITHM))
                     rep=representative([a,b],accounts)
@@ -191,6 +210,21 @@ class Reconciliation:
                 created+=1
             return dict(candidates=created,overflow=len(overflow),automatic=False)
 
+    def clean_stale_candidates(self):
+        """Remove undecided expired proposals only, never user decisions or raw evidence."""
+        with self.connect() as db:
+            ids=[r[0] for r in db.execute("SELECT id FROM link_groups WHERE status='stale' AND decided_by IS NULL")]
+            for gid in ids:
+                db.execute('DELETE FROM link_members WHERE group_id=?',(gid,))
+                db.execute('DELETE FROM link_groups WHERE id=?',(gid,))
+            if ids:audit(db,'stale_candidates_cleaned','reconciliation',{'count':len(ids)})
+        return len(ids)
+
+    def candidate_summary(self):
+        with self.connect() as db:
+            counts=dict(db.execute("SELECT confidence,COUNT(*) FROM link_groups WHERE status='candidate' GROUP BY confidence"))
+            return {level:counts.get(level,0) for level in ('A','B','C')}
+
     def decide_group(self,identifier,decision):
         if decision not in ('confirmed','rejected','split'):raise ValueError('无效对账决定')
         with self.connect() as db:
@@ -198,14 +232,16 @@ class Reconciliation:
             if not group:raise ValueError('关联组不存在')
             if decision=='split' and group['status']!='confirmed':raise ValueError('只有已确认的关联组可以拆分')
             if decision=='confirmed':
-                if group['status'] not in ('candidate','stale'):raise ValueError('此组已有决定，请重新核对来源')
+                if group['status']!='candidate':raise ValueError('此组已有决定或候选已过期，请重新核对来源')
                 rows=[dict(r) for r in db.execute('''SELECT t.*,COALESCE(b.started_at,'') AS imported_at
                     FROM transactions t JOIN link_members m ON m.transaction_id=t.id
                     LEFT JOIN import_batches b ON b.id=t.import_batch_id WHERE m.group_id=?''',(identifier,))]
-                if group['kind']!='purchase_duplicate' or not valid_group(rows):raise ValueError('仅同币种、同额、同向的普通消费可确认排重；退款与转账不可加入')
+                accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
+                if sum(is_wallet(r,accounts) for r in rows)>1:raise ValueError('同一消费组最多一个钱包，两个钱包不能确认为重复消费')
+                if group['kind']!='purchase_duplicate' or not valid_group(rows,accounts):raise ValueError('仅同币种、同额、同向的普通消费可确认排重；退款与转账不可加入')
                 active=db.execute("SELECT 1 FROM link_members a JOIN link_members b ON a.transaction_id=b.transaction_id JOIN link_groups g ON g.id=b.group_id WHERE a.group_id=? AND b.group_id<>? AND g.status='confirmed'",(identifier,identifier)).fetchone()
                 if active:raise ValueError('成员已在其他确认组内，请先拆分原组；不做传递合并')
-                accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
+                if group['confidence']=='C':raise ValueError('C级仅金额日期相近，不能直接确认；请补充账户/绑定或来源信息，再重新核对')
                 rep=representative(rows,accounts)
                 db.execute("UPDATE link_members SET role=CASE WHEN transaction_id=? THEN 'purchase' ELSE 'funding' END WHERE group_id=?",(rep['id'],identifier))
             db.execute("UPDATE link_groups SET status=?,decided_at=CURRENT_TIMESTAMP,decided_by='user' WHERE id=?",(decision,identifier))
@@ -215,10 +251,11 @@ class Reconciliation:
         """Only an explicit user action may undo a rejected/split/invalidated decision."""
         with self.connect() as db:
             group=db.execute('SELECT * FROM link_groups WHERE id=?',(identifier,)).fetchone()
-            if not group or group['status'] not in ('rejected','split','needs_review'):
-                raise ValueError('请选择已拒绝、已拆分或编辑后需复核的组')
+            if not group or group['status'] not in ('rejected','split','needs_review','candidate','stale'):
+                raise ValueError('请选择待核对、已拒绝或已拆分的组')
             rows=[dict(r) for r in db.execute('SELECT t.* FROM transactions t JOIN link_members m ON t.id=m.transaction_id WHERE m.group_id=?',(identifier,))]
-            if not valid_group(rows):raise ValueError('当前来源金额、类型或状态不符合排重条件，请先核对交易')
+            accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
+            if not valid_group(rows,accounts):raise ValueError('当前来源金额、类型、钱包数量或状态不符合排重条件，请先核对交易')
             db.execute("UPDATE link_groups SET status='candidate',decided_at=CURRENT_TIMESTAMP,decided_by='user' WHERE id=?",(identifier,))
             audit(db,'link_reopened',identifier,{'previous_status':group['status']})
 

@@ -2,6 +2,7 @@ from pathlib import Path
 import sqlite3
 import pandas as pd
 from contextlib import contextmanager,closing
+from collections import defaultdict
 import json
 import threading
 import uuid
@@ -39,6 +40,14 @@ class Store(Reconciliation):
     def _insert_rows(self, db, rows):
         added, duplicates, conflicts = 0, 0, []
         existing={r['signature']:dict(r) for r in db.execute('SELECT * FROM transactions')}
+        origins=defaultdict(list);weak_identities=defaultdict(list)
+        def content_key(row):
+            return tuple(row.get(k) for k in ('external_id','date','amount_cents','kind','merchant','description','currency'))
+        def index(row):
+            if row['status']=='deleted':return
+            if row.get('source_document_id'):origins[(row['source_document_id'],row['source_row'])].append(row)
+            if row['external_id']:weak_identities[content_key(row)].append(row)
+        for row in existing.values():index(row)
         learned={(r['merchant'],r['kind']):r['category'] for r in db.execute('SELECT * FROM merchant_rules')}
         keys=['id','external_id','date','merchant','description','amount_cents','kind','category','category_source','channel','source_file','source_row','signature',
               'currency','status','account_id','source_document_id','raw_row_id','import_batch_id']
@@ -47,10 +56,22 @@ class Store(Reconciliation):
             row.setdefault('currency','CNY');row.setdefault('status','normal')
             for key in ('account_id','source_document_id','raw_row_id','import_batch_id'):row.setdefault(key,None)
             old=existing.get(row['signature'])
+            if row.get('source_document_id') and (not old or old['status']=='deleted'):
+                same_origin=origins.get((row['source_document_id'],row['source_row']),[])
+                # An exact source row cannot become a second transaction by changing
+                # parser/account. Scoped IDs in genuinely different known accounts
+                # remain valid; a global external-ID uniqueness rule would lose data.
+                ambiguous=[other for other in weak_identities.get(content_key(row),[])
+                           if (other['channel'] in ('未指定','通用') or row['channel'] in ('未指定','通用'))
+                           and (other['channel'],other['account_id'])!=(row['channel'],row['account_id'])]
+                collision=(same_origin or ambiguous)
+                if collision:
+                    conflicts.append({'行号':row['source_row'],'原因':'相同原始行或未明确来源的同交易ID已存在，账户/格式声明不同，未重复计入；请核对原批次'})
+                    continue
             if not old and row.get('source_document_id'):
                 identity=('external|'+row['channel']+'|'+row['external_id']) if row['external_id'] else 'fingerprint|'+'|'.join([row['date'],str(row['amount_cents']),row['kind'],row['merchant'],row['description'],row['channel']])
                 legacy=existing.get(sha256(identity.encode()).hexdigest())
-                if legacy and legacy['account_id'] is None:
+                if legacy and legacy['status']!='deleted' and legacy['account_id'] is None:
                     if row['account_id'] is not None:
                         conflicts.append({'行号':row['source_row'],'原因':'存在未指定账户的旧记录，未再次计入；请核对旧记录来源'})
                         continue
@@ -69,7 +90,7 @@ class Store(Reconciliation):
                            [row[k] for k in keys if k!='id']+[old['id']])
             else:
                 db.execute(f"INSERT INTO transactions ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})",[row[k] for k in keys])
-            existing[row['signature']]=row;added+=1
+            existing[row['signature']]=row;index(row);added+=1
         return added, duplicates, conflicts
 
     def import_statement(self,result):
@@ -157,6 +178,8 @@ class Store(Reconciliation):
             for txid, category in corrections:
                 if category not in CATEGORIES:
                     raise ValueError('无效分类')
+                old=db.execute('SELECT category FROM transactions WHERE id=?',(txid,)).fetchone()
+                if old and old['category']!=category:self.invalidate_groups(db,txid,'分类已修改，请重新核对关联')
                 db.execute('UPDATE transactions SET category=?, category_source=? WHERE id=?', (category, '用户修正', txid))
                 if learn:
                     r=db.execute('SELECT merchant,kind FROM transactions WHERE id=?',(txid,)).fetchone()
@@ -194,7 +217,7 @@ class Store(Reconciliation):
             old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
             if old is None:raise ValueError('记录不存在')
             db.execute('INSERT INTO transaction_edits(transaction_id,old_values) VALUES (?,?)',(txid,json.dumps(dict(old),ensure_ascii=False)))
-            if any(old[k]!=values[k] for k in ['date','merchant','description','amount_cents','kind']):
+            if any(old[k]!=values[k] for k in ['date','merchant','description','amount_cents','kind','category']):
                 self.invalidate_groups(db,txid,'交易关键字段已编辑')
             fields=['date','merchant','description','amount_cents','kind','category']
             db.execute('UPDATE transactions SET '+','.join(k+'=?' for k in fields)+',category_source=? WHERE id=?',[values[k] for k in fields]+['用户修正',txid])
@@ -229,10 +252,11 @@ class Store(Reconciliation):
         from .categories import CATEGORIES
         if category not in CATEGORIES:raise ValueError('无效模型分类')
         with self.connect() as db:
-            row=db.execute('SELECT kind,category_source FROM transactions WHERE id=?',(txid,)).fetchone()
+            row=db.execute('SELECT kind,category,category_source FROM transactions WHERE id=?',(txid,)).fetchone()
             if not row or row['category_source']!='待确认':return False
             permitted=['工资','生活费','其他收入'] if row['kind']=='收入' else [c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']]
             if category not in permitted:raise ValueError('模型分类与收支类型冲突')
+            if row['category']!=category:self.invalidate_groups(db,txid,'接受模型分类修改，请重新核对关联')
             db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=?',(category,'模型建议（需核对）',txid))
             return True
 
@@ -268,6 +292,7 @@ class Store(Reconciliation):
                 old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
                 if old is None:continue
                 snapshot.append(dict(id=txid,category=old['category'],source=old['category_source'],new=category))
+                if old['category']!=category:self.invalidate_groups(db,txid,'批量分类已修改，请重新核对关联')
                 db.execute('INSERT INTO transaction_edits(transaction_id,old_values) VALUES (?,?)',(txid,json.dumps(dict(old),ensure_ascii=False)))
                 db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=?',(category,'用户修正',txid))
         return snapshot
@@ -276,6 +301,9 @@ class Store(Reconciliation):
         count=0
         with self.connect() as db:
             for row in snapshot:
+                current=db.execute('SELECT category,category_source FROM transactions WHERE id=?',(row['id'],)).fetchone()
+                if current and current['category']==row['new'] and current['category_source']=='用户修正' and row['category']!=row['new']:
+                    self.invalidate_groups(db,row['id'],'撤销批量分类，请重新核对关联')
                 count+=db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=? AND category=? AND category_source=?',(row['category'],row['source'],row['id'],row['new'],'用户修正')).rowcount
         return count
 

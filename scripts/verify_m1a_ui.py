@@ -48,7 +48,7 @@ with TemporaryDirectory(prefix='.test_m1a_ui_',dir=ROOT) as temp:
     assert any('退款待处理' in r['counting_note'] for r in app.record_rows)
     screen('records_before',app)
     app.reconciliation_window();app.update();window=top(app)
-    button(window,'生成 / 刷新候选').invoke();app.update()
+    wait(app,lambda:str(button(window,'生成 / 刷新候选').cget('state'))=='normal' and len(next(c for c in descendants(window) if c.winfo_class()=='Treeview').get_children())==2)
     tree=next(c for c in descendants(window) if c.winfo_class()=='Treeview')
     assert len(tree.get_children())==2
     for _ in range(2):
@@ -88,6 +88,7 @@ with TemporaryDirectory(prefix='.test_m1a_ui_',dir=ROOT) as temp:
     wait(app,lambda:any(c.winfo_class()=='Button' and c.cget('text')=='确认导入并保存来源' for c in descendants(window)))
     button(window,'取消导入').invoke();app.update();assert len(app.store.import_batches())==before
     app.reconciliation_window();app.update();window=top(app)
+    wait(app,lambda:str(button(window,'生成 / 刷新候选').cget('state'))=='normal')
     for _ in range(2):
         tree=next(c for c in descendants(window) if c.winfo_class()=='Treeview')
         item=next(i for i in tree.get_children() if tree.item(i,'values')[0]=='已确认');tree.selection_set(item)

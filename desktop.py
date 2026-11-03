@@ -12,7 +12,7 @@ from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 
 from finance.storage import Store
-from finance.demo import demo_bytes
+from finance.demo import demo_bytes,initialize_demo
 from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
@@ -67,8 +67,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.animators=[]
         self.animation_paused=False
         self.store = Store(DATA_DIR / (self.mode+'.sqlite3'))
-        if self.mode=='demo' and self.store.transactions().empty:
-            self.store.import_rows(parse_statement(demo_bytes(), 'desktop_demo.csv').rows)
+        if self.mode=='demo':initialize_demo(self.store)
         self.review_initialize()
         side = tk.Frame(self, bg='white', width=px(220))
         side.pack(side='left', fill='y'); side.pack_propagate(False)
@@ -386,6 +385,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
     def switch_space(self):
         self.mode = 'personal' if self.mode == 'demo' else 'demo'
         self.store = Store(DATA_DIR / (self.mode + '.sqlite3'))
+        if self.mode=='demo' and initialize_demo(self.store):self.selected_month=max(self.store.transactions().date.str[:7])
         self.space_label.config(text='我的账本 · 本机数据' if self.mode == 'personal' else '演示空间 · 合成账单')
         self.search_text='';self.category_filter='全部分类'
         self.save_preferences()
@@ -622,7 +622,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
             entry.pack(fill='x',pady=px((0,7)));fields[key]=entry
         remember=tk.BooleanVar(value=False)
         tk.Checkbutton(box,text='记住此商户分类，用于以后新导入的同类收支',variable=remember,bg=BG).pack(anchor='w')
-        status=self.label(box,'原始交易编号与文件来源保留。',9,MUTED)
+        status=self.label(box,'分类修改会使相关对账待复核。是否计入收支取决于“收支类型”，不是分类名称。',9,MUTED);status.configure(wraplength=px(455))
         def save():
             try:
                 values={k:e.get().strip() for k,e in fields.items()};values['amount_cents']=money_to_cents(values['amount_cents'])
@@ -794,6 +794,11 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
 
 
 if __name__ == '__main__':
+    if '--self-test-round5' in sys.argv:
+        if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
+        from finance.round5_acceptance import verify_round5
+        verify_round5(DATA_DIR)
+        sys.exit(0)
     if '--self-test-m1a' in sys.argv:
         if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
         from finance.m1a_demo import verify_six

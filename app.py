@@ -43,10 +43,8 @@ if enabled and consent:
     except ValueError as exc: st.sidebar.error(str(exc))
 
 store=Store(Path(os.getenv('FINANCE_DATA_DIR',str(ROOT/'data')))/('demo.sqlite3' if workspace=='演示数据' else 'personal.sqlite3'))
-if workspace=='演示数据' and store.transactions().empty:
-    from finance.demo import demo_bytes
-    parsed=parse_statement(demo_bytes(TODAY),'三个月演示账单.csv')
-    store.import_rows(parsed.rows)
+from finance.demo import initialize_demo
+if workspace=='演示数据' and initialize_demo(store,TODAY):
     store.save_budget(DEMO_MONTH,'餐饮',10000)
     store.save_budget(DEMO_MONTH,'交通',15000)
 tx=store.transactions()
@@ -109,7 +107,7 @@ elif page=='导入与分类':
     import_account=st.selectbox('账单所属账户（不确定时标未指定）',list(accounts))
     if uploaded:
         try:
-            parsed=parse_statement(uploaded.getvalue(),uploaded.name,retain_source=True,account_id=accounts[import_account])
+            parsed=parse_statement(uploaded.getvalue(),uploaded.name,retain_source=True,adapter='auto',account_id=accounts[import_account])
             a,b,c=st.columns(3)
             a.metric('有效行（含待去重）',len(parsed.rows)); b.metric('异常行',len(parsed.issues)); c.metric('跳过行',parsed.skipped)
             for warning in parsed.warnings: st.warning(warning)
@@ -146,12 +144,11 @@ elif page=='导入与分类':
         if st.button('让 AI 建议待确认分类（每次最多 20 笔）',disabled=model is None or pending.empty):
             done,failed=0,0
             with st.spinner('正在请求分类建议…'):
-                with store.connect() as db:
-                    for row in pending.head(20).to_dict('records'):
-                        try:
-                            label=model.suggest_category(row['merchant'],row['description'],row['kind'])
-                            db.execute('UPDATE transactions SET category=?,category_source=? WHERE id=?',(label,'模型建议（需核对）',row['id'])); done+=1
-                        except Exception: failed+=1
+                for row in pending.head(20).to_dict('records'):
+                    try:
+                        label=model.suggest_category(row['merchant'],row['description'],row['kind'])
+                        done+=int(store.apply_model_category(row['id'],label))
+                    except Exception: failed+=1
             st.success(f'更新 {done} 笔建议，失败 {failed} 笔；原记录保留，可手动修正。')
             st.session_state['ai_notice']=f'更新 {done} 笔 AI 分类建议，请核对。失败 {failed} 笔。'
             st.rerun()

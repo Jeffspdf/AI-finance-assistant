@@ -139,7 +139,7 @@ class RoundTwo:
         self.button(window,'查找 / 前往',run);self.button(window,'快速记一笔',lambda:(window.destroy(),self.quick_entry()))
         entry.bind('<Return>',lambda _:run());entry.focus_set()
 
-    def import_async(self,filename=None,adapter='generic',account_id=None):
+    def import_async(self,filename=None,adapter='auto',account_id=None):
         from pathlib import Path
         import threading,queue,csv
         from .importer import parse_statement
@@ -172,7 +172,12 @@ class RoundTwo:
                 with open(destination,'w',encoding='utf-8-sig',newline='') as stream:
                     fields=list(result.issues[0]) if result.issues else ['行号','原因'];writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader();writer.writerows(result.issues)
         def preview(result):
-            status.config(text=f'有效 {len(result.rows)} 行 · 异常 {len(result.issues)} 行 · 跳过 {result.skipped} 行；有效行确认后才写入。')
+            format_name={'wechat_csv':'微信 CSV','bank_template_v1':'银行模板 v1 XLSX','generic':'通用 CSV/XLSX'}[result.adapter]
+            status.config(text=f'已识别：{format_name} · 有效 {len(result.rows)} 行 · 异常 {len(result.issues)} 行 · 跳过 {result.skipped} 行。')
+            if result.adapter=='wechat_csv' and not account_id:
+                self.label(content,'尚未指定钱包账户。请在“账户与支付绑定”中声明钱包/银行卡，可提高对账证据等级。',10,PRIMARY).configure(wraplength=px(730))
+                hint_actions=tk.Frame(content,bg=BG);hint_actions.pack(fill='x')
+                self.button(hint_actions,'管理账户与支付绑定',self.account_window)
             if result.warnings:self.label(content,'\n'.join(result.warnings),9,DANGER).configure(wraplength=px(730))
             notebook=ttk.Notebook(content);notebook.pack(fill='both',expand=True)
             valid=tk.Frame(notebook,bg='white');issues=tk.Frame(notebook,bg='white');notebook.add(valid,text='有效记录预览（前200）');notebook.add(issues,text=f'全部异常（{len(result.issues)}）')
@@ -186,7 +191,13 @@ class RoundTwo:
                 state['writing']=True;commit_button.config(state='disabled');cancel_button.config(state='disabled')
                 status.config(text='正在保存有效记录…完成前请勿关闭。')
                 def writer():
-                    try:mailbox.put(('saved',(store.import_statement(result),result)))
+                    try:
+                        saved=store.import_statement(result)
+                        try:
+                            store.generate_candidates()
+                            candidates=store.candidate_summary()
+                        except Exception:candidates=None
+                        mailbox.put(('saved',(saved,result,candidates)))
                     except Exception as exc:mailbox.put(('error',str(exc)))
                 threading.Thread(target=writer,daemon=True).start()
             if result.raw_rows:commit_button=self.button(actions,'确认导入并保存来源',commit)
@@ -199,11 +210,14 @@ class RoundTwo:
                 state['writing']=False;status.config(text='未完成导入：'+value,fg=DANGER);cancel_button.config(state='normal')
             elif kind=='saved':
                 state['writing']=False;state['done']=True
-                ((added,duplicates,conflicts),result)=value
+                ((added,duplicates,conflicts),result,candidates)=value
                 for child in content.winfo_children():child.destroy()
                 for child in actions.winfo_children():child.destroy()
                 status.config(text=f'已新增 {added} 笔，重复跳过 {duplicates} 笔，冲突 {len(conflicts)} 笔。')
                 self.label(content,f'异常 {len(result.issues)} 行未入库；原有冲突交易未被覆盖。',11,MUTED)
+                if candidates is not None:
+                    self.label(content,f'当前空间发现 {sum(candidates.values())} 组待核对候选（A/B级 {candidates["A"]+candidates["B"]}，C级 {candidates["C"]}）。尚未自动排重。',11,PRIMARY).configure(wraplength=px(730))
+                else:self.label(content,'账单已保存；候选生成未完成，请到对账窗口重试。',11,MUTED)
                 all_records=store.transactions();pending=int((all_records.category_source=='待确认').sum())
                 self.label(content,f'当前空间还有 {pending} 笔待确认分类，可继续核对。',11,PRIMARY)
                 for month in sorted({r['date'][:7] for r in result.rows},reverse=True)[:3]:
@@ -214,6 +228,11 @@ class RoundTwo:
                     close()
                     if mode==self.mode:
                         self.selected_month='全部月份';self.category_filter='待确认分类';self.search_text='';self.show('records');self.animate_character('success')
+                def go_reconcile():
+                    close()
+                    if self.mode!=mode:self.switch_space()
+                    self.reconciliation_window()
+                self.button(actions,'去对账核对',go_reconcile)
                 self.button(actions,'核对待确认分类',go);self.button(actions,'完成',lambda:(close(),self.show(self.page)))
             if not state['done']:window.poll=window.after(80,poll)
         def cleanup(event):

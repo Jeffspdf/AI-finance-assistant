@@ -1,0 +1,15 @@
+{
+  "data": "synthetic only",
+  "alipay_confidence": "A",
+  "confirmed_expense_cents": 2000,
+  "category_changed_expense_cents": 4000,
+  "group_status": "needs_review",
+  "cache_cleared": true,
+  "two_wallets_rejected": true,
+  "legacy_invalid_group_repaired": true,
+  "auto_detect_wechat": true,
+  "changed_parser_conflicts": 1,
+  "C_confirm_rejected": true,
+  "demo_reseeded": false,
+  "execution": "actual packaged Windows EXE"
+}

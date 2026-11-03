@@ -1,4 +1,4 @@
-param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.8.1')
+param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.8.2')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Build step failed: $LASTEXITCODE" } }
@@ -20,6 +20,9 @@ try {
     $m1Smoke = Start-Process -FilePath 'dist\AIFinanceHelper\AIFinanceHelper.exe' -ArgumentList '--self-test-m1a' -WindowStyle Hidden -PassThru
     if (-not $m1Smoke.WaitForExit(60000)) { $m1Smoke.Kill(); throw 'Packaged M1a self-test timed out' }
     if ($m1Smoke.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $packageSmokeDir 'm1a-self-test.json'))) { throw 'Packaged M1a acceptance failed; installer build stopped' }
+    $round5Smoke = Start-Process -FilePath 'dist\AIFinanceHelper\AIFinanceHelper.exe' -ArgumentList '--self-test-round5' -WindowStyle Hidden -PassThru
+    if (-not $round5Smoke.WaitForExit(60000)) { $round5Smoke.Kill(); throw 'Packaged round-five self-test timed out' }
+    if ($round5Smoke.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $packageSmokeDir 'round5-self-test.json'))) { throw 'Packaged round-five acceptance failed; installer build stopped' }
 } finally { $env:FINANCE_DESKTOP_DATA_DIR = $previousFinanceData }
 if (-not $Iscc) {
     $candidates = @('tools\inno\ISCC.exe', "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe")

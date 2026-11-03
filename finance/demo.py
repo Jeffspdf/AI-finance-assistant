@@ -32,6 +32,23 @@ def demo_bytes(today=None, errors=False):
     stream=StringIO(); writer=csv.writer(stream); writer.writerow(HEADER); writer.writerows(rows)
     return stream.getvalue().encode('utf-8-sig')
 
+
+def initialize_demo(store,today=None):
+    """Seed once per ledger, not whenever its statistical projection is empty."""
+    from pathlib import Path
+    from .importer import parse_statement
+    from .reconciliation import audit
+    if Path(store.path).name.lower()!='demo.sqlite3':raise ValueError('只能初始化演示空间')
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        if db.execute("SELECT 1 FROM audit_events WHERE event='demo_initialized' AND entity_id='default-demo'").fetchone():return False
+        # Deleted/refund-only/invalid-import history is also an existing workspace.
+        existing=db.execute('SELECT EXISTS(SELECT 1 FROM transactions) OR EXISTS(SELECT 1 FROM import_batches)').fetchone()[0]
+        added=0
+        if not existing:added=store._insert_rows(db,parse_statement(demo_bytes(today),'desktop_demo.csv').rows)[0]
+        audit(db,'demo_initialized','default-demo',{'seeded':added,'existing_history':bool(existing)})
+    return bool(added)
+
 if __name__=='__main__':
     from pathlib import Path
     root=Path(__file__).resolve().parents[1]/'samples'; root.mkdir(exist_ok=True)

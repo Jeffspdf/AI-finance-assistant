@@ -12,6 +12,8 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
+Version 0.8.2 fixes Alipay A-level channel recognition, rejects multiple wallets in one purchase group, and invalidates affected decisions on category changes. Legacy invalid confirmations are repaired consistently with caches/audit. C/stale proposals cannot confirm directly. Imports auto-detect supported formats, show post-save reconciliation actions, and reject repeated source rows under changed account/parser declarations. Demo initialization is recorded once even after deletion. See [round-five scope and validation](docs/ROUND5_RESPONSE.md).
+
 Version 0.8.1 adds Generate demo statements inside the demo workspace: choose start month, 1–12 months, 1–500 expenses per month, amount range, monthly income, optional transfers/refunds, and append or explicitly confirmed month replacement. Generation is local and atomic, keeps source batches, refreshes the selected month, and cannot target the personal ledger. [Usage and validation](docs/DEMO_GENERATOR.md).
 
 Create accounts and dated funding declarations in Settings, then select an account (or explicitly Unspecified) and format when importing. WeChat CSV and a bounded bank-template-v1 XLSX are supported alongside generic import. All A/B/C candidates require manual confirmation. The wallet representative counts once; funding legs remain in the source ledger. Split restores counts; reruns preserve user decisions, and explicit reopening is available.

@@ -8,11 +8,13 @@
 
 ## Windows 安装
 
-从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.8.1-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
+从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.8.2-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
 
 顶部选择演示空间或我的账本。首次演示默认最近有数据月份；个人账本初始为空。私有数据目录保留为 `%LOCALAPPDATA%\ShiguangLedger`，保证旧版升级兼容，卸载默认保留。设置提供当前空间的一致备份、预览和确认恢复；升级模式4前自动备份。升级后不支持直接运行旧版写库，需要对应旧版的备份才能降级。API配置独立保留。
 
 ## 跨来源对账（0.8.0）
+
+v0.8.2修复：支付宝通道支持A级候选；禁止两个钱包确认排重；分类修改后关联转待复核，旧不合法确认也会恢复计数。C级不能直接确认。导入默认自动检测格式，保存后显示候选数并可直接去对账；同文件换账户/格式不再静默重复计入；删除演示数据后不重新播种100笔。[第五轮处理与验证](docs/ROUND5_RESPONSE.md)。
 
 演示空间新增“生成演示账单”（0.8.1）：自选起始月份、连续月数、每月支出笔数、金额范围和收入，可选转账/退款，默认追加或确认替换所选月份。完成后直接查看账本，不需要自己准备数据；个人空间不提供该入口。[使用与验证](docs/DEMO_GENERATOR.md)。
 

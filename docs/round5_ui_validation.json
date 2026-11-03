@@ -1,0 +1,12 @@
+{
+  "data": "synthetic only",
+  "auto_scan": true,
+  "confirmed_expense_cents": 6000,
+  "category_changed_expense_cents": 8000,
+  "category_status": "needs_review",
+  "auto_detect_wechat": true,
+  "post_import_cta": true,
+  "C_confirm_disabled": true,
+  "horizontal_clipping": [],
+  "callback_errors": []
+}

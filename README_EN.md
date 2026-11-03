@@ -12,6 +12,8 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
+Version 0.8.1 adds Generate demo statements inside the demo workspace: choose start month, 1–12 months, 1–500 expenses per month, amount range, monthly income, optional transfers/refunds, and append or explicitly confirmed month replacement. Generation is local and atomic, keeps source batches, refreshes the selected month, and cannot target the personal ledger. [Usage and validation](docs/DEMO_GENERATOR.md).
+
 Create accounts and dated funding declarations in Settings, then select an account (or explicitly Unspecified) and format when importing. WeChat CSV and a bounded bank-template-v1 XLSX are supported alongside generic import. All A/B/C candidates require manual confirmation. The wallet representative counts once; funding legs remain in the source ledger. Split restores counts; reruns preserve user decisions, and explicit reopening is available.
 
 Settings provides a separate synthetic six-row demo: expense 120 -> confirm 60 -> split 120 yuan, with a pending 10-yuan refund and a 500-yuan transfer excluded from income/expense. Pending refunds are not deducted: these are not final net-expense figures. Overview, budget, QA, insights, planning estimates and the web prototype share the same projection.

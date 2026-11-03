@@ -8,11 +8,13 @@
 
 ## Windows 安装
 
-从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.8.0-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
+从 [Releases](https://github.com/Jeffspdf/AI-finance-assistant/releases/latest) 下载 `AIFinanceHelper-0.8.1-Setup-x64.exe`，退出旧版后安装。从桌面或开始菜单打开，无需 Python。ZIP 便携版须完整解压，不能只复制 EXE。安装包未签名，可能出现未知发布者提示。
 
 顶部选择演示空间或我的账本。首次演示默认最近有数据月份；个人账本初始为空。私有数据目录保留为 `%LOCALAPPDATA%\ShiguangLedger`，保证旧版升级兼容，卸载默认保留。设置提供当前空间的一致备份、预览和确认恢复；升级模式4前自动备份。升级后不支持直接运行旧版写库，需要对应旧版的备份才能降级。API配置独立保留。
 
 ## 跨来源对账（0.8.0）
+
+演示空间新增“生成演示账单”（0.8.1）：自选起始月份、连续月数、每月支出笔数、金额范围和收入，可选转账/退款，默认追加或确认替换所选月份。完成后直接查看账本，不需要自己准备数据；个人空间不提供该入口。[使用与验证](docs/DEMO_GENERATOR.md)。
 
 设置中先建立账户和支付绑定；导入时选微信 CSV、银行模板 v1 XLSX 或通用格式，并选择账户或明确标未指定。账本 → 跨来源对账 → 查看来源 → 人工确认同笔消费。确认前不改金额；确认后钱包消费代表计一次，银行资金腿仍留在账本；可拆分恢复，也可明确“重新核对”。
 

@@ -1,0 +1,15 @@
+{
+  "data": "synthetic only",
+  "months": [
+    "2024-02",
+    "2024-03"
+  ],
+  "rows_added": 14,
+  "batches": 1,
+  "double_click_did_not_duplicate": true,
+  "cancel_replace_preserved_rows": true,
+  "personal_unchanged": true,
+  "native_scale": 1.5,
+  "horizontal_clipping": [],
+  "callback_errors": []
+}

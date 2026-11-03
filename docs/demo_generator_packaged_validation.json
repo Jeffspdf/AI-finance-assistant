@@ -1,0 +1,13 @@
+{
+  "data": "synthetic only",
+  "months": [
+    "2024-02",
+    "2024-03"
+  ],
+  "generated_rows": 14,
+  "expense_cents": 9872,
+  "replacement_removed": 7,
+  "replacement_added": 8,
+  "personal_unchanged": true,
+  "execution": "actual packaged Windows EXE"
+}

@@ -26,6 +26,7 @@ from finance.desktop_review import ReviewFeatures
 from finance.desktop_round2 import RoundTwo
 from finance.conversation import ConversationFeatures
 from finance.desktop_m1a import M1Features
+from finance.desktop_demo import DemoGeneratorFeatures
 from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form
 enable_dpi_awareness()
 
@@ -38,7 +39,7 @@ BLUE = '#0f766e'
 GREEN = '#0f766e'
 
 
-class Desktop(M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
+class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
     def __init__(self):
         super().__init__()
         init_scale(self)
@@ -451,6 +452,10 @@ class Desktop(M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
         self.label(self.main,short_titles[page],20,bold=True)
         subtitle = '问题文本发送至你配置的接口；账单查询与金额由本机代码处理。' if page == 'assistant' and self.model_client else titles[page][1]
         self.label(self.main, subtitle, 10, MUTED)
+        if self.mode=='demo':
+            demo_actions=tk.Frame(self.main,bg=BG);demo_actions.pack(fill='x',pady=px((0,6)))
+            self.button(demo_actions,'生成演示账单',self.demo_generator_window)
+            self.label(demo_actions,'自选月份和金额 · 本地生成合成数据',10,MUTED)
         if page in ('home','records','budget_page','plan','assistant'):
             refund=self.store.pending_refunds(self.selected_month if page in ('home','records','budget_page') else None)
             if refund['count']:
@@ -823,6 +828,12 @@ if __name__ == '__main__':
                 app.update();time.sleep(.01)
             assert not getattr(app,'chat_busy',False)
             assert '结余为' in app.answer.cget('text')
+            from finance.demo_generator import verify_generator
+            generator_report=verify_generator(DATA_DIR)
+            (DATA_DIR/'demo-generator-self-test.json').write_text(json.dumps(generator_report,ensure_ascii=False,indent=2),encoding='utf-8')
+            app.show('home');app.demo_generator_window();app.update()
+            assert app.demo_generator_dialog.winfo_exists()
+            app.demo_generator_dialog.destroy()
             (DATA_DIR / 'self-test.ok').write_text('Desktop smoke test passed', encoding='utf-8')
             app.destroy()
         else:

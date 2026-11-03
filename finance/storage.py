@@ -74,27 +74,30 @@ class Store(Reconciliation):
 
     def import_statement(self,result):
         """Commit provenance, issues and transactions together, even an all-invalid file."""
+        with self.connect() as db:return self._import_statement(db,result)
+
+    def _import_statement(self,db,result):
+        """Also used by the demo generator inside its replacement transaction."""
         if not result.document:raise ValueError('此预览没有来源信息，请重新使用导入入口解析')
         doc=result.document;document_id='DOC-'+doc['sha256'];batch_id='BATCH-'+uuid.uuid4().hex
-        with self.connect() as db:
-            account=doc.get('account_id')
-            if account and not db.execute('SELECT 1 FROM accounts WHERE id=?',(account,)).fetchone():raise ValueError('所选账户已不存在')
-            if account and doc['channel'] in ('微信','银行'):
-                selected=db.execute('SELECT * FROM accounts WHERE id=?',(account,)).fetchone()
-                if (doc['channel']=='微信' and (selected['type']!='wallet' or selected['channel']!='微信')) or (doc['channel']=='银行' and selected['type']=='wallet'):
-                    raise ValueError('账单格式与所选账户类型不一致，请重新选择')
-            db.execute('INSERT OR IGNORE INTO source_documents(id,sha256,filename,channel,account_id,parser_version) VALUES (?,?,?,?,?,?)',
-                       (document_id,doc['sha256'],doc['filename'],doc['channel'],account,doc['parser_version']))
-            db.execute("INSERT INTO import_batches(id,document_id,account_id,parser_version,status) VALUES (?,?,?,?,'committing')",(batch_id,document_id,account,doc['parser_version']))
-            raw_ids={}
-            for raw in result.raw_rows:
-                raw_id=document_id+'-'+str(raw['row_no']);raw_ids[raw['row_no']]=raw_id
-                db.execute('INSERT OR IGNORE INTO raw_rows(id,document_id,row_no,raw_json,parse_status) VALUES (?,?,?,?,?)',
-                           (raw_id,document_id,raw['row_no'],json.dumps(raw['fields'],ensure_ascii=False),raw['parse_status']))
-            rows=[dict(r,source_document_id=document_id,raw_row_id=raw_ids[r['source_row']],import_batch_id=batch_id,account_id=account) for r in result.rows]
-            added,duplicates,conflicts=self._insert_rows(db,rows)
-            db.execute("UPDATE import_batches SET status='committed',finished_at=CURRENT_TIMESTAMP,added=?,duplicates=?,conflicts=?,issues_json=? WHERE id=?",(added,duplicates,len(conflicts),json.dumps(result.issues+conflicts,ensure_ascii=False),batch_id))
-            audit(db,'batch_imported',batch_id,{'document':document_id,'added':added,'duplicates':duplicates,'conflicts':len(conflicts)})
+        account=doc.get('account_id')
+        if account and not db.execute('SELECT 1 FROM accounts WHERE id=?',(account,)).fetchone():raise ValueError('所选账户已不存在')
+        if account and doc['channel'] in ('微信','银行'):
+            selected=db.execute('SELECT * FROM accounts WHERE id=?',(account,)).fetchone()
+            if (doc['channel']=='微信' and (selected['type']!='wallet' or selected['channel']!='微信')) or (doc['channel']=='银行' and selected['type']=='wallet'):
+                raise ValueError('账单格式与所选账户类型不一致，请重新选择')
+        db.execute('INSERT OR IGNORE INTO source_documents(id,sha256,filename,channel,account_id,parser_version) VALUES (?,?,?,?,?,?)',
+                   (document_id,doc['sha256'],doc['filename'],doc['channel'],account,doc['parser_version']))
+        db.execute("INSERT INTO import_batches(id,document_id,account_id,parser_version,status) VALUES (?,?,?,?,'committing')",(batch_id,document_id,account,doc['parser_version']))
+        raw_ids={}
+        for raw in result.raw_rows:
+            raw_id=document_id+'-'+str(raw['row_no']);raw_ids[raw['row_no']]=raw_id
+            db.execute('INSERT OR IGNORE INTO raw_rows(id,document_id,row_no,raw_json,parse_status) VALUES (?,?,?,?,?)',
+                       (raw_id,document_id,raw['row_no'],json.dumps(raw['fields'],ensure_ascii=False),raw['parse_status']))
+        rows=[dict(r,source_document_id=document_id,raw_row_id=raw_ids[r['source_row']],import_batch_id=batch_id,account_id=account) for r in result.rows]
+        added,duplicates,conflicts=self._insert_rows(db,rows)
+        db.execute("UPDATE import_batches SET status='committed',finished_at=CURRENT_TIMESTAMP,added=?,duplicates=?,conflicts=?,issues_json=? WHERE id=?",(added,duplicates,len(conflicts),json.dumps(result.issues+conflicts,ensure_ascii=False),batch_id))
+        audit(db,'batch_imported',batch_id,{'document':document_id,'added':added,'duplicates':duplicates,'conflicts':len(conflicts)})
         return added,duplicates,conflicts
 
     def import_batches(self):

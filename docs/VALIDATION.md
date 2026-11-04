@@ -1,5 +1,7 @@
 # Validation record — 2026-11-01
 
+Milestone closeout, 2026-11-04: [ninth-review assessment](ROUND9_RESPONSE.md) accepts M1a at v0.8.5 and corrects the claim that old invalid merchant rules have no management entry. A new synthetic GUI replay verifies the existing list and selected deletion; two relevant existing tests passed. Runtime code is unchanged. The complete-suite count remains247; the full suite/packaged results below are their original observed runs, not claimed as rerun in this documentation-only closeout.
+
 Latest: [v0.8.5 eighth-review assessment and F1–F4](ROUND8_RESPONSE.md), **247 tests passed**. Includes actual Streamlit column/row constraints, read-only legacy conflict discovery and snapshot confirmation/final checks, with a real hardlink retention case. Dedicated GUI and packaged-EXE evidence are recorded there. All new data is synthetic; no personal ledger or paid model was used.
 
 Final code `686a6c7` passed [remote Tests](https://github.com/Jeffspdf/AI-finance-assistant/actions/runs/41670611996). The actual0.8.5 EXE detected the published version with an explicit latest-version status and downloaded all 37,737,239 installer bytes with SHA256 matching official metadata and the local artifact. [Network evidence](packaged_update_network_v085.json). No installed-client replacement, code-signing or clean-VM certification is inferred.

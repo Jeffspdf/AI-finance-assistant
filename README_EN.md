@@ -12,6 +12,8 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
+M1a is accepted at v0.8.5 for the tested import formats, manual decisions, shared projection, category domains, explicit maintenance and legacy/snapshot visibility. The existing learned-rule manager already lists and deletes old rules; invalid income/expense rules are ignored during import. Refund netting remains a later M2 milestone. See [ninth-review assessment and closeout](docs/ROUND9_RESPONSE.md).
+
 Version 0.8.5 implements review F1–F4: read-only discovery of legacy category conflicts across all source months, exact-ID navigation and explicit correction; kind-filtered web manual editing; snapshot identity checks across confirmation and before deletion; and clear scan/write/manual-confirmation boundaries. The file checks reduce races, without claiming atomic protection against a hostile local process. See [assessment and evidence](docs/ROUND8_RESPONSE.md).
 
 Version 0.8.4 evaluates the seventh review before implementing E1–E3: disjoint income/expense/transfer categories, explicit selected-group repair, and repair-history/snapshot management. Legacy income/expense category conflicts are preserved until an explicit valid edit. Read-only dialogs do not scan; writable dialogs still scan on entry. Snapshots can be previewed and individually deleted after confirmation, with no automatic pruning. Development smoke tests launch the known build directly; releases remain unsigned. See [assessment and evidence](docs/ROUND7_RESPONSE.md).

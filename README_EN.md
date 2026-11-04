@@ -4,6 +4,8 @@
 
 A local Windows application for student spending analysis, budgets, and explainable savings planning. Tkinter is the delivered desktop UI; Streamlit remains a web prototype. Optional compatible Chat Completions providers suggest categories and parse bounded questions. All money calculations run in deterministic Python code.
 
+**M2 development branch**: only [M2-1 migration and read-only refund validation](docs/M2_1_ACCEPTANCE.md) is implemented. It upgrades test databases to schema 5, but has no net projection or refund UI. Use a separate test data directory, not your personal ledger. Stable v0.8.5 uses schema 4 and cannot open the upgraded database. No new installer is released; v0.9.0 requires M2-5 acceptance.
+
 ## Run
 
 Use Windows x64 and Python 3.12 with Tk. Create a virtual environment, install `requirements.txt`, then run `python desktop.py`. End users can install the EXE from Releases without Python. Builds are unsigned. Quit before upgrading. Application data remains in `%LOCALAPPDATA%\ShiguangLedger` for backward compatibility and is retained by uninstall.
@@ -12,7 +14,7 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
-M2 preparation: [gap analysis and implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md) records the confirmed cash-date default and net-based budgets with gross still visible. Refund netting is not implemented in the client yet. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
+M2 implementation: the user approved the [gap analysis and implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md), with the cash-date default and net-based budgets while retaining gross. Only M2-1 is implemented; client refund netting remains pending. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
 
 M1a is accepted at v0.8.5 for the tested import formats, manual decisions, shared projection, category domains, explicit maintenance and legacy/snapshot visibility. The existing learned-rule manager already lists and deletes old rules; invalid income/expense rules are ignored during import. Refund netting remains a later M2 milestone. See [ninth-review assessment and closeout](docs/ROUND9_RESPONSE.md).
 

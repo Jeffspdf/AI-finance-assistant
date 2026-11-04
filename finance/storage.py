@@ -71,6 +71,13 @@ class Store(Reconciliation,BackupManagement):
     def import_rows(self, rows):
         with self.connect() as db:return self._insert_rows(db,rows)
 
+    def validate_refund_link(self,refund_txn_id,original_txn_id,amount_cents=None):
+        """M2-1 foundation: read-only validation, without confirming or deducting."""
+        from .refund_rules import validate_refund_link
+        with self.connect(read_only=True) as db:
+            db.execute('BEGIN')  # One snapshot across sources, groups and existing decisions.
+            return validate_refund_link(db,refund_txn_id,original_txn_id,amount_cents)
+
     def category_conflicts(self):
         """Expose invalid legacy classifications, including non-counting source legs."""
         frame=self.source_transactions()

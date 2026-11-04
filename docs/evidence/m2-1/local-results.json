@@ -1,0 +1,90 @@
+{
+  "stage": "M2-1 only; awaiting user checkpoint before M2-2",
+  "timestamp": "2026-11-04T13:37:22.740133+08:00",
+  "branch": "m2/refund-net",
+  "base_commit": "d56850c29fb4458ec6a27a2b36b3abab779cb46b",
+  "stable_release": "v0.8.5 / schema 4",
+  "development_schema": 5,
+  "data": "synthetic only; no personal ledger or API key accessed",
+  "pytest": {
+    "tests": 322,
+    "previous": 260,
+    "m2_1": 62,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 27.506,
+    "timestamp": "2026-11-04T13:34:36.697640+08:00",
+    "command": "python -m pytest -q"
+  },
+  "migration": {
+    "before_version": 4,
+    "after_version": 5,
+    "added_tables": [
+      "ledger_settings",
+      "refund_links"
+    ],
+    "all_old_schema_objects_unchanged": true,
+    "all_old_rows_unchanged": true,
+    "v4_history_row_unchanged": true,
+    "backup_matches_pre_migration": true,
+    "v4_checksum": "3d9f13acb3466e8dd9201768cad876f374292d9d4fbf2d0a79ebfb4f19053a93",
+    "history": [
+      {
+        "version": 4,
+        "applied_at": "2026-11-04 00:00:00",
+        "checksum": "3d9f13acb3466e8dd9201768cad876f374292d9d4fbf2d0a79ebfb4f19053a93"
+      },
+      {
+        "version": 5,
+        "applied_at": "2026-11-04 05:37:22",
+        "checksum": "db4d84a66b90a0fd7cfa95f2af74a34c62290eb911301baff5904f2ba64243cc"
+      }
+    ],
+    "basis": "cash",
+    "integrity_check": "ok",
+    "foreign_key_violations": 0,
+    "gross_expense_cents": 10000,
+    "pending_refunds": {
+      "count": 1,
+      "amount_cents": 3000
+    },
+    "source_rows": 4
+  },
+  "desktop_source_smoke": {
+    "status": "passed",
+    "m1a": {
+      "data": "synthetic only",
+      "before_cents": 12000,
+      "confirmed_cents": 6000,
+      "split_cents": 12000,
+      "pending_refund_cents": 1000,
+      "transfer_cents": 50000,
+      "source_rows": 6,
+      "automatic": false,
+      "checks": [
+        "overview",
+        "ledger",
+        "budget",
+        "question",
+        "planning_estimate",
+        "link_evidence",
+        "split_persistence"
+      ]
+    },
+    "console_note": "Desktop smoke also emitted \"can't open file for write !\" without a Python error; root cause not identified; no claim of warning-free GUI certification"
+  },
+  "packaged_exe": "not built or tested for M2-1; scheduled for M2-5",
+  "gates": {
+    "G-M2": "M2-1 engineering checks passed; M2-2..5 pending",
+    "G-DATA": "not run; real samples and participants unavailable"
+  },
+  "source_sha256": {
+    "finance/migrations.py": "b0c49aba50d34f3710346c40c4ae444f30c36435674e1c5f87bd9a1cca387ff4",
+    "finance/storage.py": "4d942da68c943e65d963d8bda7b01007f22f2279e1439523295d4d179bc90713",
+    "finance/refund_rules.py": "d27f2bf8136f4040d3e68d95a5bf2bb496cae8a7774211571c426164582a7b09",
+    "tests/m2_v4_fixture.py": "9c397824b9f12f51b2035015a869e06b505b4728a4014c1d7d600e777fc4824c",
+    "tests/test_m2_1.py": "8c65ec4143cd77f1976e55b15fbe6ff3a084dc12086552afc10fc529ac7dccc0"
+  },
+  "migration_diff_sha256": "7937df37193a7735f0627de05d017ae7ce6cd0aa82e5671790d06a1bd272c78d"
+}

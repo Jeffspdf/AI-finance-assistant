@@ -1,0 +1,141 @@
+{
+  "timestamp": "2026-11-04T19:59:42.012428+08:00",
+  "product_commit": "75c9ce5",
+  "baseline_commit": "18336e5411f32921d6785c2d0364c53f90790993",
+  "scope": "standalone experiment tool preflight only; no target GUI or admin capture",
+  "tests": {
+    "total": 25,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 3.574,
+    "cases": [
+      {
+        "name": "test_a_is_direct_and_b_has_a_matched_sham_control",
+        "status": "passed"
+      },
+      {
+        "name": "test_plan_refuses_out_of_scope_repetition_counts[0]",
+        "status": "passed"
+      },
+      {
+        "name": "test_plan_refuses_out_of_scope_repetition_counts[9]",
+        "status": "passed"
+      },
+      {
+        "name": "test_plan_refuses_out_of_scope_repetition_counts[21]",
+        "status": "passed"
+      },
+      {
+        "name": "test_plan_refuses_out_of_scope_repetition_counts[100]",
+        "status": "passed"
+      },
+      {
+        "name": "test_visible_gui_requires_explicit_flag_before_any_source_or_process_access",
+        "status": "passed"
+      },
+      {
+        "name": "test_internal_child_cannot_accidentally_start_gui_without_released_gate",
+        "status": "passed"
+      },
+      {
+        "name": "test_prepare_and_changed_baseline_never_launch_a_process",
+        "status": "passed"
+      },
+      {
+        "name": "test_outer_shell_warning_is_not_counted_as_historical_append_reproduction",
+        "status": "passed"
+      },
+      {
+        "name": "test_cleanup_induced_output_is_retained_but_not_counted_as_baseline_reproduction",
+        "status": "passed"
+      },
+      {
+        "name": "test_archive_cannot_escape_session[../escape]",
+        "status": "passed"
+      },
+      {
+        "name": "test_archive_cannot_escape_session[C:/escape]",
+        "status": "passed"
+      },
+      {
+        "name": "test_archive_cannot_escape_session[folder/../../escape]",
+        "status": "passed"
+      },
+      {
+        "name": "test_archive_cannot_escape_session[//server/share/escape]",
+        "status": "passed"
+      },
+      {
+        "name": "test_warning_detection_handles_powershell_encoding_and_case[utf-8]",
+        "status": "passed"
+      },
+      {
+        "name": "test_warning_detection_handles_powershell_encoding_and_case[utf-16-le]",
+        "status": "passed"
+      },
+      {
+        "name": "test_zero_exit_does_not_hide_missing_marker_timeout_or_failed_ime[False-False-original-True]",
+        "status": "passed"
+      },
+      {
+        "name": "test_zero_exit_does_not_hide_missing_marker_timeout_or_failed_ime[True-True-original-True]",
+        "status": "passed"
+      },
+      {
+        "name": "test_zero_exit_does_not_hide_missing_marker_timeout_or_failed_ime[True-False-ime_disabled-False]",
+        "status": "passed"
+      },
+      {
+        "name": "test_procmon_import_scopes_pids_and_never_treats_csv_as_native_stack",
+        "status": "passed"
+      },
+      {
+        "name": "test_unrecognized_procmon_export_cannot_silently_look_like_zero_failures",
+        "status": "passed"
+      },
+      {
+        "name": "test_analyze_keeps_unrun_phase_and_partial_evidence_visible",
+        "status": "passed"
+      },
+      {
+        "name": "test_failed_containment_keeps_gate_closed_and_cleans_only_own_waiting_process",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_powershell_append_pid_and_log_capture_with_synthetic_console_child",
+        "status": "passed"
+      },
+      {
+        "name": "test_native_timeout_terminates_only_the_owned_gated_process_family",
+        "status": "passed"
+      }
+    ]
+  },
+  "native_preflight": [
+    "synthetic console child through real PowerShell *>>; actual Python PID sampled; existing log prefix retained",
+    "owned gated process family terminated on timeout; no Tk or finance GUI imported",
+    "deliberate SYNTHETIC_CONTROL warning validates recording only; not historical reproduction"
+  ],
+  "procmon_powershell": "syntax parsed only; no administrator capture or live start/stop validation",
+  "prepared_session_local_name": ".test_warning_experiment_abc_v1",
+  "prepared_plan": {
+    "A": 10,
+    "B_normal_wrapper": 10,
+    "B_ime_disabled_wrapper": 10
+  },
+  "powershell_pinned_to_original_host": true,
+  "A_executed": 0,
+  "B_executed": 0,
+  "C_captured": false,
+  "product_sources_unchanged": true,
+  "candidate_hashes_unchanged": true,
+  "full_501_regression_rerun": false,
+  "root_cause_closed": false,
+  "formal_release_approved": false,
+  "source_sha256_lf": {
+    "scripts/warning_experiment.py": "801370b097b5462ad6b4845646f62da4e896b0d6d49ba4fd4c7d1e4ae4df6f84",
+    "scripts/capture_warning_procmon.ps1": "2d0c3b7566111c76324c057c78d1212cceba2b48ad52c9f39ad8c0c1579ed6d9",
+    "tests/test_warning_experiment.py": "48a8edad9c9c9465507282557a98c67e8ca59f5164fa17863b4d816062a94082"
+  }
+}

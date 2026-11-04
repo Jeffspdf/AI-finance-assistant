@@ -72,6 +72,27 @@ try {
 
 ## 关口保持
 
+### 后台续查（用户正在看视频期间）
+
+本轮没有发送鼠标键盘输入、激活窗口、启动可见测试界面或请求 UAC，也没有启停 Procmon 采集。产品源码和候选包哈希未变；以下是新增的诊断证据，不是重新执行了501项回归。
+
+**找回了原命令中的一个覆盖缺口**：M2-2/M2-3逐进程使用的是 PowerShell `*>>` **追加**重定向，而前轮合并对照是 `*>` **覆盖**。原命令输出、退出码及验收标志见[历史执行记录摘录](evidence/m2-warning-background/original-invocations.json)，没有把工具日志中的既有结论当作新运行结果。
+
+随后比较 append/overwrite/split 三种方式，每种分别跑标准输出/错误正控制、无窗口 Tcl、desktop仅导入、M1a服务自检、第八轮服务自检：**15次均退出0，无目标警告**。[无窗口对照](evidence/m2-warning-background/no-window-controls.json)
+
+原先的“完整GUI自检 + `*>>`”组合本轮尚未覆盖。隔离桌面权限探测返回 WinError 5，因此没有退回可见GUI测试。Procmon进程仍存在，但本轮未核实采集状态，也未声称获得PML/调用栈。
+
+**新的最强来源候选是本机搜狗组件**，理由如下：
+
+- 本机五个搜狗二进制中存在完整相同的 `can't open file for write !` 字符串：SGTool.exe、userNetSchedule.exe、PicFace.dll、PicFace64.dll、SGPicFaceTool.exe。相邻常量包括配置头/校验等写入错误，但没有据此猜测具体失败路径。
+- 已对SGTool.exe、userNetSchedule.exe、PicFace64.dll三个文件核验有效的搜狗数字签名、版本和SHA256；只读检查，未加载或手动运行这些组件。[文件身份、偏移及脱敏记录](evidence/m2-warning-background/input-method-candidate.json)
+- 项目既有debug.log在两次原运行附近出现含sogou的`kernel_parameter_setter.cc`、`t_skinfilemap.cpp`记录；原始输入法日志未上传。
+- 两份警告日志最后写入时间分别在GUI成功标志之后约347.589ms、358.415ms，而M1a成功标志分别再晚约1083.669ms、1065.222ms。另测无输出子进程对已有文件执行`*>>`不会改变其内容或修改时间。[时序及控制](evidence/m2-warning-background/historical-timing.json)
+
+**这些仍不构成运行时归因**：常量存在不等于该DLL当时输出了它；日志修改时间也不是进程起止时间，无法单独区分GUI收尾与下一进程早期。当前表述是“强候选”，不是“已证明来自搜狗”，更不是“已经排除产品”。[后台续查汇总](evidence/m2-warning-background/results.json)
+
+下一次可进行前台诊断时，优先在原GUI自检+追加输出组合中记录每个PID及起止时刻，结合Procmon确认实际发出模块、写入路径和拒绝原因。可准备只作用于诊断子进程的IME对照，必须在创建窗口前设置，并记录是否真的改变了加载模块；不改变用户全局输入法或客户端中文录入功能。微软说明[ImmDisableIME](https://learn.microsoft.com/en-us/windows/desktop/api/Imm/nf-imm-immdisableime)作用于线程/进程且须在首个顶层窗口创建前调用；具体对照尚未执行，不能据文档宣布验证通过。
+
 M2-5 的 501 项回归及八组实际 EXE 结果仍只覆盖 `75c9ce5` 工程候选。本次没有产品源码变化，不需要假装又做了一次完整回归；本次新增的是诊断证据。当前候选产物哈希继续匹配原验收包，未替换稳定版。
 
 尚未取得警告对应的失败路径或原生调用栈，因此不做产品补丁、不以“未复现”关闭警告。干净 VM 安装/升级/卸载、签名及 G-DATA 也未因本次排查完成；它们与警告归因分开记录。

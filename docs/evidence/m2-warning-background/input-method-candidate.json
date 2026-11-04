@@ -1,0 +1,288 @@
+{
+  "status": "strong candidate; runtime emitter and failed path unconfirmed",
+  "executed_any_input_method_component": false,
+  "scan": {
+    "files": 157,
+    "matching_literal_files": [
+      {
+        "file": "SGTool.exe",
+        "term": "can't open file for write",
+        "encoding": "utf-8",
+        "offset": 14743380
+      },
+      {
+        "file": "userNetSchedule.exe",
+        "term": "can't open file for write",
+        "encoding": "utf-8",
+        "offset": 8030520
+      },
+      {
+        "file": "PicFace.dll",
+        "term": "can't open file for write",
+        "encoding": "utf-8",
+        "offset": 3382128
+      },
+      {
+        "file": "PicFace64.dll",
+        "term": "can't open file for write",
+        "encoding": "utf-8",
+        "offset": 4111616
+      },
+      {
+        "file": "SGPicFaceTool.exe",
+        "term": "can't open file for write",
+        "encoding": "utf-8",
+        "offset": 3704308
+      }
+    ]
+  },
+  "verified_files": [
+    {
+      "Name": "SGTool.exe",
+      "Bytes": 20146560,
+      "Version": "16.8.0.5351",
+      "Company": "Sogou.com",
+      "Signature": "Valid",
+      "Signer": "CN=\"Beijing Sogou Technology Development Co., Ltd.\", O=\"Beijing Sogou Technology Development Co., Ltd.\", S=Beijing, C=CN",
+      "SHA256": "248ee8474a7ddd5dabe7271dee745945cf586125d7498f52f711e89dd06e00f5"
+    },
+    {
+      "Name": "userNetSchedule.exe",
+      "Bytes": 9744768,
+      "Version": "16.8.0.5351",
+      "Company": "Sogou.com",
+      "Signature": "Valid",
+      "Signer": "CN=\"Beijing Sogou Technology Development Co., Ltd.\", O=\"Beijing Sogou Technology Development Co., Ltd.\", S=Beijing, C=CN",
+      "SHA256": "2c206cf691f6300096d6c2a0c46f2128a1e5d39cf95c1dd447f94a42f87d234b"
+    },
+    {
+      "Name": "PicFace64.dll",
+      "Bytes": 4812672,
+      "Version": "1.1.0.3184",
+      "Company": "Sogou.com",
+      "Signature": "Valid",
+      "Signer": "CN=\"Beijing Sogou Technology Development Co., Ltd.\", O=\"Beijing Sogou Technology Development Co., Ltd.\", S=Beijing, C=CN",
+      "SHA256": "e1080025d95c214dd8e2d4bc59df36ad841e5b67cd8a8a872c215718a5757eb0"
+    }
+  ],
+  "relevant_native_log_metadata": [
+    {
+      "timestamp_local": "1104/133542.951",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/133542.951",
+      "source": "t_skinfilemap.cpp",
+      "line": 56,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/133542.951",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/133542.951",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/133542.977",
+      "source": "t_skinfilemap.cpp",
+      "line": 63,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/133542.977",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/133542.977",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/133543.005",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/133545.598",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/140600.816",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/140600.816",
+      "source": "t_skinfilemap.cpp",
+      "line": 56,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/140600.816",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/140600.816",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/140600.856",
+      "source": "t_skinfilemap.cpp",
+      "line": 63,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/140600.856",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/140600.856",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/140600.884",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/140602.923",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/144904.410",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/144904.410",
+      "source": "t_skinfilemap.cpp",
+      "line": 56,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/144904.410",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/144904.410",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/144904.437",
+      "source": "t_skinfilemap.cpp",
+      "line": 63,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/144904.437",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/144904.437",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/144904.462",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/144906.514",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/171654.142",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/171654.143",
+      "source": "t_skinfilemap.cpp",
+      "line": 56,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/171654.143",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/171654.143",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/171654.163",
+      "source": "t_skinfilemap.cpp",
+      "line": 63,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/171654.163",
+      "source": "t_skinfilemap.cpp",
+      "line": 65,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/171654.163",
+      "source": "t_skinfilemap.cpp",
+      "line": 67,
+      "mentions_sogou": false
+    },
+    {
+      "timestamp_local": "1104/171654.184",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    },
+    {
+      "timestamp_local": "1104/171659.960",
+      "source": "kernel_parameter_setter.cc",
+      "line": 150,
+      "mentions_sogou": true
+    }
+  ],
+  "native_log_target_warning_present": false,
+  "interpretation": "Exact literal presence and nearby native log activity do not prove which module emitted the historical warning"
+}

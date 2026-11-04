@@ -1,0 +1,60 @@
+{
+  "timestamp": "2026-11-04T19:14:08.016613+08:00",
+  "product_commit": "75c9ce5",
+  "replay_commit": "18336e5",
+  "root_cause": "UNRESOLVED",
+  "formal_release": "NOT APPROVED",
+  "new_finding": "Historical commands used *>> append per process; earlier merged controls used *> overwrite, not this exact topology",
+  "new_controls": {
+    "total": 15,
+    "modes": [
+      "append",
+      "overwrite",
+      "split"
+    ],
+    "checks": [
+      "stdout/stderr positive control",
+      "Tcl interpreter without Tk windows",
+      "desktop import only",
+      "M1a backend self-test",
+      "round8 backend self-test"
+    ],
+    "exit_failures": 0,
+    "target_warning_hits": 0
+  },
+  "uncovered": "Original full GUI --self-test plus *>> is not covered by these no-window controls",
+  "noninterference": {
+    "mouse_or_keyboard_input": false,
+    "window_activation": false,
+    "visible_test_windows_started": false,
+    "uac_requested": false,
+    "procmon_capture_started_or_stopped": false
+  },
+  "isolation_attempt": {
+    "input_desktop_query": "access denied",
+    "private_desktop_creation": "access denied; WinError 5",
+    "SwitchDesktop_called": false,
+    "interpretation": "No fallback to visible GUI tests"
+  },
+  "additional_inspection": {
+    "venv_launcher_and_powershell_binaries": 540,
+    "complete_warning_string_matches": 0,
+    "interpretation": "Not a proof of origin"
+  },
+  "procmon": {
+    "process_still_present": true,
+    "capture_state": "not verified; not controlled in this run",
+    "saved_configuration": "only EULA/filter-dialog layout value names observed; not evidence of correct capture filters"
+  },
+  "product_source_and_candidate_hashes_unchanged": true,
+  "full_regression_rerun": false,
+  "next": "When foreground work is allowed, collect the original GUI plus append combination with Procmon and separate phase timestamps; do not close the gate on non-reproduction",
+  "component_candidate": {
+    "source": "Sogou components",
+    "matching_literal_binaries": 5,
+    "signature_verified_binaries": 3,
+    "status": "runtime attribution and failed path pending"
+  },
+  "timing_inference": "Prioritize GUI completion/next-process boundary; precise producer still needs PID evidence",
+  "release_gate": "still NOT APPROVED; no main merge, v0.9.0 tag or Release"
+}

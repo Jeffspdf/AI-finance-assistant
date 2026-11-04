@@ -1,0 +1,27 @@
+{
+  "rows": [
+    {
+      "stage": "m2_2",
+      "log_modified_utc": "2026-11-04T06:06:03.216269+00:00",
+      "gui_marker_utc": "2026-11-04T06:06:02.868680+00:00",
+      "m1a_marker_utc": "2026-11-04T06:06:04.299938+00:00",
+      "log_after_gui_marker_ms": 347.589,
+      "m1a_marker_after_log_ms": 1083.669
+    },
+    {
+      "stage": "m2_3",
+      "log_modified_utc": "2026-11-04T06:49:06.813188+00:00",
+      "gui_marker_utc": "2026-11-04T06:49:06.454773+00:00",
+      "m1a_marker_utc": "2026-11-04T06:49:07.878410+00:00",
+      "log_after_gui_marker_ms": 358.415,
+      "m1a_marker_after_log_ms": 1065.222
+    }
+  ],
+  "silent_append_control": {
+    "child_exit": 0,
+    "bytes_before": 24,
+    "bytes_after": 24,
+    "last_write_timestamp_unchanged": true
+  },
+  "interpretation": "Output last-write falls after GUI success marker and before M1a success marker. Marker times are not process start/exit times; cannot alone distinguish GUI teardown from the next process early startup."
+}

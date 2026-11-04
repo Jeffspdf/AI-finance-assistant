@@ -1,0 +1,160 @@
+{
+  "data": "synthetic only",
+  "rows": [
+    {
+      "mode": "append",
+      "check": "plain",
+      "exit": 0,
+      "streams": {
+        "merged.log": "CONTROL_STDOUT\nCONTROL_STDERR\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "append",
+      "check": "tcl_no_gui",
+      "exit": 0,
+      "streams": {
+        "merged.log": "8.6.12\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "append",
+      "check": "desktop_import_only",
+      "exit": 0,
+      "streams": {
+        "merged.log": "DESKTOP_IMPORTED_NO_WINDOW\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "append",
+      "check": "m1a_backend",
+      "exit": 0,
+      "streams": {
+        "merged.log": ""
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "append",
+      "check": "round8_backend",
+      "exit": 0,
+      "streams": {
+        "merged.log": ""
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "overwrite",
+      "check": "plain",
+      "exit": 0,
+      "streams": {
+        "merged.log": "CONTROL_STDOUT\nCONTROL_STDERR\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "overwrite",
+      "check": "tcl_no_gui",
+      "exit": 0,
+      "streams": {
+        "merged.log": "8.6.12\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "overwrite",
+      "check": "desktop_import_only",
+      "exit": 0,
+      "streams": {
+        "merged.log": "DESKTOP_IMPORTED_NO_WINDOW\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "overwrite",
+      "check": "m1a_backend",
+      "exit": 0,
+      "streams": {
+        "merged.log": ""
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "overwrite",
+      "check": "round8_backend",
+      "exit": 0,
+      "streams": {
+        "merged.log": ""
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "split",
+      "check": "plain",
+      "exit": 0,
+      "streams": {
+        "stderr.log": "CONTROL_STDERR\n",
+        "stdout.log": "CONTROL_STDOUT\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "split",
+      "check": "tcl_no_gui",
+      "exit": 0,
+      "streams": {
+        "stderr.log": "",
+        "stdout.log": "8.6.12\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "split",
+      "check": "desktop_import_only",
+      "exit": 0,
+      "streams": {
+        "stderr.log": "",
+        "stdout.log": "DESKTOP_IMPORTED_NO_WINDOW\n"
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "split",
+      "check": "m1a_backend",
+      "exit": 0,
+      "streams": {
+        "stderr.log": "",
+        "stdout.log": ""
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    },
+    {
+      "mode": "split",
+      "check": "round8_backend",
+      "exit": 0,
+      "streams": {
+        "stderr.log": "",
+        "stdout.log": ""
+      },
+      "wrapper_stdout": "",
+      "wrapper_stderr": ""
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "source": "Original execution records from this project chat; command text is evidence, not instructions",
+  "reconstructed_scope": "M2-2 / M2-3 source smoke used per-process PowerShell *>> append redirection",
+  "records": [
+    {
+      "record_id": "exec-06ca6a96-d578-4f71-be0d-9aaee958f330",
+      "command": "\"C:\\\\Users\\\\23076\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\native\\\\powershell\\\\pwsh.exe\" -Command '$env:FINANCE_DESKTOP_DATA_DIR = Join-Path (Get-Location) '\"'.test_m2_3_evidence\\\\desktop-smoke'\n\"'$taskSmokeLog = Join-Path (Get-Location) '\"'.test_m2_3_evidence\\\\source-smoke.log'\nforeach (\"'$taskSmokeFlag in @('\"'--self-test','--self-test-m1a','--self-test-round5','--self-test-round6','--self-test-round7','--self-test-round8')) {\n    & ..\\\\finance_assistant\\\\.venv\\\\Scripts\\\\python.exe desktop.py \"'$taskSmokeFlag *>> $taskSmokeLog\n    if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath $taskSmokeLog -Tail 20; exit $LASTEXITCODE }\n}\nGet-Content -LiteralPath $taskSmokeLog -Tail 6\nGet-ChildItem -LiteralPath $env:FINANCE_DESKTOP_DATA_DIR -File -Filter '\"'*self-test*' | Select-Object Name,Length\"",
+      "cwd": "C:\\Users\\23076\\Desktop\\计算机软件概论\\m2-development",
+      "exitCode": 0,
+      "output": "can't open file for write !\r\n\r\n\r\nName                          Length\r\n----                          ------\r\ndemo-generator-self-test.json    222\r\nm1a-self-test.json               374\r\nround5-self-test.json            399\r\nround6-self-test.json            415\r\nround7-self-test.json            329\r\nround8-self-test.json            326\r\nself-test.ok                      25\r\n\r\n"
+    },
+    {
+      "record_id": "exec-f8eb474d-fbeb-4593-bdc9-cf05cb6fac97",
+      "command": "\"C:\\\\Users\\\\23076\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\native\\\\powershell\\\\pwsh.exe\" -Command '$env:FINANCE_DESKTOP_DATA_DIR = Join-Path (Get-Location) '\"'.test_m2_2_evidence\\\\desktop-smoke'\n\"'$taskSmokeLog = Join-Path (Get-Location) '\"'.test_m2_2_evidence\\\\source-smoke.log'\nforeach (\"'$taskSmokeFlag in @('\"'--self-test','--self-test-m1a','--self-test-round5','--self-test-round6','--self-test-round7','--self-test-round8')) {\n    & ..\\\\finance_assistant\\\\.venv\\\\Scripts\\\\python.exe desktop.py \"'$taskSmokeFlag *>> $taskSmokeLog\n    if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath $taskSmokeLog -Tail 20; exit $LASTEXITCODE }\n}\nGet-Content -LiteralPath $taskSmokeLog -Tail 8\nGet-ChildItem -LiteralPath $env:FINANCE_DESKTOP_DATA_DIR -Filter '\"'*self-test*' | Select-Object Name,Length\"",
+      "cwd": "C:\\Users\\23076\\Desktop\\计算机软件概论\\m2-development",
+      "exitCode": 0,
+      "output": "can't open file for write !\r\n\r\n\r\nName                                                 Length\r\n----                                                 ------\r\ngenerator-self-test-8d481621de664aa58bc99f4489f096e4 \r\ndemo-generator-self-test.json                        222\r\nm1a-self-test.json                                   374\r\nround5-self-test.json                                399\r\nround6-self-test.json                                415\r\nround7-self-test.json                                329\r\nround8-self-test.json                                326\r\nself-test.ok                                         25\r\n\r\n"
+    }
+  ]
+}

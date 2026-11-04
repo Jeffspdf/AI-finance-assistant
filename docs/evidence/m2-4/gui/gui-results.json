@@ -1,0 +1,64 @@
+{
+  "data": "synthetic only",
+  "execution": "real Tk widgets, Python source; not packaged EXE",
+  "reference_date": "2026-11-04",
+  "checks": [
+    "source/group proposal -> explicit group confirmation -> whole refund confirmation; B button disabled",
+    "same source: cash/original month amounts agree across overview/ledger/budget/QA/plan; basis cancel and audited confirm",
+    "relation/group blockers -> inspect -> targeted repair -> actual source edit -> group reopen -> explicit reconfirm; blocker revoke exit",
+    "negative historical average -> no automatic future budget; explicit nonnegative inputs required"
+  ],
+  "layout_checks": [
+    {
+      "name": "refund_tab_0",
+      "size": [
+        1530,
+        1230
+      ],
+      "horizontal_spill": []
+    },
+    {
+      "name": "refund_tab_1",
+      "size": [
+        1530,
+        1230
+      ],
+      "horizontal_spill": []
+    },
+    {
+      "name": "refund_tab_2",
+      "size": [
+        1530,
+        1230
+      ],
+      "horizontal_spill": []
+    },
+    {
+      "name": "actionable_review",
+      "size": [
+        1530,
+        1230
+      ],
+      "horizontal_spill": []
+    }
+  ],
+  "cash": {
+    "home": -3000,
+    "ledger": -3000,
+    "budget_used": -3000,
+    "budget_remaining": 13000,
+    "qa": -3000,
+    "plan_average": 3500
+  },
+  "original": {
+    "october_home": 0,
+    "october_ledger": 0,
+    "october_budget": 0,
+    "october_qa": 0,
+    "september_home": 7000,
+    "plan_average": 7000
+  },
+  "callback_errors": [],
+  "ui_scale": 1.5,
+  "basis_switch_audits": 2
+}

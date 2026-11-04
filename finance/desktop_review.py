@@ -14,7 +14,7 @@ from .ui_theme import BG,MUTED,PRIMARY as GREEN,DANGER,Meter
 class ReviewFeatures:
     def review_initialize(self):
         self.dismissed_alerts=set()
-        records=self.store.transactions()
+        records=self.store.spending_view()
         if 'month' not in self.preferences and not records.empty:
             self.selected_month=max(records.date.str[:7])
         if self.mode=='demo' and not records.empty:
@@ -45,10 +45,10 @@ class ReviewFeatures:
         self.button(controls,'复制上月预算',self.copy_previous_budget)
         self.button(controls,'按近三月均值建议',self.propose_budgets)
         self.label(form,'零预算仍可保存；没有记录不表示没有消费。提醒仅在应用内显示。',9,MUTED)
-        report=budget_report(self.store.transactions(),month,self.store.budgets(month))
+        report=budget_report(self.store.spending_view(),month,self.store.budgets(month))
         self.budget_rows=report.to_dict('records')
         if report.empty:self.label(self.main,'先设置一项分类预算。',12)
-        self.budget_tree=self.table(self.main,['分类','预算','已支出','剩余','使用率','超支'],[[r['分类'],f"{r['预算']:,.2f}",f"{r['已支出']:,.2f}",f"{r['剩余']:,.2f}",f"{r['使用率']:.1f}%" if r['使用率'] is not None else '零预算',f"{r['超支']:,.2f}"] for r in self.budget_rows],5)
+        self.budget_tree=self.table(self.main,['分类','预算','净支出','剩余','使用率','超支'],[[r['分类'],f"{r['预算']:,.2f}",f"{r['已支出']:,.2f}",f"{r['剩余']:,.2f}",f"{r['使用率']:.1f}%" if r['使用率'] is not None else '零预算',f"{r['超支']:,.2f}"] for r in self.budget_rows],5)
         self.budget_tree.bind('<<TreeviewSelect>>',self.budget_evidence)
         self.budget_details=tk.Frame(self.main,bg=BG);self.budget_details.pack(fill='both',expand=True)
         if self.budget_rows:self.budget_tree.selection_set(self.budget_tree.get_children()[0]);self.budget_evidence()
@@ -69,7 +69,7 @@ class ReviewFeatures:
         self.label(self.budget_details,category+' · 支出依据（点击下方按钮进入账本追溯）',12,bold=True)
         controls=tk.Frame(self.budget_details,bg=BG);controls.pack(fill='x')
         self.button(controls,'查看对应账单与源记录',lambda:self.open_category(category,self.budget_month))
-        frame=self.store.transactions();tx=frame[(frame.date.str.startswith(self.budget_month))&(frame.kind=='支出')&(frame.category==category)]
+        frame=self.store.spending_view();tx=frame[(frame.date.str.startswith(self.budget_month))&(frame.kind=='支出')&(frame.category==category)]
         self.table(self.budget_details,['日期','商户','金额','源文件','行号'],[[r.date[:10],r.merchant,yuan(r.amount_cents),r.source_file,r.source_row] for r in tx.itertuples()],4)
         from .evidence import calculation
         trace=calculation('budget','budget.spent_minus_limit',tx,inputs={'month':self.budget_month,'category':category},
@@ -91,7 +91,7 @@ class ReviewFeatures:
 
     def home_budget_alerts(self):
         month=self.selected_month if self.selected_month!='全部月份' else date.today().strftime('%Y-%m')
-        report=budget_report(self.store.transactions(),month,self.store.budgets(month))
+        report=budget_report(self.store.spending_view(),month,self.store.budgets(month))
         if not report.empty:
             self.label(self.main,'分类预算使用 / '+month,12,bold=True)
             for r in report.to_dict('records'):
@@ -103,27 +103,29 @@ class ReviewFeatures:
                 if r['超支']:
                     def dismiss(k=key,w=line):self.dismissed_alerts.add(k);w.destroy()
                     tk.Button(line,text='关闭',command=dismiss,relief='flat',bg=line['bg'],fg=MUTED).pack(side='right')
-                bar=Meter(line,length=160,value=min(100,r['使用率'] or (100 if r['已支出'] else 0)),danger=bool(r['超支']));bar.pack(side='right',padx=px(10))
+                bar=Meter(line,length=160,value=max(0,min(100,r['使用率'] or (100 if r['已支出']>0 else 0))),danger=bool(r['超支']));bar.pack(side='right',padx=px(10))
         self.show_goal_gaps(self.main)
 
     def draw_trend(self):
         from .analytics import overview
-        monthly,_=overview(self.store.transactions())
+        monthly,_=overview(self.store.spending_view())
         monthly=monthly.tail(12)
         if monthly.empty:return
-        self.label(self.main,'月度支出趋势（最近有记录月份，空白月份未视为零）',12,bold=True)
+        from .spending_presenter import basis_label
+        self.label(self.main,'月度净支出趋势 · '+basis_label(self.store.spending_basis()),12,bold=True)
         chart=tk.Canvas(self.main,height=px(200),bg='white',highlightthickness=px(0));chart.pack(fill='x',pady=px(8))
         def draw(_=None):
             chart.delete('all');width=max(px(500),chart.winfo_width());left=px(78);right=width-px(42);top=px(24);bottom=px(162)
-            values=monthly['支出'].tolist();scale=max(max(values)*1.15,1);points=[]
+            values=monthly['支出'].tolist();low=min(0,min(values))*1.15;high=max(1,max(values)*1.15);scale=high-low;points=[]
             for tick in range(4):
                 y=bottom-(bottom-top)*tick/3
                 chart.create_line(left,y,right,y,fill='#eef2f0')
-                chart.create_text(left-px(8),y,text=f'{scale*tick/3:,.0f}',anchor='e',fill=MUTED,font=('Segoe UI', 10))
+                chart.create_text(left-px(8),y,text=f'{low+scale*tick/3:,.0f}',anchor='e',fill=MUTED,font=('Segoe UI', 10))
+            zero=bottom-(0-low)/scale*(bottom-top);chart.create_line(left,zero,right,zero,fill='#94a69c',dash=(3,3))
             chart.create_text(px(14),px(14),text='元',fill=MUTED,font=('Microsoft YaHei UI', 10))
             for i,(_,r) in enumerate(monthly.iterrows()):
                 x=(left+right)/2 if len(values)==1 else left+i*(right-left)/(len(values)-1)
-                y=bottom-r['支出']/scale*(bottom-top);points.extend([x,y])
+                y=bottom-(r['支出']-low)/scale*(bottom-top);points.extend([x,y])
                 dot=chart.create_oval(x-px(4),y-px(4),x+px(4),y+px(4),fill=GREEN,outline='white',width=px(2))
                 if i%max(1,(len(values)+5)//6)==0 or i==len(values)-1:chart.create_text(x,px(182),text=r['月份'],fill=MUTED,font=('Segoe UI', 10))
                 def tooltip(event,text=f"{r['月份']} 支出 ¥{r['支出']:,.2f}"):
@@ -135,15 +137,24 @@ class ReviewFeatures:
         chart.bind('<Configure>',draw);draw()
 
     def estimate_plan(self):
-        try:r=estimate_from_records(self.store.transactions())
+        try:r=estimate_from_records(self.store.spending_view())
         except ValueError as exc:messagebox.showinfo('账单估算',str(exc));return
         income=r['average_income_cents'];expense=r['average_expense_cents']
+        self.plan_estimate=r
+        if r.get('requires_explicit_budget'):
+            self.inputs['每月收入 / 元'].delete(0,'end');self.inputs['每月收入 / 元'].insert(0,f'{income/100:.2f}')
+            for name in ('方案 A 月预算 / 元','方案 B 月预算 / 元'):self.inputs[name].delete(0,'end')
+            self.estimate_note.config(text=f'历史平均净支出 ¥{yuan(expense)}，受退款回流影响。请明确填写非负未来预算，再比较方案；不假定退款持续发生。')
+            self.plan_result.config(text='请明确设置非负未来预算')
+            for label in self.plan_card_labels:label.config(text='请明确设置非负未来预算')
+            return
         for name,value in [('每月收入 / 元',income),('方案 A 月预算 / 元',expense),('方案 B 月预算 / 元',int((Decimal(expense)*Decimal('.9')).quantize(Decimal('1'))))]:
             self.inputs[name].delete(0,'end');self.inputs[name].insert(0,f'{value/100:.2f}')
         self.calculate()
         text='使用完整月份：'+ '、'.join(r['months'])+f"；{r['record_count']} 笔。\n"+'\n'.join(f"{x['month']}：收入 ¥{yuan(x['income_cents'])}，支出 ¥{yuan(x['expense_cents'])}" for x in r['rows'])
-        text+=f"\n平均收入 ¥{yuan(income)}；平均支出 ¥{yuan(expense)}。B 为平均支出的 90%，仅是假设情景。"
-        text+='\n缺失月份：'+('、'.join(r['missing_months']) or '无')+'；不能证明各月账单完整。'
+        from .spending_presenter import basis_label
+        text+=f"\n平均收入 ¥{yuan(income)}；平均净支出 ¥{yuan(expense)}。B 为均值的90%，仅是假设情景。"+basis_label(r['spending_basis'])
+        text+='\n无本口径计入明细的月份：'+('、'.join(r['missing_months']) or '无')+'；可能含退款回溯月份，不能证明各月账单完整。'
         self.estimate_note.config(text=text)
 
     def contribution_window(self):
@@ -180,7 +191,8 @@ class ReviewFeatures:
     def suggest_categories_ui(self):
         if not self.model_client:messagebox.showinfo('AI 分类','请先在设置中启用模型。');return
         store=self.store;model=self.model_client
-        candidates=self.frame[self.frame.category_source=='待确认'].head(20).to_dict('records')
+        sources=self.source_frame if self.page=='records' else self.store.source_transactions()
+        candidates=sources[sources.category_source=='待确认'].head(20).to_dict('records')
         if not candidates:messagebox.showinfo('AI 分类','当前筛选范围内没有待确认分类。');return
         if not messagebox.askyesno('发送分类信息',f'将发送 {len(candidates)} 笔的商户、描述和收支类型给当前模型，不发送金额。是否继续？'):return
         window=tk.Toplevel(self);window.title('AI 分类建议 · 人工核对');set_window_geometry(window, 780, 500);window.configure(bg=BG)

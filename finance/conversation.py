@@ -81,7 +81,7 @@ class ConversationFeatures:
             if messagebox.askyesno('确认预算修改',f'将 {month} 的{category}预算设为 ¥{cents/100:,.2f}？'+('（未指定月份，默认本月）' if period is None else '')):
                 self.store.save_budget(month,category,cents)
                 from .evidence import calculation
-                trace=calculation('action','budget.user_confirmed',self.store.transactions().iloc[:0],
+                trace=calculation('action','budget.user_confirmed',self.store.spending_view().iloc[:0],
                                   inputs={'user_confirmed':True},extra=[dict(type='Budget',id=month+'/'+category,snapshot=dict(month=month,category=category,amount_cents=cents))])
                 self._chat_reply(f'已设置 {month} {category}预算 ¥{cents/100:,.2f}。可在预算页修改。',trace=trace)
             else:self._chat_reply('已取消，预算没有改变。')
@@ -102,7 +102,7 @@ class ConversationFeatures:
         else:
             explicit_month=re.search(r'20\d{2}-(0[1-9]|1[0-2])(?![-\d])',q)
             if explicit_month:self.chat_context[self.mode]=explicit_month.group(0)
-        mode=self.mode;frame=self.frame.copy();budgets=self.qa_budgets(frame);model=self.model_client
+        mode=self.mode;frame=self.store.spending_view();budgets=self.qa_budgets(frame);model=self.model_client
         if model:
             self.chat_busy=True;self.chat_status.config(text='正在核对问题与账单…');self.animate_character('thinking');mailbox=queue.Queue()
             def worker():

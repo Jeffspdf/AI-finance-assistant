@@ -49,6 +49,9 @@ def spending_view(db,source_frame,basis=None):
     if not frame.empty:frame=frame.sort_values(['date','id'],kind='stable').reset_index(drop=True)
     frame.attrs=dict(gross.attrs,projection='spending_view',spending_basis=basis,computed_at=computed_at,
                      algorithm_version=ALGORITHM,refund_decisions=decisions,repair_pending=repair,
+                     source_months=sorted(set(source_frame.date.str[:7])),refund_sources=inventory,
+                     excluded_sources=source_frame.loc[~source_frame.included_in_stats,
+                         ['id','date','merchant','amount_cents','kind','status','source_file','source_row','counting_note']].to_dict('records'),
                      refund_pending=dict(count=sum(r['association_status']!='linked' for r in inventory),
                        amount_cents=sum(r['amount_cents'] for r in inventory if r['association_status']!='linked')))
     return frame

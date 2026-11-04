@@ -1,0 +1,72 @@
+{
+  "violations": [],
+  "scan": "root Python entrypoints and finance/**/*.py; exact source reader function allowances",
+  "protected_money_entrypoints": [
+    "app.py/<module>",
+    "desktop.py/Desktop.home",
+    "desktop.py/Desktop.refresh_records",
+    "desktop.py/Desktop.show",
+    "finance/conversation.py/ConversationFeatures.conversation_ask",
+    "finance/desktop_m1a.py/M1Features.reconciliation_window.refresh",
+    "finance/desktop_refunds.py/RefundFeatures.refund_window.refresh",
+    "finance/desktop_review.py/ReviewFeatures.budget_evidence",
+    "finance/desktop_review.py/ReviewFeatures.budget_page",
+    "finance/desktop_review.py/ReviewFeatures.draw_trend",
+    "finance/desktop_review.py/ReviewFeatures.estimate_plan",
+    "finance/desktop_review.py/ReviewFeatures.home_budget_alerts",
+    "finance/desktop_round2.py/RoundTwo.home_insights",
+    "finance/desktop_round2.py/RoundTwo.import_async.poll",
+    "finance/desktop_round2.py/RoundTwo.propose_budgets",
+    "finance/desktop_round2.py/RoundTwo.show_insight_evidence",
+    "finance/web_refunds.py/render_refunds"
+  ],
+  "purpose_scoped_source_readers": [
+    {
+      "file": "desktop.py",
+      "function": "Desktop.records",
+      "purpose": "editable source ledger"
+    },
+    {
+      "file": "app.py",
+      "function": "_source_records",
+      "purpose": "editable source ledger"
+    },
+    {
+      "file": "finance/desktop_round2.py",
+      "function": "RoundTwo.batch_correct",
+      "purpose": "source IDs for classification"
+    },
+    {
+      "file": "finance/desktop_review.py",
+      "function": "ReviewFeatures.suggest_categories_ui",
+      "purpose": "source IDs for classification"
+    },
+    {
+      "file": "finance/desktop_demo.py",
+      "function": "DemoGeneratorFeatures.demo_generator_window.generate",
+      "purpose": "preview replacement source count"
+    },
+    {
+      "file": "finance/desktop_refunds.py",
+      "function": "RefundFeatures.refund_window.refresh",
+      "purpose": "refund and purchase source selection"
+    },
+    {
+      "file": "finance/web_refunds.py",
+      "function": "render_refunds",
+      "purpose": "refund and purchase source selection"
+    },
+    {
+      "file": "finance/storage.py",
+      "function": "Store.category_conflicts",
+      "purpose": "legacy source classification discovery"
+    },
+    {
+      "file": "finance/m1a_demo.py",
+      "function": "seed_six",
+      "purpose": "isolated engineering sample initialization"
+    }
+  ],
+  "regression_tests": 19,
+  "limits": "AST regression gate with explicit backend SQL/projection trust boundary; not proof against arbitrary dynamic Python"
+}

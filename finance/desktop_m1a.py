@@ -115,11 +115,12 @@ class M1Features:
         state={'rows':[],'tree':None,'scanning':False};mailbox=queue.Queue()
         labels={'candidate':'待确认','confirmed':'已确认','rejected':'已拒绝','split':'已拆分','stale':'候选已过期','needs_review':'待复核'}
         def refresh():
-            f=store.transactions();pending=store.pending_refunds()
-            total.config(text=f'当前消费 ¥{yuan(int(f.loc[f.kind=="支出","amount_cents"].sum()))} · 退款待处理 ¥{yuan(pending["amount_cents"])}（未扣退款，净支出待定）')
+            from .spending_presenter import spending_totals,basis_label
+            f=store.spending_view();values=spending_totals(f)
+            total.config(text=f'消费总额 ¥{yuan(values["gross_cents"])} · 净支出 ¥{yuan(values["net_cents"])} · '+basis_label(f.attrs['spending_basis']))
             for child in holder.winfo_children():child.destroy()
             for child in details.winfo_children():child.destroy()
-            state['rows']=store.reconciliation_groups()[:200]
+            state['rows']=[g for g in store.reconciliation_groups() if g['kind']=='purchase_duplicate'][:200]
             state['tree']=self.table(holder,['状态','等级','金额 / 元','来源','依据'],[['待修复（已恢复计数）' if g['repair_pending'] else labels.get(g['status'],g['status']),g['confidence'],yuan(g['members'][0]['amount_cents']) if g['members'] else '', ' + '.join(r['channel'] for r in g['members']),g['reason']] for g in state['rows']],7)
             state['tree'].bind('<<TreeviewSelect>>',show_details)
             confirm_button.config(state='disabled')

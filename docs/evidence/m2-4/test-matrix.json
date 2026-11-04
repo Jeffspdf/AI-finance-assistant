@@ -1,0 +1,256 @@
+{
+  "data": "synthetic only",
+  "cases": [
+    {
+      "name": "test_basis_switch_requires_explicit_true_confirmation[False]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.103,
+      "status": "passed"
+    },
+    {
+      "name": "test_basis_switch_requires_explicit_true_confirmation[None]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.104,
+      "status": "passed"
+    },
+    {
+      "name": "test_basis_switch_requires_explicit_true_confirmation[1]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.12,
+      "status": "passed"
+    },
+    {
+      "name": "test_basis_switch_requires_explicit_true_confirmation[yes]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.13,
+      "status": "passed"
+    },
+    {
+      "name": "test_basis_switch_is_global_per_space_audited_and_source_immutable",
+      "module": "tests.test_m2_4",
+      "seconds": 0.166,
+      "status": "passed"
+    },
+    {
+      "name": "test_basis_audit_failure_rolls_back_and_readonly_cannot_switch",
+      "module": "tests.test_m2_4",
+      "seconds": 0.113,
+      "status": "passed"
+    },
+    {
+      "name": "test_totals_budget_qa_and_export_share_one_projection[cash--3000]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.164,
+      "status": "passed"
+    },
+    {
+      "name": "test_totals_budget_qa_and_export_share_one_projection[original_purchase_month-0]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.168,
+      "status": "passed"
+    },
+    {
+      "name": "test_gross_query_is_explicit_and_derived_without_changing_net_source",
+      "module": "tests.test_m2_4",
+      "seconds": 0.169,
+      "status": "passed"
+    },
+    {
+      "name": "test_explicit_refund_queries_distinguish_adjustment_basis_from_source_month[cash-30.00]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.154,
+      "status": "passed"
+    },
+    {
+      "name": "test_explicit_refund_queries_distinguish_adjustment_basis_from_source_month[original_purchase_month-0.00]",
+      "module": "tests.test_m2_4",
+      "seconds": 0.166,
+      "status": "passed"
+    },
+    {
+      "name": "test_local_refund_status_queries_do_not_call_a_provider",
+      "module": "tests.test_m2_4",
+      "seconds": 0.148,
+      "status": "passed"
+    },
+    {
+      "name": "test_refund_only_original_month_zero_has_source_evidence_and_no_false_missing",
+      "module": "tests.test_m2_4",
+      "seconds": 0.067,
+      "status": "passed"
+    },
+    {
+      "name": "test_pending_review_and_linked_labels_are_distinct_everywhere",
+      "module": "tests.test_m2_4",
+      "seconds": 0.141,
+      "status": "passed"
+    },
+    {
+      "name": "test_invalid_refund_groups_are_merged_with_relation_blockers_and_reads_are_pure",
+      "module": "tests.test_m2_4",
+      "seconds": 0.14,
+      "status": "passed"
+    },
+    {
+      "name": "test_damaged_context_propagates_generic_review_to_all_current_refund_members",
+      "module": "tests.test_m2_4",
+      "seconds": 0.149,
+      "status": "passed"
+    },
+    {
+      "name": "test_explicit_purchase_role_does_not_fabricate_a_refund_or_change_source_money",
+      "module": "tests.test_m2_4",
+      "seconds": 0.057,
+      "status": "passed"
+    },
+    {
+      "name": "test_negative_history_requires_explicit_future_budget_without_creating_goal_predictions",
+      "module": "tests.test_m2_4",
+      "seconds": 0.172,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_actual_refund_group_and_money_controls_obey_b_contract",
+      "module": "tests.test_m2_4_web",
+      "seconds": 2.186,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_basis_controls_and_all_pages_use_the_same_fixture",
+      "module": "tests.test_m2_4_web",
+      "seconds": 2.872,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_blocker_inspect_repair_and_revoke_are_operable_without_startup_side_effects",
+      "module": "tests.test_m2_4_web",
+      "seconds": 1.46,
+      "status": "passed"
+    },
+    {
+      "name": "test_actual_tk_workflow_in_a_separate_process",
+      "module": "tests.test_m2_4_web",
+      "seconds": 11.343,
+      "status": "passed"
+    },
+    {
+      "name": "test_product_projection_contract",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.38,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def budget(store):\\n    frame=store.transactions()\\n    return frame.amount_cents.sum()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.005,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def overview(store):\\n    getter=store.transactions\\n    return getter().amount_cents.sum()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.006,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def plan(store):\\n    return getattr(store,'transactions')()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.005,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def page(store):\\n    return store.source_transactions().amount_cents.sum()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.003,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def page(db):\\n    return db.execute('SELECT SUM(amount_cents) FROM transactions')\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.004,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def budget(store):\\n    store.spending_view()\\n    raw=store.transactions()\\n    return raw.amount_cents.sum()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.003,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def page(store,db):\\n    return store._source_frame(db).amount_cents.sum()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.004,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def page(store):\\n    method='transactions'\\n    return getattr(store,method)()\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.007,
+      "status": "passed"
+    },
+    {
+      "name": "test_new_product_pages_cannot_bypass_the_projection[def page(pd,db):\\n    return pd.read_sql_query('SELECT * FROM transactions',db)\\n]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.005,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_reader_cannot_start_calculating_money[raw.amount_cents.sum()]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.005,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_reader_cannot_start_calculating_money[alias[alias.kind=='\\u652f\\u51fa'].amount_cents.sum()]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.004,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_reader_cannot_start_calculating_money[overview(alias)]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.005,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_reader_cannot_start_calculating_money[alias.groupby('category').amount_cents.aggregate('sum')]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.004,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_reader_cannot_start_calculating_money[alias.amount_cents.mean()]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.006,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_reader_cannot_start_calculating_money[sum(row.amount_cents for row in alias.itertuples())]",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.004,
+      "status": "passed"
+    },
+    {
+      "name": "test_permitted_source_display_and_net_summary_are_distinct",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.006,
+      "status": "passed"
+    },
+    {
+      "name": "test_source_helper_alias_cannot_feed_a_web_statistic",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.007,
+      "status": "passed"
+    },
+    {
+      "name": "test_deleting_net_entrypoint_is_a_contract_failure",
+      "module": "tests.test_projection_contract",
+      "seconds": 0.005,
+      "status": "passed"
+    }
+  ],
+  "tests_per_module": {
+    "tests.test_m2_4": 18,
+    "tests.test_m2_4_web": 4,
+    "tests.test_projection_contract": 19
+  }
+}

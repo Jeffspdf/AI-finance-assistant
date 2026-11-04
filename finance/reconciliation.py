@@ -162,13 +162,9 @@ class Reconciliation:
     def source_transactions(self):
         """All active source legs, including refunds and excluded funding legs."""
         with self.connect(read_only=True) as db:
-            db.execute('BEGIN');return self._source_frame(db)
-
-    def pending_refunds(self,month=None):
-        rows=self.source_transactions()
-        rows=rows[rows.status=='refund_pending']
-        if month and month!='全部月份':rows=rows[rows.date.str.startswith(month)]
-        return dict(count=len(rows),amount_cents=int(rows.amount_cents.sum()))
+            from .refund_rules import refund_inventory
+            from .spending_presenter import annotate_refund_sources
+            db.execute('BEGIN');return annotate_refund_sources(self._source_frame(db),refund_inventory(db))
 
     def reconciliation_groups(self):
         with self.connect(read_only=True) as db:

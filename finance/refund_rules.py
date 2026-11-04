@@ -186,6 +186,12 @@ def refund_inventory(db,assessed=None):
     for row in db.execute("SELECT id,refund_txn_id,context_json FROM refund_links WHERE status='needs_review'"):
         ids={row['refund_txn_id']}|_snapshot_ids(_decode_context(row['context_json']),'refund')
         for identifier in ids:invalid_reasons[identifier].extend(stored_review_reasons(db,row['id']))
+    # A damaged decision snapshot must not leave other legs of its current group looking ordinary-pending.
+    for group in db.execute("SELECT id FROM link_groups WHERE kind='refund_duplicate' AND status IN ('confirmed','needs_review')"):
+        members=[r[0] for r in db.execute('SELECT transaction_id FROM link_members WHERE group_id=?',(group['id'],))]
+        inherited=[reason for identifier in members for reason in invalid_reasons.get(identifier,[])]
+        if inherited:
+            for identifier in members:invalid_reasons[identifier].extend(['相关退款组待复核，请核对全部来源后重新确认',*inherited])
     events={}
     for row in db.execute("""SELECT t.* FROM transactions t LEFT JOIN import_batches b ON b.id=t.import_batch_id
         WHERE t.status='refund_pending' AND COALESCE(b.status,'')<>'deleted' ORDER BY t.id"""):

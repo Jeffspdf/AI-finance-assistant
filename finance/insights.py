@@ -22,7 +22,7 @@ def make_insights(frame,month,goals=None,contributions=None,today=None):
             now=current[current.category==category];before=old[old.category==category]
             merchant_changes={m:int(now.loc[now.merchant==m,'amount_cents'].sum())-int(before.loc[before.merchant==m,'amount_cents'].sum()) for m in set(now.merchant)|set(before.merchant)}
             biggest=max(merchant_changes,key=lambda m:abs(merchant_changes[m]))
-            percent=f'（{delta/base:+.1%}）' if base else '（上月该类无匹配支出）'
+            percent=f'（{delta/base:+.1%}）' if base>0 else '（上月净额非正，不计算变化比例）'
             cards.append(dict(kind='change',title=category+'较上月'+('增加' if delta>0 else '减少'),value=f'¥{yuan(abs(delta))}',
                               why=f'{month} ¥{yuan(value)} − {previous} ¥{yuan(base)}{percent}。其中商户“{biggest}”变化 ¥{yuan(merchant_changes[biggest])}。仅描述记录差异，不推断原因。',
                               category=category,month=month,ids=now.id.tolist()+before.id.tolist()))
@@ -38,7 +38,7 @@ def make_insights(frame,month,goals=None,contributions=None,today=None):
                 break
     try:estimate=estimate_from_records(frame,today)
     except ValueError:estimate=None
-    if estimate:
+    if estimate and not estimate.get('requires_explicit_budget'):
         available=estimate['average_income_cents']-estimate['average_expense_cents']
         for goal in goals:
             entries=contributions.get(goal['id'])
@@ -65,11 +65,13 @@ def make_insights(frame,month,goals=None,contributions=None,today=None):
             extra.append(dict(type='Goal',id=str(goal['id']),snapshot=dict(goal)))
             extra.extend(dict(type='Contribution',id=str(e.get('id',i)),snapshot=e) for i,e in enumerate(contributions[goal['id']].to_dict('records')))
         card['trace']=calculation('insight','insight.'+card['kind'],evidence_frame,
-                                  inputs=dict(month=month,today=today.isoformat(),assumption='仅已导入记录；未扣待处理退款'),extra=extra)
+                                  inputs=dict(month=month,today=today.isoformat(),assumption='仅已导入记录；只抵扣有效确认退款'),extra=extra)
     return [c for c in cards[:3] if c['trace']['evidence']]
 
 def suggested_budgets(frame,today=None):
     frame=effective_frame(frame)
     today=today or date.today();estimate=estimate_from_records(frame,today)
     expenses=frame[frame.date.str[:7].isin(estimate['months'])&(frame.kind=='支出')]
+    if estimate.get('requires_explicit_budget') or (expenses.groupby('category').amount_cents.sum()<0).any():
+        raise ValueError('历史净支出均值或分类均值为负，受退款回流影响；请明确设置非负未来预算，不自动建议负预算')
     return {c:int((Decimal(int(total))/len(estimate['months'])*Decimal('.9')).quantize(Decimal('1'))) for c,total in expenses.groupby('category').amount_cents.sum().items()}

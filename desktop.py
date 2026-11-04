@@ -27,6 +27,9 @@ from finance.desktop_round2 import RoundTwo
 from finance.conversation import ConversationFeatures
 from finance.desktop_m1a import M1Features
 from finance.desktop_demo import DemoGeneratorFeatures
+from finance.desktop_refunds import RefundFeatures
+from finance.spending_presenter import spending_totals,basis_label,refund_status_summary,refund_status_text
+from finance.evidence import count_records
 from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form
 enable_dpi_awareness()
 
@@ -39,7 +42,7 @@ BLUE = '#0f766e'
 GREEN = '#0f766e'
 
 
-class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
+class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
     def __init__(self):
         super().__init__()
         init_scale(self)
@@ -385,7 +388,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
     def switch_space(self):
         self.mode = 'personal' if self.mode == 'demo' else 'demo'
         self.store = Store(DATA_DIR / (self.mode + '.sqlite3'))
-        if self.mode=='demo' and initialize_demo(self.store):self.selected_month=max(self.store.transactions().date.str[:7])
+        if self.mode=='demo' and initialize_demo(self.store):self.selected_month=max(self.store.spending_view().date.str[:7])
         self.space_label.config(text='我的账本 · 本机数据' if self.mode == 'personal' else '演示空间 · 合成账单')
         self.search_text='';self.category_filter='全部分类'
         self.save_preferences()
@@ -426,7 +429,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.guide_action.config(text=action, command=lambda p=target: self.show(p))
         for child in self.main.winfo_children(): child.destroy()
         self.content_canvas.yview_moveto(0)
-        self.frame = self.store.source_transactions() if page=='records' else self.store.transactions()
+        self.frame = self.store.spending_view()
         titles = {'home': ('把生活记好，把小目标存好。', '财务概览  /  每一笔记录，都让计划更清楚一点。'), 'records': ('好好记账，心里有数。', '交易账本  /  导入、核对与修正，每笔都有来源。'), 'plan': ('给下一个愿望，留点预算。', '储蓄规划  /  试试不同的预算，找到舒服的节奏。'), 'assistant': ('关于钱的小疑问，一起理清。', '本地规则模式  /  回答来自已导入账单，不向外发送数据。')}
         titles['budget_page']=('预算有边界，花钱更安心。','设置分类预算，查看超支和目标缺口。')
         titles['settings']=('按你的习惯，设置小助手。','模型、更新、数据和角色，集中管理。')
@@ -434,7 +437,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.space_picker=ttk.Combobox(header,values=['演示空间','我的账本'],state='readonly',width=12)
         self.space_picker.set('演示空间' if self.mode=='demo' else '我的账本');self.space_picker.pack(side='left',padx=px((0,12)))
         self.space_picker.bind('<<ComboboxSelected>>',lambda _:self.switch_space() if (self.space_picker.get()=='我的账本')!=(self.mode=='personal') else None)
-        months=sorted(set(self.frame.date.str[:7])|{date.today().strftime('%Y-%m')},reverse=True)
+        months=sorted(set(self.frame.attrs.get('source_months',[]))|set(self.frame.date.str[:7])|{date.today().strftime('%Y-%m')},reverse=True)
         if self.selected_month not in ['全部月份',*months]:self.selected_month=months[0]
         if page in ('home','records','budget_page'):
             self.month_picker=ttk.Combobox(header,values=([*months] if page=='budget_page' else ['全部月份',*months]),state='readonly',width=13)
@@ -452,6 +455,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.label(self.main,short_titles[page],20,bold=True)
         subtitle = '问题文本发送至你配置的接口；账单查询与金额由本机代码处理。' if page == 'assistant' and self.model_client else titles[page][1]
         self.label(self.main, subtitle, 10, MUTED)
+        self.label(self.main,basis_label(self.frame.attrs['spending_basis'])+' · 预算按净支出，消费总额同时保留',10,BLUE)
         if self.store.semantic_backup:
             self.label(self.main,'旧记录的转账类型/分类冲突已按原收支类型修正，金额不变，分类标为待确认；修复前已保存备份。',10,'#ae6450').configure(wraplength=px(760))
             self.button(self.main,'查看修复明细与备份',self.semantic_backups_window)
@@ -460,9 +464,11 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
             self.button(demo_actions,'生成演示账单',self.demo_generator_window)
             self.label(demo_actions,'自选月份和金额 · 本地生成合成数据',10,MUTED)
         if page in ('home','records','budget_page','plan','assistant'):
-            refund=self.store.pending_refunds(self.selected_month if page in ('home','records','budget_page') else None)
-            if refund['count']:
-                self.label(self.main,f'退款待处理 {refund["count"]} 笔 / ¥{yuan(refund["amount_cents"])} · 当前支出未扣退款，净支出待定。',10,'#ae6450')
+            summary=refund_status_summary(self.frame.attrs['refund_sources'],self.selected_month if page in ('home','records','budget_page') else None)
+            self.refund_status_label=self.label(self.main,refund_status_text(summary)+'（按实际退款月列流水状态）',10,'#ae6450')
+            self.refund_status_label.configure(wraplength=px(720))
+            actions=tk.Frame(self.main,bg=BG);actions.pack(fill='x')
+            self.button(actions,'退款与待复核',self.refund_window)
         if page == 'assistant':
             self.label(self.main, '已连接模型 · 条件理解与本机计算' if self.model_client else '本地助手 · 无需联网即可查询', 10, GREEN)
         getattr(self, page)()
@@ -479,7 +485,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         if not in_page:
             scroll=ttk.Scrollbar(box,orient='vertical',command=tree.yview);scroll.pack(side='right',fill='y');tree.configure(yscrollcommand=scroll.set)
         for i,name in enumerate(columns):
-            numeric=any(k in name for k in ['金额','收入','支出','结余','预算','剩余','使用率','超支','行号','储蓄'])
+            numeric=any(k in name for k in ['金额','收入','支出','结余','预算','剩余','使用率','超支','行号','储蓄','来源数','笔数'])
             tree.heading(i,text=name,command=lambda c=i:self.sort_table(tree,c))
             tree.column(i,width=px(110),minwidth=px(70),anchor='e' if numeric else 'w',stretch=True)
         tree.pack(fill='both',expand=True)
@@ -501,45 +507,50 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
 
     def home(self):
         f = self.frame
-        income = int(f.loc[f.kind == '收入', 'amount_cents'].sum())
-        expense = int(f.loc[f.kind == '支出', 'amount_cents'].sum())
+        totals=spending_totals(f);self.home_totals=totals
+        income=totals['income_cents'];expense=totals['net_cents']
         band = tk.Frame(self.main, bg=BG); band.pack(fill='x', pady=px(20))
-        for title, value, color in [('期间收入', income, INK), ('期间支出', expense, INK), ('期间结余', income-expense, GREEN)]:
+        for title, value, color in [('期间收入', income, INK), ('净支出', expense, INK), ('期间结余', income-expense, GREEN)]:
             card = tk.Frame(band, bg='#e8f4ec' if title == '期间结余' else 'white', padx=px(20), pady=px(20)); card.pack(side='left', fill='x', expand=True, padx=px((0, 12)))
             self.label(card, title, 10, MUTED)
             self.label(card, '¥ '+yuan(value), 23, color, True)
+        self.label(self.main,f'消费总额 ¥{yuan(totals["gross_cents"])} − 已确认抵扣 ¥{yuan(totals["refund_cents"])} = 净支出 ¥{yuan(expense)}',11,BLUE)
         self.home_insights()
         if f.empty:
             empty=tk.Frame(self.main,bg='white',padx=px(20),pady=px(12));empty.pack(fill='x')
-            self.label(empty,'这个时间范围还没有账单。导入记录后即可分析。',12)
+            self.label(empty,'当前口径本期无计入明细；已导入退款可能待处理、待复核或归入原消费月。' if self.selected_month in f.attrs.get('source_months',[]) else '这个时间范围还没有账单。导入记录后即可分析。',12).configure(wraplength=px(800))
             self.button(empty,'导入账单',self.import_file)
             self.button(empty,'查看全部月份',self.select_all_months)
         self.home_budget_alerts()
         self.draw_trend()
         monthly, categories = overview(f)
-        self.label(self.main, '消费结构 / '+self.selected_month, 14, bold=True)
+        self.label(self.main, '净支出结构 / '+self.selected_month+' · '+basis_label(f.attrs['spending_basis']), 14, bold=True)
         canvas = tk.Canvas(self.main, height=px(180), bg='white', highlightthickness=px(0))
         canvas.pack(fill='x', pady=px(10))
         top = categories.head(5)
-        maxval = max(top['支出'].max(), 1) if len(top) else 1
+        maxval = max(top['支出'].abs().max(), 1) if len(top) else 1
         def draw_categories(event=None):
             canvas.delete('all')
             width=max(500,logical(canvas.winfo_width()));bar_end=width-245
             for i, (_, row) in enumerate(top.iterrows()):
                 y=24+i*32
                 canvas.create_text(px(20),px(y),text=row['分类'],anchor='w',fill=INK,font=point_font())
-                canvas.create_rectangle(px(110),px(y-6),px(bar_end),px(y+6),fill='#f0f5f2',outline='')
-                canvas.create_rectangle(px(110),px(y-6),px(110+float(row['支出'])/maxval*(bar_end-110)),px(y+6),fill=[BLUE,'#75b9a2','#9ac6b4','#e6c997','#b1b6d8'][i],outline='')
-                canvas.create_text(px(bar_end+20),px(y),text=f"¥ {row['支出']:,.2f}   ·   {row['占比']}%",anchor='w',fill=MUTED,font=point_font())
+                zero=(110+bar_end)/2;span=(bar_end-110)/2
+                canvas.create_line(px(zero),px(y-12),px(zero),px(y+12),fill='#b9c6c0')
+                canvas.create_rectangle(px(zero),px(y-6),px(zero+float(row['支出'])/maxval*span),px(y+6),fill=BLUE if row['支出']>=0 else '#b5816b',outline='')
+                share='占比不适用' if __import__('pandas').isna(row['占比']) else f"{row['占比']}%"
+                canvas.create_text(px(bar_end+20),px(y),text=f"¥ {row['支出']:,.2f} · {share}",anchor='w',fill=MUTED,font=point_font())
                 hit=canvas.create_rectangle(px(5),px(y-13),px(width-5),px(y+13),fill='',outline='')
                 canvas.tag_bind(hit,'<Button-1>',lambda event,c=row['分类']:self.open_category(c))
                 canvas.tag_bind(hit,'<Enter>',lambda event:canvas.config(cursor='hand2'))
         canvas.bind('<Configure>',draw_categories);draw_categories()
         self.label(self.main, '月度收支', 14, bold=True)
         self.table(self.main, ['月份', '收入 / 元', '支出 / 元', '结余 / 元'], [[r['月份'], f"{r['收入']:,.2f}", f"{r['支出']:,.2f}", f"{r['结余']:,.2f}"] for _, r in monthly.iterrows()], 4)
-        self.label(self.main, f'{"演示空间" if self.mode == "demo" else "个人空间"} · {len(f)} 笔记录 · 转账不计入收支 · 结余不等于账户余额', 9, MUTED)
+        self.label(self.main, f'{"演示空间" if self.mode == "demo" else "个人空间"} · {count_records(f)} 笔记录 · 退款调整不增加消费笔数 · 结余不等于账户余额', 9, MUTED)
 
     def records(self):
+        self.source_frame=self.store.source_transactions()
+        if self.selected_month!='全部月份':self.source_frame=self.source_frame[self.source_frame.date.str.startswith(self.selected_month)].copy()
         bar = tk.Frame(self.main, bg=BG); bar.pack(fill='x')
         self.button(bar, '＋ 导入账单', self.import_file)
         self.button(bar, '查看源记录', self.source)
@@ -555,12 +566,14 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.button(more,'跨来源对账',self.reconciliation_window)
         self.button(more,'导入批次',self.import_history_window)
         self.button(more,'历史分类待修正',self.category_conflicts_window)
+        self.button(more,'导出净额明细',self.export_spending)
         filters=tk.Frame(self.main,bg=BG);filters.pack(fill='x',pady=px(8))
         self.search_var=tk.StringVar(value=self.search_text)
         ttk.Entry(filters,textvariable=self.search_var,width=32).pack(side='left',padx=px((0,10)))
         self.filter_picker=ttk.Combobox(filters,values=['全部分类','待确认分类',*CATEGORIES],state='readonly',width=12)
         self.filter_picker.set(self.category_filter);self.filter_picker.pack(side='left')
-        self.result_count=tk.Label(filters,bg=BG,fg=MUTED);self.result_count.pack(side='right')
+        self.result_count=tk.Label(self.main,bg=BG,fg=MUTED,justify='left',anchor='w',wraplength=px(720));self.result_count.pack(fill='x')
+        self.result_count.bind('<Configure>',lambda event:self.result_count.configure(wraplength=max(px(240),event.width-px(8))))
         self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源','统计口径'],[],12)
         self.tree.bind('<Double-1>',lambda _:self.edit_selected())
         self.tree.bind('<<TreeviewSelect>>',self.update_category_choices)
@@ -579,7 +592,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
 
     def refresh_records(self):
         self.search_text=self.search_var.get().strip();self.category_filter=self.filter_picker.get()
-        frame=self.frame
+        frame=self.source_frame
         amount_match=__import__('re').fullmatch(r'([<>]=?)(\d+(?:\.\d{1,2})?)',self.search_text)
         if amount_match:
             op,value=amount_match.groups()
@@ -599,9 +612,10 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         self.page_info.config(text=f'第 {self.record_page+1} / {pages} 页 · 每页 200 笔')
         for item in self.tree.get_children():self.tree.delete(item)
         for i,r in enumerate(self.record_rows):self.tree.insert('','end',iid=str(i),values=[r['date'][:10],r['merchant'],r['kind'],yuan(r['amount_cents']),r['category'],r['category_source'],r['counting_note']],tags=('alternate',) if i%2 else ())
-        counted=frame[frame.included_in_stats]
-        cost=int(counted.loc[counted.kind=='支出','amount_cents'].sum())
-        self.result_count.config(text=f'{total} 笔来源 · 计入消费 ¥{yuan(cost)}')
+        net=self.store.spending_view()
+        if self.selected_month!='全部月份':net=net[net.date.str.startswith(self.selected_month)].copy()
+        totals=spending_totals(net);self.record_totals=totals
+        self.result_count.config(text=f'{total} 笔来源 · 本期净支出 ¥{yuan(totals["net_cents"])} · 消费总额 ¥{yuan(totals["gross_cents"])}（摘要不随源记录搜索改变）')
         self.update_category_choices()
 
     def update_category_choices(self,event=None):
@@ -659,7 +673,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
         if expected_path and Path(expected_path).resolve()!=Path(self.store.path).resolve():
             messagebox.showinfo('空间已切换','请先回到打开待修正列表时的空间，再定位或编辑。');return False
         self.selected_month='全部月份';self.search_text='';self.category_filter='全部分类';self.show('records')
-        ordered=self.frame.sort_values('date',ascending=False).id.tolist()
+        ordered=self.source_frame.sort_values('date',ascending=False).id.tolist()
         if identifier not in ordered:
             messagebox.showinfo('记录已变化','该来源已删除或不在当前空间，请刷新待修正列表。');return False
         self.record_page=ordered.index(identifier)//200;self.refresh_records()
@@ -803,6 +817,7 @@ class Desktop(DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,Rev
     def settings(self):
         if self.model_notice:self.label(self.main,self.model_notice,10,'#ae6450').configure(wraplength=px(760))
         items=[('大模型接口','可记住本机加密密钥及启用状态，重启和更新后自动恢复。',self.show_model_settings,'配置模型'),
+               ('退款与统计口径','管理退款、待复核及全局口径；预算使用净支出。',self.refund_window,'退款与统计口径'),
                ('版本与更新',f'当前 v{APP_VERSION} · 检查新版与下载安装包。',self.show_updates,'检查更新'),
                ('账户与支付绑定','声明钱包与银行卡账户，建立带有效期的支付绑定；不会自动合并交易。',self.account_window,'管理账户与绑定'),
                ('备份与恢复','当前空间一致备份；恢复前预览并再次快照，保留旧数据身份。',self.backup_window,'备份与恢复'),
@@ -875,7 +890,7 @@ if __name__ == '__main__':
             restored=app.model_repository.load()
             assert (app.model_client is not None)==restored.enabled
             assert app.model_key==restored.api_key
-            assert len(app.store.transactions()) >= 100
+            assert len(app.store.spending_view()) >= 100
             for page in ['records','budget_page','plan','assistant','settings','home']:
                 app.show(page); app.update()
             app.switch_space(); app.update()

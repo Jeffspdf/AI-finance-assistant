@@ -73,6 +73,50 @@ class Refunds:
         if self.read_only:raise ValueError('只读账本不能修改退款决定')
         db.execute('BEGIN IMMEDIATE')
 
+    def spending_basis(self):
+        with self.connect(read_only=True) as db:
+            row=db.execute("SELECT value FROM ledger_settings WHERE key='spending_basis'").fetchone()
+            if not row:raise ValueError('缺少口径设置，请核对账本')
+            from .spending_presenter import basis_label
+            basis_label(row['value']);return row['value']
+
+    def set_spending_basis(self,basis,*,confirmed=False):
+        from .spending_presenter import basis_label
+        basis_label(basis)
+        if confirmed is not True:raise ValueError('请先确认：将重算当前空间所有净额，不改原始账单')
+        with self.connect() as db:
+            self._begin_refund_write(db)
+            old=db.execute("SELECT value FROM ledger_settings WHERE key='spending_basis'").fetchone()
+            if not old:raise ValueError('缺少口径设置，请核对账本')
+            if old['value']==basis:return False
+            db.execute("UPDATE ledger_settings SET value=?,updated_at=CURRENT_TIMESTAMP WHERE key='spending_basis'",(basis,))
+            updated=db.execute("SELECT updated_at FROM ledger_settings WHERE key='spending_basis'").fetchone()[0]
+            audit(db,'spending_basis_changed','spending_basis',dict(old=old['value'],new=basis,changed_at=updated))
+        return True
+
+    def confirm_purchase_role(self,identifier,*,reason):
+        from .categories import validate_kind_category
+        reason=_reason(reason)
+        with self.connect() as db:
+            self._begin_refund_write(db)
+            row=db.execute('SELECT * FROM transactions WHERE id=?',(identifier,)).fetchone()
+            if not row or row['status']!='review' or row['kind']!='支出':raise ValueError('只能明确复核中的支出来源为原消费')
+            validate_kind_category(row['kind'],row['category'])
+            self.invalidate_groups(db,identifier,'用户明确确认原消费角色')
+            db.execute("UPDATE transactions SET status='normal' WHERE id=?",(identifier,))
+            _source(db,identifier,'purchase')
+            audit(db,'purchase_role_confirmed',identifier,dict(old=dict(row),new_status='normal',reason=reason))
+
+    def refund_work_items(self):
+        """Merge relation blockers and invalid refund groups; do not conflate group-only issues with global relation locks."""
+        rows=[dict(kind='link',**row) for row in self.refund_confirmation_blockers()]
+        for group in self.reconciliation_groups():
+            if group['kind']!='refund_duplicate' or group['status']!='needs_review':continue
+            rows.append(dict(kind='group',id=group['id'],reasons=[group.get('review_reason') or '退款组已失效，请核对来源后重新确认'],
+                member_ids=[r['id'] for r in group['members']],repair_pending=group['repair_pending'],
+                actions=['inspect_sources','repair_invalid_groups','split_group']))
+        return rows
+
     def refund_sources(self):
         with self.connect(read_only=True) as db:
             db.execute('BEGIN');return refund_inventory(db)

@@ -2,6 +2,7 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import os
+import json
 import pandas as pd
 import streamlit as st
 from finance.storage import Store
@@ -10,20 +11,24 @@ from finance.categories import CATEGORIES,category_options
 from finance.analytics import overview, budget_report, plan_savings, yuan, month_records
 from finance.qa import answer_question, month_shift
 from finance.llm import ModelClient
+from finance.spending_presenter import spending_totals,basis_label,refund_status_summary,refund_status_text,net_export_csv,answer_export_csv
+from finance.evidence import count_records
+from finance.analytics import estimate_from_records
+from finance.web_refunds import render_refunds
 
 ROOT=Path(__file__).resolve().parent
-st.set_page_config(page_title='清账 · 个人理财助手', page_icon='🌿', layout='wide')
+st.set_page_config(page_title='AI理财小助手', page_icon='🌿', layout='wide')
 try: TODAY=datetime.now(ZoneInfo('Asia/Shanghai')).date()
 except Exception: TODAY=date.today()
 DEMO_MONTH=month_shift(TODAY,-1)
 if 'workspace' not in st.session_state: st.session_state.workspace='演示数据'
 
 with st.sidebar:
-    st.title('清账')
+    st.title('AI理财小助手')
     st.caption('看懂支出，规划储蓄')
     workspace=st.radio('数据空间',['演示数据','我的账单'],key='workspace')
     st.caption('两个空间独立保存，演示不会混入你的账单。')
-    page=st.radio('工作台',['财务概览','导入与分类','预算与提醒','储蓄方案','有依据问答','使用说明'])
+    page=st.radio('工作台',['财务概览','导入与分类','预算与提醒','储蓄方案','有依据问答','退款与口径','使用说明'])
     st.divider()
     st.caption('本地模式 · 人民币 · 不连接银行')
     with st.expander('可选 AI 理解与分类'):
@@ -42,15 +47,20 @@ if enabled and consent:
     try: model=ModelClient(base,model_name,key,enabled=True)
     except ValueError as exc: st.sidebar.error(str(exc))
 
-store=Store(Path(os.getenv('FINANCE_DATA_DIR',str(ROOT/'data')))/('demo.sqlite3' if workspace=='演示数据' else 'personal.sqlite3'))
+ledger_path=Path(os.getenv('FINANCE_DATA_DIR',str(ROOT/'data')))/('demo.sqlite3' if workspace=='演示数据' else 'personal.sqlite3')
+stores=st.session_state.setdefault('ledger_stores',{})
+if str(ledger_path) not in stores:stores[str(ledger_path)]=Store(ledger_path)
+store=stores[str(ledger_path)]
 from finance.demo import initialize_demo
 if workspace=='演示数据' and initialize_demo(store,TODAY):
     store.save_budget(DEMO_MONTH,'餐饮',10000)
     store.save_budget(DEMO_MONTH,'交通',15000)
-tx=store.transactions()
-pending_refund=store.pending_refunds()
-if pending_refund['count']:st.warning(f'退款待处理 {pending_refund["count"]} 笔 / ¥{yuan(pending_refund["amount_cents"])}。当前支出未扣退款，净支出待定。')
-record_version=hash(tuple(tx[['id','category','kind','amount_cents']].itertuples(index=False,name=None)))
+tx=store.spending_view()
+st.caption(basis_label(tx.attrs['spending_basis'])+' · 预算按净支出，消费总额同时保留')
+status_summary=refund_status_summary(tx.attrs['refund_sources'])
+if status_summary['pending']['count'] or status_summary['needs_review']['count']:st.warning('当前空间退款流水：'+refund_status_text(status_summary))
+elif status_summary['linked']['count']:st.caption('当前空间退款流水：'+refund_status_text(status_summary))
+record_version=hash((tx.attrs['spending_basis'],tuple(tx[['id','category','kind','amount_cents','date','merchant']].itertuples(index=False,name=None)),json.dumps(tx.attrs['refund_sources'],sort_keys=True)))
 if st.session_state.get('record_version')!=record_version:
     st.session_state.pop('answer',None)
     st.session_state['record_version']=record_version
@@ -62,6 +72,10 @@ def view_records(frame):
         renamed=renamed.drop(columns=['amount_cents'])
     return renamed.rename(columns={'id':'交易 ID','external_id':'原始交易 ID','date':'日期','merchant':'商户','description':'描述','kind':'收支','category':'分类','category_source':'分类依据','channel':'平台','source_file':'来源文件','source_row':'源文件行号'})
 
+def _source_records(store):
+    """Source editing only; all monetary summaries continue to use tx/spending_view."""
+    return store.source_transactions()
+
 st.caption(f'{workspace} / {page}')
 if page=='财务概览':
     st.title('你的钱，有迹可循')
@@ -69,22 +83,21 @@ if page=='财务概览':
     if tx.empty:
         st.info('还没有账单。请到“导入与分类”上传文件，或在左侧切换到演示数据。')
     else:
-        months=sorted(tx.date.str[:7].unique(),reverse=True)
+        months=sorted(set(tx.date.str[:7])|set(tx.attrs['source_months']),reverse=True)
         month=st.selectbox('查看月份',months)
         subset=month_records(tx,month)
-        income=int(subset.loc[subset.kind=='收入','amount_cents'].sum())
-        expense=int(subset.loc[subset.kind=='支出','amount_cents'].sum())
+        values=spending_totals(subset);income=values['income_cents'];expense=values['net_cents']
         a,b,c,d=st.columns(4)
-        a.metric('收入',f'¥ {yuan(income)}'); b.metric('支出',f'¥ {yuan(expense)}'); c.metric('结余',f'¥ {yuan(income-expense)}'); d.metric('交易记录',len(subset))
-        st.caption('收入 − 支出 = 结余。转账不计入收支；这里只反映已导入记录，不代表银行余额。')
+        a.metric('收入',f'¥ {yuan(income)}'); b.metric('净支出',f'¥ {yuan(expense)}'); c.metric('结余',f'¥ {yuan(income-expense)}'); d.metric('交易记录',count_records(subset))
+        st.caption(f'消费总额 ¥{yuan(values["gross_cents"])} − 已确认抵扣 ¥{yuan(values["refund_cents"])} = 净支出 ¥{yuan(expense)}。转账不计收支，退款调整不增加笔数。')
         trend,_=overview(tx); _,cats=overview(subset)
         left,right=st.columns([1.3,1])
         with left:
-            st.subheader('月度趋势')
+            st.subheader('月度趋势 · '+basis_label(tx.attrs['spending_basis']))
             st.line_chart(trend.set_index('月份')[['收入','支出','结余']])
             st.dataframe(trend,hide_index=True,width='stretch')
         with right:
-            st.subheader('支出去向')
+            st.subheader('净支出去向 · '+basis_label(tx.attrs['spending_basis']))
             if cats.empty: st.info('本月没有支出记录。')
             else:
                 st.bar_chart(cats.set_index('分类')['支出'],horizontal=True)
@@ -95,7 +108,7 @@ if page=='财务概览':
             for row in alerts.to_dict('records'): st.warning(f"{month} {row['分类']}已超预算 ¥ {row['超支']:,.2f}。请到预算与提醒查看依据。")
         unknown=int((tx.category_source=='待确认').sum())
         if unknown: st.info(f'{unknown} 笔记录需要确认分类，可在“导入与分类”中修改。')
-        with st.expander('本月源记录'):
+        with st.expander('本月净额明细（含退款调整，不可作为原始交易编辑）'):
             st.dataframe(view_records(subset.drop(columns=['signature'])),hide_index=True,width='stretch')
 elif page=='导入与分类':
     st.title('把账单变成一份清楚的记录')
@@ -124,15 +137,18 @@ elif page=='导入与分类':
                     added,duplicates,conflicts=store.import_statement(parsed)
                     st.success(f'已保存 {added} 笔，跳过重复 {duplicates} 笔。')
                     if conflicts: st.dataframe(pd.DataFrame(conflicts),hide_index=True)
-                    tx=store.transactions()
+                    tx=store.spending_view()
         except Exception as exc:
             st.error(f'无法导入：{exc}')
     st.subheader('确认与修正分类')
     st.caption('收入限工资/生活费/其他收入，支出使用支出分类，转账只用转账分类。保存时逐行校验，冲突不会写入。')
-    if tx.empty: st.info('导入后即可在这里修改分类。')
+    source_tx=_source_records(store)
+    totals=spending_totals(tx)
+    st.caption(f'当前空间净支出 ¥{yuan(totals["net_cents"])}；消费总额 ¥{yuan(totals["gross_cents"])}。下方仅编辑原始来源，不编辑虚拟退款调整。')
+    if source_tx.empty: st.info('导入后即可在这里修改分类。')
     else:
         only_pending=st.checkbox('只看待确认记录')
-        selected=tx[tx.category_source=='待确认'] if only_pending else tx
+        selected=source_tx[source_tx.category_source=='待确认'] if only_pending else source_tx
         correction_kind=st.selectbox('修正的收支类型',['支出','收入','转账'],key='correction_kind_'+workspace)
         selected=selected[selected.kind==correction_kind]
         display=view_records(selected[['id','date','merchant','description','amount_cents','kind','category','category_source']])
@@ -145,7 +161,7 @@ elif page=='导入与分类':
                 except ValueError as exc:st.error(str(exc))
                 else:
                     st.success(f'已保存 {len(corrections)} 项修正。');st.rerun()
-        pending=tx[tx.category_source=='待确认']
+        pending=source_tx[source_tx.category_source=='待确认']
         if st.button('让 AI 建议待确认分类（每次最多 20 笔）',disabled=model is None or pending.empty):
             done,failed=0,0
             with st.spinner('正在请求分类建议…'):
@@ -158,10 +174,10 @@ elif page=='导入与分类':
             st.session_state['ai_notice']=f'更新 {done} 笔 AI 分类建议，请核对。失败 {failed} 笔。'
             st.rerun()
         if 'ai_notice' in st.session_state: st.info(st.session_state.pop('ai_notice'))
-        st.download_button('导出整理后的记录',view_records(tx.drop(columns=['signature'])).to_csv(index=False).encode('utf-8-sig'),'整理后的账单.csv','text/csv')
+        st.download_button('导出当前口径净额明细',net_export_csv(tx),'净额明细_'+tx.attrs['spending_basis']+'.csv','text/csv')
 elif page=='预算与提醒':
     st.title('给开销留一条边界')
-    known=sorted(set(tx.date.str[:7])|{TODAY.strftime('%Y-%m')},reverse=True)
+    known=sorted(set(tx.date.str[:7])|set(tx.attrs['source_months'])|{TODAY.strftime('%Y-%m')},reverse=True)
     month=st.selectbox('预算月份',known,index=known.index(DEMO_MONTH) if workspace=='演示数据' and DEMO_MONTH in known else 0)
     existing=store.budgets(month)
     category=st.selectbox('支出分类',[c for c in CATEGORIES if c not in ['工资','生活费','其他收入','转账']])
@@ -170,6 +186,7 @@ elif page=='预算与提醒':
         if st.form_submit_button('保存预算'):
             store.save_budget(month,category,money_to_cents(limit,allow_zero=True)); st.rerun()
     report=budget_report(tx,month,existing)
+    st.caption('净使用额可为负；退款回流可能使预算剩余大于原额度。')
     if report.empty: st.info('设置一项分类预算后，将显示使用率和超支提醒。')
     else:
         st.dataframe(report.rename(columns={'使用率':'使用率（%）'}),hide_index=True,width='stretch')
@@ -184,6 +201,12 @@ elif page=='预算与提醒':
 elif page=='储蓄方案':
     st.title('把目标拆成每个月能做的事')
     st.write('比较两种每月预算。所有结果来自你填写的假设，不预测未来收入。')
+    try:
+        history_estimate=estimate_from_records(tx,TODAY)
+        st.caption(f'近有记录完整月平均净支出 ¥{yuan(history_estimate["average_expense_cents"])} · '+basis_label(tx.attrs['spending_basis']))
+    except ValueError:history_estimate=None
+    negative_history=bool(history_estimate and history_estimate.get('requires_explicit_budget'))
+    if negative_history:st.warning('历史净额均值为负，不能假定退款持续回流；请明确确认非负未来预算。')
     with st.form('plan'):
         name=st.text_input('目标名称','六个月内存下 6000 元')
         left,right=st.columns(2)
@@ -196,8 +219,10 @@ elif page=='储蓄方案':
         income=st.number_input('预计每月收入（元）',min_value=0.0,value=5000.0,step=100.0)
         budget_a=left.number_input('方案 A 每月总支出预算（元）',min_value=0.0,value=4200.0,step=100.0)
         budget_b=right.number_input('方案 B 每月总支出预算（元）',min_value=0.0,value=3800.0,step=100.0)
+        explicit_future=st.checkbox('我明确接受上方非负未来预算，不将历史负净额视作持续收入') if negative_history else True
         if st.form_submit_button('比较方案',type='primary'):
             try:
+                if not explicit_future:raise ValueError('请先明确确认非负未来预算')
                 inputs=dict(name=name,target_cents=money_to_cents(target),saved_cents=money_to_cents(saved,True),start_date=start.isoformat(),deadline=deadline.isoformat(),income_cents=money_to_cents(income,True))
                 results=[]
                 for label,budget in [('A',budget_a),('B',budget_b)]:
@@ -248,7 +273,11 @@ elif page=='有依据问答':
         if result['evidence']:
             evidence=view_records(pd.DataFrame(result['evidence']))
             st.dataframe(evidence,hide_index=True,width='stretch')
-            st.download_button('下载本次回答依据',evidence.to_csv(index=False).encode('utf-8-sig'),'回答依据.csv','text/csv')
+        if result.get('trace'):
+            with st.expander('计算口径与退款证据'):st.json(result['trace'])
+            st.download_button('下载本次回答依据',answer_export_csv(result),'回答依据.csv','text/csv')
+elif page=='退款与口径':
+    render_refunds(st,store)
 else:
     st.title('从一份账单开始')
     st.markdown('''

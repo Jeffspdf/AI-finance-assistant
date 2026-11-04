@@ -19,7 +19,7 @@ class RoundTwo:
         self.bind('<Control-k>',lambda _:self.command_palette())
 
     def home_insights(self):
-        frame=self.store.transactions();goals=self.store.goals().to_dict('records')
+        frame=self.store.spending_view();goals=self.store.goals().to_dict('records')
         cards=make_insights(frame,self.selected_month,goals,{g['id']:self.store.contributions(g['id']) for g in goals})
         if not cards:return
         self.label(self.main,'本期洞察 · 仅基于已导入记录',12,bold=True)
@@ -39,7 +39,7 @@ class RoundTwo:
         band.bind('<Configure>',arrange);arrange()
 
     def show_insight_evidence(self,card):
-        frame=self.store.transactions();tx=frame[frame.id.isin(card['ids'])]
+        frame=self.store.spending_view();tx=frame[frame.id.isin(card['ids'])]
         window=tk.Toplevel(self);window.title('洞察依据');set_window_geometry(window, 760, 560);window.configure(bg=BG)
         self.label(window,card['title']+' · '+card['value'],16,bold=True)
         note=self.label(window,card['why'],10,MUTED);note.configure(wraplength=px(710))
@@ -82,7 +82,7 @@ class RoundTwo:
         selected=[self.record_rows[self.row_index(self.tree,item)] for item in selection]
         ids=[r['id'] for r in selected]
         if same_merchant:
-            pairs={(r['merchant'],r['kind']) for r in selected};all_rows=self.store.transactions()
+            pairs={(r['merchant'],r['kind']) for r in selected};all_rows=self.store.source_transactions()
             ids=[r.id for r in all_rows.itertuples() if (r.merchant,r.kind) in pairs]
         if not self.category.get():messagebox.showinfo('分类与类型冲突','请按相同收支类型分开选择记录，收入、支出、转账各有对应分类。');return
         if not messagebox.askyesno('确认批量分类',f'将 {len(ids)} 笔改为“{self.category.get()}”？'+('覆盖当前空间相同商户的全部记录。' if same_merchant else '可撤销本次批量操作。')):return
@@ -107,7 +107,7 @@ class RoundTwo:
         self.store.copy_budgets(source,target,overwrite);self.show('budget_page')
 
     def propose_budgets(self):
-        try:budgets=suggested_budgets(self.store.transactions())
+        try:budgets=suggested_budgets(self.store.spending_view())
         except ValueError as exc:messagebox.showinfo('预算建议',str(exc));return
         text='以最近三个完整月的分类平均支出 ×90% 作为建议，不是最优预算保证。\n'+ '\n'.join(f'{c}：¥{yuan(v)}' for c,v in budgets.items())
         if messagebox.askyesno('确认应用到 '+self.budget_month,text+'\n是否应用（覆盖同类别预算）？'):
@@ -222,7 +222,7 @@ class RoundTwo:
                 if candidates is not None:
                     self.label(content,f'当前空间发现 {sum(candidates.values())} 组待核对候选（A/B级 {candidates["A"]+candidates["B"]}，C级 {candidates["C"]}）。尚未自动排重。',11,PRIMARY).configure(wraplength=px(730))
                 else:self.label(content,'账单已保存；候选生成未完成，请到对账窗口重试。',11,MUTED)
-                all_records=store.transactions();pending=int((all_records.category_source=='待确认').sum())
+                all_records=store.spending_view();pending=int((all_records.category_source=='待确认').sum())
                 self.label(content,f'当前空间还有 {pending} 笔待确认分类，可继续核对。',11,PRIMARY)
                 for month in sorted({r['date'][:7] for r in result.rows},reverse=True)[:3]:
                     report=budget_report(all_records,month,store.budgets(month))

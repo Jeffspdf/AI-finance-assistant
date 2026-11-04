@@ -1,0 +1,131 @@
+{
+  "stage": "M2-4 UI and projection contract, not M2-5 release",
+  "timestamp": "2026-11-04T17:43:37.003777+08:00",
+  "base_commit": "18336e5411f32921d6785c2d0364c53f90790993",
+  "branch": "m2/refund-net",
+  "data": "synthetic only; isolated directories, no personal ledger or API key accessed",
+  "stable_release": "v0.8.5 / schema 4",
+  "development_schema": 5,
+  "migrations_unchanged": true,
+  "previous_tests_unmodified": true,
+  "pytest": {
+    "total": 492,
+    "previous": 451,
+    "new": 41,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 71.176,
+    "timestamp": "2026-11-04T17:34:39.078461+08:00"
+  },
+  "static_contract": "projection-contract.json",
+  "test_matrix": "test-matrix.json",
+  "actual_gui": "gui/gui-results.json",
+  "native_dpi": "native-dpi.json",
+  "simulated_tk_scale": "gui-scale-200.json (not a second actual Windows DPI setting)",
+  "source_desktop": {
+    "processes_passed": 6,
+    "artifacts": {
+      "m1a-self-test.json": {
+        "data": "synthetic only",
+        "before_cents": 12000,
+        "confirmed_cents": 6000,
+        "split_cents": 12000,
+        "pending_refund_cents": 1000,
+        "transfer_cents": 50000,
+        "source_rows": 6,
+        "automatic": false,
+        "checks": [
+          "overview",
+          "ledger",
+          "budget",
+          "question",
+          "planning_estimate",
+          "link_evidence",
+          "split_persistence"
+        ]
+      },
+      "round5-self-test.json": {
+        "data": "synthetic only",
+        "alipay_confidence": "A",
+        "confirmed_expense_cents": 2000,
+        "category_changed_expense_cents": 4000,
+        "group_status": "needs_review",
+        "cache_cleared": true,
+        "two_wallets_rejected": true,
+        "legacy_invalid_group_repaired": true,
+        "auto_detect_wechat": true,
+        "changed_parser_conflicts": 1,
+        "C_confirm_rejected": true,
+        "demo_reseeded": false
+      },
+      "round6-self-test.json": {
+        "data": "synthetic only",
+        "invalid_transfer_category_rejected": true,
+        "confirmed_expense_cents": 6000,
+        "valid_category_change_expense_cents": 8000,
+        "read_queries_unchanged": true,
+        "read_only_view": true,
+        "explicit_repair_cleared_cache": true,
+        "no_wallet_ack_required": true,
+        "C_binding_gap_named": true,
+        "C_upgraded_to_A": true,
+        "legacy_category_backup_and_normalization": true
+      },
+      "round7-self-test.json": {
+        "data": "synthetic only",
+        "income_expense_categories_guarded": true,
+        "targeted_repair_only_selected": true,
+        "query_bytes_unchanged": true,
+        "legacy_income_expense_preserved": true,
+        "backup_discoverable_after_restart": true,
+        "backup_preview_and_explicit_delete": true,
+        "read_only_delete_rejected": true
+      },
+      "round8-self-test.json": {
+        "data": "synthetic only",
+        "legacy_conflicts_discovered_readonly": true,
+        "no_startup_income_expense_rewrite": true,
+        "explicit_correction_preserves_kind_amount": true,
+        "stale_snapshot_identity_rejected": true,
+        "fresh_confirmation_deletes_only_selected": true,
+        "live_database_unchanged_by_cleanup": true
+      }
+    },
+    "warning_observed_in_redirected_log": false,
+    "warning_status": "Earlier warning root cause remains unlocated; absence from this redirected log is not closure; M2-5 release gate"
+  },
+  "gates": {
+    "actionable_refund_ui": "inspect / targeted repair / revoke; invalid groups included; B enforced",
+    "net_entrypoints": "17 required entrypoints; 9 exact purpose-scoped source readers; static + actual Tk/Web controls",
+    "basis": "per-space consent, audited old/new/time, labels in charts/QA/exports",
+    "refund_states": "derived linked / pending / needs_review; source status unchanged"
+  },
+  "remaining": [
+    "M2-5 actual packaged EXE, migration rehearsal and console warning root cause",
+    "G-DATA not run: authorized real samples and qualitative participants unavailable"
+  ],
+  "source_sha256_lf": {
+    "app.py": "f29e5c18d0fe98878c367d7dd183b501c8968d2865fe94fa523b2466c7b1773a",
+    "desktop.py": "aff7af28bb3de0011feebba5ffc7e2028186559b694167e24001a216099a4abe",
+    "finance/conversation.py": "462b1cafe3af1be375fc659e7fe78c6a5fb8fd70a7b1788dcfe0410e538e5106",
+    "finance/desktop_m1a.py": "34196f85ae2c097e4a2ba2263b2c26914b133148e84600b9a5cc484887ac4293",
+    "finance/desktop_refunds.py": "2f76684e0cdb44b4bd2af7350c2547b329f67c5f4a24414399f85bc7c87c09cb",
+    "finance/desktop_review.py": "80be9c8f7b4307e8315ad7d588a9ceba36a7f8237f855c496dffb94b9b3bd9e5",
+    "finance/desktop_round2.py": "3e1ec20955d2f6ecddc2a509a55b78d576c9c13f93c77ac90551d85c66de7cb0",
+    "finance/insights.py": "d60e7b44669c34e5d1ae8fc87d83d5306afee0e85f3b1a6717589ccdf1dc5c79",
+    "finance/projection_contract.py": "0da10608d2c146ad0e39b1a541eb0c7c2b7c533a14b8cb4fffbee9e89924e1fd",
+    "finance/qa.py": "6428e0e73c1408d4322067b83a2928e3f7522839c307cfecdc744138faf240b1",
+    "finance/reconciliation.py": "50fc10615623d42ec8879dc352bd8f602647d5f3a434b381bf9efec731819d61",
+    "finance/refund_rules.py": "c2a418ae5d86897d552dcb0bfa0b044709aaf1e0e8a8b06a30c94c795bf6c83f",
+    "finance/refunds.py": "2b4bbd134da9cc02130deb71a88f0228ad5c17fffb97fa7e19b8a96148bda09a",
+    "finance/spending.py": "af0de488fa3c3f98f1a828c36a7bcee4637eb37c57dde4a84ec0f8af0320d5a4",
+    "finance/spending_presenter.py": "b2e702f881fb200cb9211e95c9e03e0fac6a1e90bab0e530e6a4069f7a527499",
+    "finance/web_refunds.py": "e0d0bcef88a2d94884c6df22c49b45f82cc4aa3e722736e0bef02ca7692812ab",
+    "scripts/m2_ui_fixture.py": "859217fa66ba5099dc198a4e157b189336f5585289f5c997001305a81a2dbe7d",
+    "scripts/verify_m2_4_ui.py": "c16e1e9198df680e2e1aa21650ee77e559e03478c29f91aee3785d695458c409",
+    "tests/test_m2_4.py": "526aead872b2e3cbf89d73956b7848187f66ee9acd012bfb0f0ed9fa7ae457d5",
+    "tests/test_m2_4_web.py": "f58b41841c5e3591776a17cd3519c3659fd892e11558f3c1f6b7b715740f96a9",
+    "tests/test_projection_contract.py": "d8dfd285c0f24551aa22b03d1c805c72fbc5d1583d48b6152b81107796c93ada"
+  }
+}

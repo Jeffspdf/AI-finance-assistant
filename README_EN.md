@@ -4,7 +4,7 @@
 
 A local Windows application for student spending analysis, budgets, and explainable savings planning. Tkinter is the delivered desktop UI; Streamlit remains a web prototype. Optional compatible Chat Completions providers suggest categories and parse bounded questions. All money calculations run in deterministic Python code.
 
-**M2 development branch**: M2-1/2 and [M2-3 maintenance, targeted repair and persistence](docs/M2_3_ACCEPTANCE.md) are implemented at the service layer. UI integration remains pending. Use a separate test data directory: development databases use schema 5, while stable v0.8.5 uses schema 4 and cannot open upgraded databases. No new installer is released; v0.9.0 requires M2-5 acceptance.
+**M2 development branch**: M2-1/2/3 and [M2-4 net UI, refund handling and projection contract](docs/M2_4_ACCEPTANCE.md) are implemented, with 492 passing tests. Desktop/Web use the shared net projection and actionable refund review; packaged acceptance remains M2-5. Use a separate test data directory: development databases use schema 5, while stable v0.8.5 uses schema 4 and cannot open upgraded databases. No new installer is released; v0.9.0 requires M2-5 acceptance.
 
 ## Run
 
@@ -14,7 +14,7 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
-M2 implementation: the user approved the [implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md), with the cash-date default and net-based budgets while retaining gross. Refund services and `spending_view` are implemented; all-page integration is a separate M2-4 acceptance package. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
+M2 implementation: the user approved the [implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md), with the cash-date default and net-based budgets while retaining gross. Refund services, all-page `spending_view` integration, actionable blockers, audited basis switching and the AST gate are implemented in the separate M2-4 acceptance package. Actual EXE/release acceptance remains M2-5. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
 
 M1a is accepted at v0.8.5 for the tested import formats, manual decisions, shared projection, category domains, explicit maintenance and legacy/snapshot visibility. The existing learned-rule manager already lists and deletes old rules; invalid income/expense rules are ignored during import. Stable v0.8.5 has no refund netting; development progress is described above. See [ninth-review assessment and closeout](docs/ROUND9_RESPONSE.md).
 

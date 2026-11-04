@@ -87,8 +87,47 @@ def validate_model_intent(question, intent):
     if metric=='budget' and (merchant or explicit_dates or compare):return None
     return intent
 
+def _refund_answer(frame,question,today):
+    """Bounded local refund queries; amounts never come from a model."""
+    if frame.attrs.get('projection')!='spending_view':return None
+    matched=re.fullmatch(r'(本月|这个月|上个月|上月|20\d{2}-(?:0[1-9]|1[0-2])|全部|累计)?(已确认退款抵扣|退款抵扣|退款待处理|待处理退款|退款待复核|待复核退款|退款已关联|已关联退款)(多少元|多少笔|几笔|笔数|多少|金额)?[？?。]?',re.sub(r'\s+','',question))
+    if not matched:return None
+    period,metric,quantity=matched.groups()
+    month=month_shift(today,0 if period in ('本月','这个月') else -1) if period in ('本月','这个月','上月','上个月') else period
+    all_months=month in (None,'全部','累计');scope='全部已导入记录' if all_months else month
+    if not all_months and month not in frame.attrs.get('source_months',[]):
+        return dict(answer=scope+'没有已导入来源，无法可靠给出退款金额。',evidence=[],status='missing',parser='本地退款查询')
+    from .spending_presenter import basis_label
+    adjustments=frame[frame.projection_kind=='refund_adjustment']
+    if not all_months:adjustments=adjustments[adjustments.date.str.startswith(month)]
+    extra=[];kind='confirmed_adjustment' if '抵扣' in metric else 'source_refund'
+    if kind=='confirmed_adjustment':
+        amount=-int(adjustments.amount_cents.sum());count=len(adjustments)
+        text=f'{scope}按当前口径已确认退款抵扣 {yuan(amount)} 元，{count} 笔。退款去重后只抵扣一次。'
+    else:
+        state='needs_review' if '复核' in metric else 'pending' if '处理' in metric else 'linked'
+        events=[e for e in frame.attrs['refund_sources'] if e['association_status']==state and (all_months or e['date'].startswith(month))]
+        amount=sum(e['amount_cents'] for e in events);count=len(events)
+        title={'needs_review':'待复核退款','pending':'待处理退款','linked':'已关联退款'}[state]
+        text=f'{scope}按实际退款发生月，{title} {count} 笔，完整退款金额 {yuan(amount)} 元。流水发生月可能与净额抵扣月份不同。'
+        extra=[dict(type='RefundSourceStatus',id=e['representative_id'],snapshot=e) for e in events]
+        adjustments=frame.iloc[:0].copy()
+    if not extra and adjustments.empty:
+        extra=[dict(type='SourceCoverage',id=scope,snapshot=dict(source_months=frame.attrs['source_months'],scope='仅已导入来源；未导入数据未知'))]
+    trace=calculation('answer','query.refund',adjustments,inputs=dict(period=period,metric=metric,amount_basis=kind),extra=extra)
+    text+=' '+basis_label(frame.attrs['spending_basis'])+'。不代表完整账单或账户余额。'
+    return dict(answer=text,evidence=adjustments[['id','external_id','date','amount_cents','kind','category','merchant','source_file','source_row']].to_dict('records'),
+                trace=trace,status='ok',parser='本地退款查询')
+
+
 def answer_question(frame, question, today=None, budgets=None, model=None):
     frame=effective_frame(frame)
+    refund_answer=_refund_answer(frame,question,today or date.today())
+    if refund_answer is not None:return refund_answer
+    gross_requested='消费总额' in question
+    question=question.replace('消费总额','支出').replace('净支出','支出')
+    if gross_requested and frame.attrs.get('projection')=='spending_view':
+        frame=frame[frame.projection_kind!='refund_adjustment'].copy()
     today=today or date.today(); budgets=budgets or {}
     intent=parse_question(question)
     source='本地解析'
@@ -120,15 +159,19 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         tx=tx[tx.merchant.str.contains(intent['merchant'],regex=False,case=False)]
         label+='，商户包含“'+intent['merchant']+'”'
     full=tx.copy()
-    if tx.empty:
+    known_net_scope=(frame.attrs.get('projection')=='spending_view' and not intent.get('merchant') and
+        not intent.get('date_from') and (month in frame.attrs.get('source_months',[]) or month=='all' and bool(frame.attrs.get('source_months'))))
+    if tx.empty and not known_net_scope:
         return {'answer':f'没有 {label}，无法给出金额。请先导入对应账单；没有记录不代表没有消费。','evidence':[],'status':'missing','parser':source}
     if metric in ['expense','share','top','budget','compare','average_expense']: tx=tx[tx.kind=='支出']
     elif metric in ['income','average_income']: tx=tx[tx.kind=='收入']
     elif metric=='balance': tx=tx[tx.kind!='转账']
     if category: tx=tx[tx.category==category]
-    if tx.empty:
+    if tx.empty and not known_net_scope:
         return {'answer':f'{label}中没有符合条件的{category or "相关"}记录，无法提供有源记录支持的金额。','evidence':[],'status':'missing','parser':source}
     total=int(tx.amount_cents.sum()); item=category or ''
+    if tx.empty and metric in ('top','compare','average_expense','average_income'):
+        return dict(answer='该口径下没有足够计入记录进行排名、比较或均值计算。',evidence=[],status='missing',parser=source)
     if metric=='compare':
         names=intent['compare_categories'];tx=tx[tx.category.isin(names)]
         if tx.empty:return {'answer':'所比较分类没有可追溯的记录，无法提供金额，请先导入对应账单。','evidence':[],'status':'missing','parser':source}
@@ -140,7 +183,7 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         missing=[m for m in months if m not in observed]
         answer=f'{label}的月均'+('支出' if metric=='average_expense' else '收入')+f'为 {total/100/n:,.2f} 元。计算式：{yuan(total)} 元 ÷ {n} 个有记录月份。缺失月份：'+('、'.join(missing) if missing else '无')+'。缺失月不视为零消费。'
     elif metric in ['expense','income']:
-        description='支出' if metric=='expense' else '收入'
+        description=('消费总额（未扣退款）' if gross_requested else '净支出' if frame.attrs.get('projection')=='spending_view' else '支出') if metric=='expense' else '收入'
         answer=f'{label}的{item}{description}合计 {yuan(total)} 元，共 {count_records(tx)} 笔。计算方式：逐笔金额相加。'
     elif metric=='balance':
         income=int(tx.loc[tx.kind=='收入','amount_cents'].sum()); expense=int(tx.loc[tx.kind=='支出','amount_cents'].sum())
@@ -170,13 +213,24 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     evidence=tx[['id','external_id','date','amount_cents','kind','category','merchant','source_file','source_row']].to_dict('records')
     extra=[]
     if metric=='budget':extra=[dict(type='Budget',id=month+'/'+category,snapshot=dict(month=month,category=category,amount_cents=budget))]
-    trace=calculation('answer','query.'+metric,tx,inputs=intent,extra=extra)
+    if tx.empty and known_net_scope:
+        extra.extend(dict(type='ExcludedSource',id=r['id'],snapshot=r) for r in frame.attrs.get('excluded_sources',[]) if month=='all' or r['date'].startswith(month))
+        for d in frame.attrs.get('refund_decisions',[]):
+            representative=next(r for r in d['refund']['members'] if r['id']==d['refund']['representative_id'])
+            if month=='all' or representative['date'].startswith(month):extra.append(dict(type='RefundDecision',id=d['id'],snapshot=d))
+        answer+=' 此口径本期无计入明细；退款可能归入原消费月，零值不代表完整账单或余额。'
+    trace=calculation('answer','query.'+metric,tx,inputs=dict(intent,amount_basis='gross' if gross_requested else 'net' if frame.attrs.get('projection')=='spending_view' else 'gross'),extra=extra)
     if trace['evidence'] and any(e['type']=='LinkDecision' for e in trace['evidence']):
         answer+=' 已按人工确认的关联组排除重复资金腿；关联决定可在对账中撤销。'
     refund=frame.attrs.get('refund_pending',{})
     if frame.attrs.get('projection')=='spending_view':
-        answer+=' 净支出口径：'+('退款发生月（现金口径）。' if frame.attrs['spending_basis']=='cash' else '原消费月口径。')
-        if refund.get('count'):answer+=f' 另有{refund["count"]}笔退款待处理，尚未计入抵扣。'
+        from .spending_presenter import basis_label,refund_status_summary,refund_status_text
+        answer+=' 当前空间口径：'+basis_label(frame.attrs['spending_basis'])+'。'
+        events=frame.attrs.get('refund_sources',[])
+        if period=='last_3_complete_months':events=[r for r in events if r['date'][:7] in months]
+        if intent.get('date_from'):events=[r for r in events if intent['date_from']<=r['date'][:10]<=intent['date_to']]
+        summary=refund_status_summary(events,None if month=='all' else month if month in frame.attrs.get('source_months',[]) else None)
+        answer+=' 退款流水状态（按实际发生月，可能与抵扣月份不同）：'+refund_status_text(summary)+'。'
     elif refund.get('count'):
         answer+=f' 退款仍待处理（{refund["count"]} 笔），当前支出未扣退款，净支出待定。'
     return {'answer':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}

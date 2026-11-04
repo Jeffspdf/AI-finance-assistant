@@ -13,6 +13,7 @@ dist/
 release/
 *.spec
 .test_*/
+.validation-private/
 desktop_preview.png
 *_preview_v2.png
 *_preview.png

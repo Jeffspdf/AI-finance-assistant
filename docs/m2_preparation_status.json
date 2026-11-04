@@ -1,0 +1,16 @@
+{
+  "stage": "M2 planning and validation-tool preparation",
+  "source_app_version": "0.8.5",
+  "database_schema_supported": 4,
+  "M2_refund_runtime_implemented": false,
+  "real_validation_status": "awaiting_data",
+  "data_kind": "uncollected",
+  "real_files": 0,
+  "classified_samples": 0,
+  "actual_trial_participants": 0,
+  "independent_recall": null,
+  "automatic_real_validation_pass": false,
+  "empty_collection_tables": 10,
+  "synthetic_tool_tests": 11,
+  "combined_regression_tests_passed": 258
+}

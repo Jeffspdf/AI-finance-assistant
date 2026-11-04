@@ -12,6 +12,8 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
+M2 preparation: [gap analysis and implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md) records the confirmed cash-date default and net-based budgets with gross still visible. Refund netting is not implemented in the client yet. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
+
 M1a is accepted at v0.8.5 for the tested import formats, manual decisions, shared projection, category domains, explicit maintenance and legacy/snapshot visibility. The existing learned-rule manager already lists and deletes old rules; invalid income/expense rules are ignored during import. Refund netting remains a later M2 milestone. See [ninth-review assessment and closeout](docs/ROUND9_RESPONSE.md).
 
 Version 0.8.5 implements review F1–F4: read-only discovery of legacy category conflicts across all source months, exact-ID navigation and explicit correction; kind-filtered web manual editing; snapshot identity checks across confirmation and before deletion; and clear scan/write/manual-confirmation boundaries. The file checks reduce races, without claiming atomic protection against a hostile local process. See [assessment and evidence](docs/ROUND8_RESPONSE.md).

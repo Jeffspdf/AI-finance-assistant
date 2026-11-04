@@ -1,5 +1,7 @@
 # Validation record — 2026-11-01
 
+M2 preparation, 2026-11-04: **258 passed in 21.77s**, preserving the original247 and adding11 synthetic tests for the offline study-summary tool (missing denominators, no-data/provenance states, classification/QA scope, import timing and blocking issues). Empty private templates were initialized and evaluated as `awaiting_data`. This is not M2 business validation or a real-data study; source runtime remains0.8.5/schema4. See [preparation status](m2_preparation_status.json), [implementation plan](M2_GAP_AND_IMPLEMENTATION_PLAN.md) and [collection protocol](REAL_VALIDATION_PROTOCOL.md).
+
 Milestone closeout, 2026-11-04: [ninth-review assessment](ROUND9_RESPONSE.md) accepts M1a at v0.8.5 and corrects the claim that old invalid merchant rules have no management entry. A new synthetic GUI replay verifies the existing list and selected deletion; two relevant existing tests passed. Runtime code is unchanged. The complete-suite count remains247; the full suite/packaged results below are their original observed runs, not claimed as rerun in this documentation-only closeout.
 
 Latest: [v0.8.5 eighth-review assessment and F1–F4](ROUND8_RESPONSE.md), **247 tests passed**. Includes actual Streamlit column/row constraints, read-only legacy conflict discovery and snapshot confirmation/final checks, with a real hardlink retention case. Dedicated GUI and packaged-EXE evidence are recorded there. All new data is synthetic; no personal ledger or paid model was used.

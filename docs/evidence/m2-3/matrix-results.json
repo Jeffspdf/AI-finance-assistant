@@ -1,0 +1,427 @@
+{
+  "data": "synthetic only",
+  "execution": "pytest service-level maintenance acceptance",
+  "cases": [
+    {
+      "name": "test_contract_b_valid_confirmation_must_be_revoked_first[P-W-\\u91cd\\u65b0\\u786e\\u8ba4\\u540c\\u4e00\\u5173\\u8054]",
+      "status": "passed",
+      "seconds": 0.163
+    },
+    {
+      "name": "test_contract_b_valid_confirmation_must_be_revoked_first[P-W-\\u4fee\\u6539\\u6838\\u5bf9\\u8bf4\\u660e]",
+      "status": "passed",
+      "seconds": 0.17
+    },
+    {
+      "name": "test_contract_b_valid_confirmation_must_be_revoked_first[P-2-\\u6362\\u4e00\\u4e2a\\u539f\\u6d88\\u8d39]",
+      "status": "passed",
+      "seconds": 0.184
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[edit-P-W]",
+      "status": "passed",
+      "seconds": 0.202
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[edit-P-B]",
+      "status": "passed",
+      "seconds": 0.223
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[edit-R-W]",
+      "status": "passed",
+      "seconds": 0.23
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[single_category-P-W]",
+      "status": "passed",
+      "seconds": 0.188
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[single_category-P-B]",
+      "status": "passed",
+      "seconds": 0.217
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[single_category-R-W]",
+      "status": "passed",
+      "seconds": 0.214
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[batch_category-P-W]",
+      "status": "passed",
+      "seconds": 0.177
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[batch_category-P-B]",
+      "status": "passed",
+      "seconds": 0.249
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[batch_category-R-W]",
+      "status": "passed",
+      "seconds": 0.216
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[model_category-P-W]",
+      "status": "passed",
+      "seconds": 0.231
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[model_category-P-B]",
+      "status": "passed",
+      "seconds": 0.203
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[model_category-R-W]",
+      "status": "passed",
+      "seconds": 0.182
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[undo_batch-P-W]",
+      "status": "passed",
+      "seconds": 0.321
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[undo_batch-P-B]",
+      "status": "passed",
+      "seconds": 0.286
+    },
+    {
+      "name": "test_every_classification_and_edit_route_invalidates_and_persists[undo_batch-R-W]",
+      "status": "passed",
+      "seconds": 0.312
+    },
+    {
+      "name": "test_protected_model_label_and_noop_edits_do_not_invalidate_valid_money",
+      "status": "passed",
+      "seconds": 0.194
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[amount_cents-P-W]",
+      "status": "passed",
+      "seconds": 0.17
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[amount_cents-R-W]",
+      "status": "passed",
+      "seconds": 0.171
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[date-P-W]",
+      "status": "passed",
+      "seconds": 0.184
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[date-R-W]",
+      "status": "passed",
+      "seconds": 0.161
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[merchant-P-W]",
+      "status": "passed",
+      "seconds": 0.145
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[merchant-R-W]",
+      "status": "passed",
+      "seconds": 0.161
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[description-P-W]",
+      "status": "passed",
+      "seconds": 0.156
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[description-R-W]",
+      "status": "passed",
+      "seconds": 0.159
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[category-P-W]",
+      "status": "passed",
+      "seconds": 0.211
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[category-R-W]",
+      "status": "passed",
+      "seconds": 0.155
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[kind-P-W]",
+      "status": "passed",
+      "seconds": 0.158
+    },
+    {
+      "name": "test_each_edit_field_invalidates_with_before_and_after_evidence[kind-R-W]",
+      "status": "passed",
+      "seconds": 0.151
+    },
+    {
+      "name": "test_later_invalid_classification_rolls_back_earlier_source_and_refund_updates[single]",
+      "status": "passed",
+      "seconds": 0.143
+    },
+    {
+      "name": "test_later_invalid_classification_rolls_back_earlier_source_and_refund_updates[batch]",
+      "status": "passed",
+      "seconds": 0.135
+    },
+    {
+      "name": "test_later_invalid_classification_rolls_back_earlier_source_and_refund_updates[undo]",
+      "status": "passed",
+      "seconds": 0.136
+    },
+    {
+      "name": "test_delete_either_independent_import_batch_preserves_evidence_and_disables_refund[P]",
+      "status": "passed",
+      "seconds": 0.101
+    },
+    {
+      "name": "test_delete_either_independent_import_batch_preserves_evidence_and_disables_refund[R]",
+      "status": "passed",
+      "seconds": 0.098
+    },
+    {
+      "name": "test_all_group_decisions_require_explicit_money_reconfirmation[confirm-purchase]",
+      "status": "passed",
+      "seconds": 0.194
+    },
+    {
+      "name": "test_all_group_decisions_require_explicit_money_reconfirmation[confirm-refund]",
+      "status": "passed",
+      "seconds": 0.155
+    },
+    {
+      "name": "test_all_group_decisions_require_explicit_money_reconfirmation[split-purchase]",
+      "status": "passed",
+      "seconds": 0.159
+    },
+    {
+      "name": "test_all_group_decisions_require_explicit_money_reconfirmation[split-refund]",
+      "status": "passed",
+      "seconds": 0.174
+    },
+    {
+      "name": "test_all_group_decisions_require_explicit_money_reconfirmation[reopen-purchase]",
+      "status": "passed",
+      "seconds": 0.17
+    },
+    {
+      "name": "test_all_group_decisions_require_explicit_money_reconfirmation[reopen-refund]",
+      "status": "passed",
+      "seconds": 0.18
+    },
+    {
+      "name": "test_demo_month_replacement_invalidates_refund_and_preserves_raw_proof",
+      "status": "passed",
+      "seconds": 0.087
+    },
+    {
+      "name": "test_demo_cleanup_uses_batch_deletion_and_does_not_reseed",
+      "status": "passed",
+      "seconds": 0.154
+    },
+    {
+      "name": "test_reimporting_deleted_source_cannot_reactivate_a_stale_confirmation",
+      "status": "passed",
+      "seconds": 0.184
+    },
+    {
+      "name": "test_real_import_after_batch_deletion_preserves_identity_without_reconfirming[P]",
+      "status": "passed",
+      "seconds": 0.132
+    },
+    {
+      "name": "test_real_import_after_batch_deletion_preserves_identity_without_reconfirming[R]",
+      "status": "passed",
+      "seconds": 0.124
+    },
+    {
+      "name": "test_global_blockers_have_actionable_details_and_targeted_repair_is_component_scoped",
+      "status": "passed",
+      "seconds": 0.253
+    },
+    {
+      "name": "test_persisted_review_has_reasons_after_restart_and_no_automatic_reconfirmation",
+      "status": "passed",
+      "seconds": 0.187
+    },
+    {
+      "name": "test_evidence_and_repair_tolerate_malformed_confirmation_context[not-json]",
+      "status": "passed",
+      "seconds": 0.23
+    },
+    {
+      "name": "test_evidence_and_repair_tolerate_malformed_confirmation_context[{\"purchase\":null}]",
+      "status": "passed",
+      "seconds": 0.201
+    },
+    {
+      "name": "test_evidence_and_repair_tolerate_malformed_confirmation_context[{\"refund\":[]}]",
+      "status": "passed",
+      "seconds": 0.232
+    },
+    {
+      "name": "test_review_without_audit_still_has_a_generic_reason",
+      "status": "passed",
+      "seconds": 0.174
+    },
+    {
+      "name": "test_writable_startup_maintains_groups_and_refunds_then_is_byte_idempotent[refund_date]",
+      "status": "passed",
+      "seconds": 0.211
+    },
+    {
+      "name": "test_writable_startup_maintains_groups_and_refunds_then_is_byte_idempotent[purchase_group]",
+      "status": "passed",
+      "seconds": 0.221
+    },
+    {
+      "name": "test_writable_startup_maintains_groups_and_refunds_then_is_byte_idempotent[refund_group]",
+      "status": "passed",
+      "seconds": 0.252
+    },
+    {
+      "name": "test_writable_startup_maintains_groups_and_refunds_then_is_byte_idempotent[category_domain]",
+      "status": "passed",
+      "seconds": 0.217
+    },
+    {
+      "name": "test_explicit_refund_group_repair_does_not_touch_an_unrelated_component",
+      "status": "passed",
+      "seconds": 0.236
+    },
+    {
+      "name": "test_invalid_purchase_role_is_visible_before_explicit_group_repair",
+      "status": "passed",
+      "seconds": 0.231
+    },
+    {
+      "name": "test_targeted_group_repair_finds_saved_decisions_even_after_all_members_disappear[purchase]",
+      "status": "passed",
+      "seconds": 0.222
+    },
+    {
+      "name": "test_targeted_group_repair_finds_saved_decisions_even_after_all_members_disappear[refund]",
+      "status": "passed",
+      "seconds": 0.238
+    },
+    {
+      "name": "test_explicit_candidate_scan_persists_refund_review_without_confirming_money",
+      "status": "passed",
+      "seconds": 0.217
+    },
+    {
+      "name": "test_restore_valid_snapshot_and_invalid_snapshot_maintain_consistent_decisions",
+      "status": "passed",
+      "seconds": 0.33
+    },
+    {
+      "name": "test_restore_maintenance_failure_restores_pre_restore_data_and_audit",
+      "status": "passed",
+      "seconds": 0.247
+    },
+    {
+      "name": "test_multiple_repairs_roll_back_together_if_later_audit_fails[explicit_repair]",
+      "status": "passed",
+      "seconds": 0.206
+    },
+    {
+      "name": "test_multiple_repairs_roll_back_together_if_later_audit_fails[startup]",
+      "status": "passed",
+      "seconds": 0.234
+    },
+    {
+      "name": "test_group_and_refund_maintenance_are_one_transaction_on_startup_failure",
+      "status": "passed",
+      "seconds": 0.207
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[edit]",
+      "status": "passed",
+      "seconds": 0.083
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[single]",
+      "status": "passed",
+      "seconds": 0.081
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[batch]",
+      "status": "passed",
+      "seconds": 0.098
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[model]",
+      "status": "passed",
+      "seconds": 0.111
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[undo]",
+      "status": "passed",
+      "seconds": 0.095
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[delete]",
+      "status": "passed",
+      "seconds": 0.107
+    },
+    {
+      "name": "test_source_changes_and_invalidation_roll_back_on_audit_failure[demo_replace]",
+      "status": "passed",
+      "seconds": 0.097
+    },
+    {
+      "name": "test_duplicate_candidate_creation_is_idempotent_and_scan_preserves_refund_candidates",
+      "status": "passed",
+      "seconds": 0.229
+    },
+    {
+      "name": "test_readonly_write_guards_unknown_target_and_valid_repair_are_byte_safe",
+      "status": "passed",
+      "seconds": 0.172
+    },
+    {
+      "name": "test_two_connections_repair_once_and_repeat_is_noop",
+      "status": "passed",
+      "seconds": 0.169
+    },
+    {
+      "name": "test_two_connections_create_only_one_identical_refund_candidate",
+      "status": "passed",
+      "seconds": 0.2
+    }
+  ],
+  "tests_per_function": {
+    "test_contract_b_valid_confirmation_must_be_revoked_first": 3,
+    "test_every_classification_and_edit_route_invalidates_and_persists": 15,
+    "test_protected_model_label_and_noop_edits_do_not_invalidate_valid_money": 1,
+    "test_each_edit_field_invalidates_with_before_and_after_evidence": 12,
+    "test_later_invalid_classification_rolls_back_earlier_source_and_refund_updates": 3,
+    "test_delete_either_independent_import_batch_preserves_evidence_and_disables_refund": 2,
+    "test_all_group_decisions_require_explicit_money_reconfirmation": 6,
+    "test_demo_month_replacement_invalidates_refund_and_preserves_raw_proof": 1,
+    "test_demo_cleanup_uses_batch_deletion_and_does_not_reseed": 1,
+    "test_reimporting_deleted_source_cannot_reactivate_a_stale_confirmation": 1,
+    "test_real_import_after_batch_deletion_preserves_identity_without_reconfirming": 2,
+    "test_global_blockers_have_actionable_details_and_targeted_repair_is_component_scoped": 1,
+    "test_persisted_review_has_reasons_after_restart_and_no_automatic_reconfirmation": 1,
+    "test_evidence_and_repair_tolerate_malformed_confirmation_context": 3,
+    "test_review_without_audit_still_has_a_generic_reason": 1,
+    "test_writable_startup_maintains_groups_and_refunds_then_is_byte_idempotent": 4,
+    "test_explicit_refund_group_repair_does_not_touch_an_unrelated_component": 1,
+    "test_invalid_purchase_role_is_visible_before_explicit_group_repair": 1,
+    "test_targeted_group_repair_finds_saved_decisions_even_after_all_members_disappear": 2,
+    "test_explicit_candidate_scan_persists_refund_review_without_confirming_money": 1,
+    "test_restore_valid_snapshot_and_invalid_snapshot_maintain_consistent_decisions": 1,
+    "test_restore_maintenance_failure_restores_pre_restore_data_and_audit": 1,
+    "test_multiple_repairs_roll_back_together_if_later_audit_fails": 2,
+    "test_group_and_refund_maintenance_are_one_transaction_on_startup_failure": 1,
+    "test_source_changes_and_invalidation_roll_back_on_audit_failure": 7,
+    "test_duplicate_candidate_creation_is_idempotent_and_scan_preserves_refund_candidates": 1,
+    "test_readonly_write_guards_unknown_target_and_valid_repair_are_byte_safe": 1,
+    "test_two_connections_repair_once_and_repeat_is_noop": 1,
+    "test_two_connections_create_only_one_identical_refund_candidate": 1
+  }
+}

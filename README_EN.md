@@ -4,7 +4,7 @@
 
 A local Windows application for student spending analysis, budgets, and explainable savings planning. Tkinter is the delivered desktop UI; Streamlit remains a web prototype. Optional compatible Chat Completions providers suggest categories and parse bounded questions. All money calculations run in deterministic Python code.
 
-**M2 development branch**: M2-1 and [M2-2 refund decisions, event deduplication and net projection](docs/M2_2_ACCEPTANCE.md) are implemented at the service layer. UI integration remains pending. Use a separate test data directory: development databases use schema 5, while stable v0.8.5 uses schema 4 and cannot open upgraded databases. No new installer is released; v0.9.0 requires M2-5 acceptance.
+**M2 development branch**: M2-1/2 and [M2-3 maintenance, targeted repair and persistence](docs/M2_3_ACCEPTANCE.md) are implemented at the service layer. UI integration remains pending. Use a separate test data directory: development databases use schema 5, while stable v0.8.5 uses schema 4 and cannot open upgraded databases. No new installer is released; v0.9.0 requires M2-5 acceptance.
 
 ## Run
 

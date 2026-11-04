@@ -1,0 +1,521 @@
+{
+  "data": "synthetic only",
+  "trace": [
+    {
+      "action": "external refund-date changes; pure read",
+      "changed": null,
+      "gross_cents": 20000,
+      "net_cents": 20000,
+      "pending": {
+        "count": 3,
+        "amount_cents": 7500
+      },
+      "blockers": [
+        {
+          "id": "RL-4efa4183e88443f788ca50a819e5da22",
+          "status": "needs_review",
+          "reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ],
+          "refund_txn_id": "R-20",
+          "original_txn_id": "P-W",
+          "related_link_ids": [
+            "RL-4efa4183e88443f788ca50a819e5da22",
+            "RL-85ed386763054167ae108ad53a83fd22"
+          ],
+          "actions": [
+            "inspect_sources",
+            "repair_refund_links",
+            "revoke_refund_link"
+          ]
+        },
+        {
+          "id": "RL-85ed386763054167ae108ad53a83fd22",
+          "status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ],
+          "refund_txn_id": "R-W",
+          "original_txn_id": "P-W",
+          "related_link_ids": [
+            "RL-4efa4183e88443f788ca50a819e5da22",
+            "RL-85ed386763054167ae108ad53a83fd22"
+          ],
+          "actions": [
+            "inspect_sources",
+            "repair_refund_links",
+            "revoke_refund_link"
+          ]
+        },
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ],
+          "refund_txn_id": "R-25",
+          "original_txn_id": "P-2",
+          "related_link_ids": [
+            "RL-f111ed90e74847458f3b116c9aa103aa"
+          ],
+          "actions": [
+            "inspect_sources",
+            "repair_refund_links",
+            "revoke_refund_link"
+          ]
+        }
+      ],
+      "links": [
+        {
+          "id": "RL-4efa4183e88443f788ca50a819e5da22",
+          "stored_status": "confirmed",
+          "status": "needs_review",
+          "repair_pending": true,
+          "review_reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "id": "RL-85ed386763054167ae108ad53a83fd22",
+          "stored_status": "confirmed",
+          "status": "needs_review",
+          "repair_pending": true,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "stored_status": "confirmed",
+          "status": "needs_review",
+          "repair_pending": true,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "refund_sources": [
+        {
+          "event_key": "refund:R-20",
+          "representative_id": "R-20",
+          "member_ids": [
+            "R-20"
+          ],
+          "date": "2026-10-02 12:00:00",
+          "amount_cents": 2000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "event_key": "refund:R-25",
+          "representative_id": "R-25",
+          "member_ids": [
+            "R-25"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 2500,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "event_key": "refund:R-W",
+          "representative_id": "R-W",
+          "member_ids": [
+            "R-W"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 3000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "query_bytes_unchanged": true,
+      "database_sha256": "47ed759692ae3c8f768c64a501e897abf8a634533d70f7bb67c1a0f71240aaa1"
+    },
+    {
+      "action": "repair selected connected component",
+      "changed": 2,
+      "gross_cents": 20000,
+      "net_cents": 20000,
+      "pending": {
+        "count": 3,
+        "amount_cents": 7500
+      },
+      "blockers": [
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ],
+          "refund_txn_id": "R-25",
+          "original_txn_id": "P-2",
+          "related_link_ids": [
+            "RL-f111ed90e74847458f3b116c9aa103aa"
+          ],
+          "actions": [
+            "inspect_sources",
+            "repair_refund_links",
+            "revoke_refund_link"
+          ]
+        }
+      ],
+      "links": [
+        {
+          "id": "RL-4efa4183e88443f788ca50a819e5da22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "id": "RL-85ed386763054167ae108ad53a83fd22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "stored_status": "confirmed",
+          "status": "needs_review",
+          "repair_pending": true,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "refund_sources": [
+        {
+          "event_key": "refund:R-20",
+          "representative_id": "R-20",
+          "member_ids": [
+            "R-20"
+          ],
+          "date": "2026-10-02 12:00:00",
+          "amount_cents": 2000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "event_key": "refund:R-25",
+          "representative_id": "R-25",
+          "member_ids": [
+            "R-25"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 2500,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "event_key": "refund:R-W",
+          "representative_id": "R-W",
+          "member_ids": [
+            "R-W"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 3000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "query_bytes_unchanged": true,
+      "database_sha256": "2299331c9f39f93d280f72eeb4d4de59c9a3156b98d1bcce3d6c56ed098d69ee"
+    },
+    {
+      "action": "repeat selected repair",
+      "changed": 0,
+      "gross_cents": 20000,
+      "net_cents": 20000,
+      "pending": {
+        "count": 3,
+        "amount_cents": 7500
+      },
+      "blockers": [
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ],
+          "refund_txn_id": "R-25",
+          "original_txn_id": "P-2",
+          "related_link_ids": [
+            "RL-f111ed90e74847458f3b116c9aa103aa"
+          ],
+          "actions": [
+            "inspect_sources",
+            "repair_refund_links",
+            "revoke_refund_link"
+          ]
+        }
+      ],
+      "links": [
+        {
+          "id": "RL-4efa4183e88443f788ca50a819e5da22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "id": "RL-85ed386763054167ae108ad53a83fd22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "stored_status": "confirmed",
+          "status": "needs_review",
+          "repair_pending": true,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "refund_sources": [
+        {
+          "event_key": "refund:R-20",
+          "representative_id": "R-20",
+          "member_ids": [
+            "R-20"
+          ],
+          "date": "2026-10-02 12:00:00",
+          "amount_cents": 2000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "event_key": "refund:R-25",
+          "representative_id": "R-25",
+          "member_ids": [
+            "R-25"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 2500,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "event_key": "refund:R-W",
+          "representative_id": "R-W",
+          "member_ids": [
+            "R-W"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 3000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "query_bytes_unchanged": true,
+      "database_sha256": "2299331c9f39f93d280f72eeb4d4de59c9a3156b98d1bcce3d6c56ed098d69ee"
+    },
+    {
+      "action": "repair independent remaining component",
+      "changed": 1,
+      "gross_cents": 20000,
+      "net_cents": 20000,
+      "pending": {
+        "count": 3,
+        "amount_cents": 7500
+      },
+      "blockers": [],
+      "links": [
+        {
+          "id": "RL-4efa4183e88443f788ca50a819e5da22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "id": "RL-85ed386763054167ae108ad53a83fd22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "refund_sources": [
+        {
+          "event_key": "refund:R-20",
+          "representative_id": "R-20",
+          "member_ids": [
+            "R-20"
+          ],
+          "date": "2026-10-02 12:00:00",
+          "amount_cents": 2000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "event_key": "refund:R-25",
+          "representative_id": "R-25",
+          "member_ids": [
+            "R-25"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 2500,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "event_key": "refund:R-W",
+          "representative_id": "R-W",
+          "member_ids": [
+            "R-W"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 3000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "query_bytes_unchanged": true,
+      "database_sha256": "8f42e535c14bf60e5df9df1f81cbc847bd4e786ce7aca9b99f4e912a3f9ecf9e"
+    },
+    {
+      "action": "explicit manual reconfirmation after repair",
+      "changed": 1,
+      "gross_cents": 20000,
+      "net_cents": 17000,
+      "pending": {
+        "count": 2,
+        "amount_cents": 4500
+      },
+      "blockers": [],
+      "links": [
+        {
+          "id": "RL-4efa4183e88443f788ca50a819e5da22",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "id": "RL-85ed386763054167ae108ad53a83fd22",
+          "stored_status": "confirmed",
+          "status": "confirmed",
+          "repair_pending": false,
+          "review_reasons": []
+        },
+        {
+          "id": "RL-f111ed90e74847458f3b116c9aa103aa",
+          "stored_status": "needs_review",
+          "status": "needs_review",
+          "repair_pending": false,
+          "review_reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        }
+      ],
+      "refund_sources": [
+        {
+          "event_key": "refund:R-20",
+          "representative_id": "R-20",
+          "member_ids": [
+            "R-20"
+          ],
+          "date": "2026-10-02 12:00:00",
+          "amount_cents": 2000,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "同一消费或退款事件的相关决定已失效，需一并重新确认"
+          ]
+        },
+        {
+          "event_key": "refund:R-25",
+          "representative_id": "R-25",
+          "member_ids": [
+            "R-25"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 2500,
+          "source_status": "refund_pending",
+          "association_status": "needs_review",
+          "reasons": [
+            "来源或组上下文已变化，需要先复核；不会自动搬移代表"
+          ]
+        },
+        {
+          "event_key": "refund:R-W",
+          "representative_id": "R-W",
+          "member_ids": [
+            "R-W"
+          ],
+          "date": "2026-11-01",
+          "amount_cents": 3000,
+          "source_status": "refund_pending",
+          "association_status": "linked",
+          "reasons": []
+        }
+      ],
+      "query_bytes_unchanged": true,
+      "database_sha256": "9a7e5f75f07c420a60a4693a0ffd5a29fa60d2b99e96ba8af00d68b5b7c9dcf9"
+    }
+  ]
+}

@@ -149,25 +149,43 @@ def assess_confirmed_links(db):
         limit=items[indices[0]]['purchase'].representative['amount_cents']
         if total>limit:
             for i in indices:items[i]['reasons'].append('累计退款超过同一消费事件金额，相关确认全部需要复核')
+    components=defaultdict(list)
+    for i,item in enumerate(items):components[root(i)].append(item['link']['id'])
     invalid_roots={root(i) for i,item in enumerate(items) if item['reasons']}
     for i,item in enumerate(items):
         if root(i) in invalid_roots and not item['reasons']:
             item['reasons'].append('同一消费或退款事件的相关决定已失效，需一并重新确认')
         item['reasons']=list(dict.fromkeys(item['reasons']))
         item['valid']=not item['reasons']
+        item['related_link_ids']=sorted(components[root(i)])
     return items
+
+
+def stored_review_reasons(db,identifier):
+    row=db.execute("""SELECT detail FROM audit_events WHERE entity_id=?
+        AND event IN ('refund_invalidated','refund_repaired') ORDER BY id DESC LIMIT 1""",(identifier,)).fetchone()
+    detail=_decode_context(row['detail']) if row else None
+    if detail:
+        reasons=detail.get('reasons') or [detail.get('reason')]
+        if isinstance(reasons,list):
+            reasons=[r for r in reasons if isinstance(r,str) and r.strip()]
+            if reasons:return reasons
+    return ['关联已失效或受相关决定影响，请核对原消费、退款及分组后重新确认']
 
 
 def refund_inventory(db,assessed=None):
     """Logical refund events and derived association state; source status never changes."""
     assessed=assess_confirmed_links(db) if assessed is None else assessed
     linked={item['refund'].key for item in assessed if item['valid']}
-    invalid_ids=set()
+    invalid_reasons=defaultdict(list)
     for item in assessed:
         if item['valid']:continue
-        invalid_ids.add(item['link']['refund_txn_id'])
-        invalid_ids.update(_snapshot_ids(_decode_context(item['link']['context_json']),'refund'))
-        if item['refund'] is not None:invalid_ids.update(item['refund'].member_ids)
+        ids={item['link']['refund_txn_id']}|_snapshot_ids(_decode_context(item['link']['context_json']),'refund')
+        if item['refund'] is not None:ids.update(item['refund'].member_ids)
+        for identifier in ids:invalid_reasons[identifier].extend(item['reasons'])
+    for row in db.execute("SELECT id,refund_txn_id,context_json FROM refund_links WHERE status='needs_review'"):
+        ids={row['refund_txn_id']}|_snapshot_ids(_decode_context(row['context_json']),'refund')
+        for identifier in ids:invalid_reasons[identifier].extend(stored_review_reasons(db,row['id']))
     events={}
     for row in db.execute("""SELECT t.* FROM transactions t LEFT JOIN import_batches b ON b.id=t.import_batch_id
         WHERE t.status='refund_pending' AND COALESCE(b.status,'')<>'deleted' ORDER BY t.id"""):
@@ -177,7 +195,10 @@ def refund_inventory(db,assessed=None):
         except RefundInvariantError as exc:
             key='refund:'+row['id'];rep=row;members=[row['id']];reasons=[str(exc)]
         if key in events:continue
-        state='linked' if key in linked else 'needs_review' if reasons or invalid_ids.intersection(members) else 'pending'
+        for identifier in members:reasons.extend(invalid_reasons.get(identifier,[]))
+        reasons=list(dict.fromkeys(reasons))
+        state='linked' if key in linked else 'needs_review' if reasons else 'pending'
+        if state=='linked':reasons=[]
         events[key]=dict(event_key=key,representative_id=rep['id'],member_ids=members,date=rep['date'],
                          amount_cents=rep['amount_cents'],source_status=rep['status'],association_status=state,reasons=reasons)
     return list(events.values())

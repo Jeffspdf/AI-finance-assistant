@@ -1,0 +1,114 @@
+{
+  "stage": "M2-3 maintenance and persistence; net UI is M2-4",
+  "timestamp": "2026-11-04T14:50:20.789880+08:00",
+  "branch": "m2/refund-net",
+  "base_commit": "f61871fb90e489cdd34093a148e06f2cd2355a9c",
+  "data": "synthetic only; no personal ledger or API key accessed",
+  "stable_release": "v0.8.5 / schema 4",
+  "development_schema": 5,
+  "migrations_unchanged": true,
+  "previous_tests_unmodified": true,
+  "decisions": {
+    "reconfirmation": "B: valid confirmed must be revoked before reconfirming",
+    "confirmation_blocking": "global invalid confirmed decision blocks new confirmation; structured IDs/reasons/actions",
+    "targeted_repair": "whole related component, not unrelated components; never auto-confirm",
+    "candidate_retries": "same member set reuses candidate; historical duplicates archived with audit"
+  },
+  "pytest": {
+    "total": 451,
+    "previous": 373,
+    "new_m2_3": 78,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 48.727,
+    "timestamp": "2026-11-04T14:47:47.563600+08:00"
+  },
+  "source_desktop": {
+    "processes_passed": 6,
+    "artifacts": {
+      "m1a-self-test.json": {
+        "data": "synthetic only",
+        "before_cents": 12000,
+        "confirmed_cents": 6000,
+        "split_cents": 12000,
+        "pending_refund_cents": 1000,
+        "transfer_cents": 50000,
+        "source_rows": 6,
+        "automatic": false,
+        "checks": [
+          "overview",
+          "ledger",
+          "budget",
+          "question",
+          "planning_estimate",
+          "link_evidence",
+          "split_persistence"
+        ]
+      },
+      "round5-self-test.json": {
+        "data": "synthetic only",
+        "alipay_confidence": "A",
+        "confirmed_expense_cents": 2000,
+        "category_changed_expense_cents": 4000,
+        "group_status": "needs_review",
+        "cache_cleared": true,
+        "two_wallets_rejected": true,
+        "legacy_invalid_group_repaired": true,
+        "auto_detect_wechat": true,
+        "changed_parser_conflicts": 1,
+        "C_confirm_rejected": true,
+        "demo_reseeded": false
+      },
+      "round6-self-test.json": {
+        "data": "synthetic only",
+        "invalid_transfer_category_rejected": true,
+        "confirmed_expense_cents": 6000,
+        "valid_category_change_expense_cents": 8000,
+        "read_queries_unchanged": true,
+        "read_only_view": true,
+        "explicit_repair_cleared_cache": true,
+        "no_wallet_ack_required": true,
+        "C_binding_gap_named": true,
+        "C_upgraded_to_A": true,
+        "legacy_category_backup_and_normalization": true
+      },
+      "round7-self-test.json": {
+        "data": "synthetic only",
+        "income_expense_categories_guarded": true,
+        "targeted_repair_only_selected": true,
+        "query_bytes_unchanged": true,
+        "legacy_income_expense_preserved": true,
+        "backup_discoverable_after_restart": true,
+        "backup_preview_and_explicit_delete": true,
+        "read_only_delete_rejected": true
+      },
+      "round8-self-test.json": {
+        "data": "synthetic only",
+        "legacy_conflicts_discovered_readonly": true,
+        "no_startup_income_expense_rewrite": true,
+        "explicit_correction_preserves_kind_amount": true,
+        "stale_snapshot_identity_rejected": true,
+        "fresh_confirmation_deletes_only_selected": true,
+        "live_database_unchanged_by_cleanup": true
+      }
+    },
+    "warning_observed": true
+  },
+  "matrix": "matrix-results.json",
+  "trace": "maintenance-trace.json",
+  "remaining": [
+    "M2-4 all-page spending_view integration and mandatory static projection contract",
+    "M2-4 actionable refund UI, basis switch consent/audit and chart/export basis labels",
+    "M2-5 console write warning root cause, actual EXE and migration/release acceptance",
+    "G-DATA lacks real samples and participants"
+  ],
+  "source_sha256_lf": {
+    "finance/refunds.py": "3a03b9bf4de4f3d413030db624dc17622db7908c0b1f4099e983d3e8b8d0dc09",
+    "finance/refund_rules.py": "143df3d5bcb6194f981a757e9dcf6513e23d90feed68a7cc597396420c5ac713",
+    "finance/reconciliation.py": "69a1c34dc6a24754b4151274b2dc6480db103d1b78f37b23e6df26f7c06389fe",
+    "finance/storage.py": "45021eed12329940319984b18da8720ebaa69172d28a88b8e6115811a2c2b4f7",
+    "finance/demo_generator.py": "ce8a729a6b652a0ad0d22284ffd642c1dd4fd4f925b6b83b421056436915e15f",
+    "tests/test_m2_3.py": "a00db31aa8593576be087d183a11a7bf874baafc6c624ec7913b583eed5605e0"
+  }
+}

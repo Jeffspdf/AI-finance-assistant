@@ -27,7 +27,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
         else:
             self.migration_backup=ensure_schema(path)
             self._repair_category_semantics_on_open()
-            self.repair_invalid_groups(source='startup')
+            self.maintain_links(source='startup')
 
     @contextmanager
     def connect(self, *, read_only=False):
@@ -71,7 +71,8 @@ class Store(Refunds,Reconciliation,BackupManagement):
             return frame[frame.included_in_stats].copy()
 
     def import_rows(self, rows):
-        with self.connect() as db:return self._insert_rows(db,rows)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');return self._insert_rows(db,rows)
 
     def validate_refund_link(self,refund_txn_id,original_txn_id,amount_cents=None):
         """M2-1 foundation: read-only validation, without confirming or deducting."""
@@ -142,6 +143,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
             if old:
                 # Reimport after a soft deletion is explicit; preserve stable identity.
                 row['id']=old['id']
+                self.invalidate_groups(db,row['id'],'软删除来源被明确重新导入，旧退款决定需重新确认')
                 db.execute('UPDATE transactions SET '+','.join(k+'=?' for k in keys if k!='id')+' WHERE id=?',
                            [row[k] for k in keys if k!='id']+[old['id']])
             else:
@@ -151,7 +153,8 @@ class Store(Refunds,Reconciliation,BackupManagement):
 
     def import_statement(self,result):
         """Commit provenance, issues and transactions together, even an all-invalid file."""
-        with self.connect() as db:return self._import_statement(db,result)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');return self._import_statement(db,result)
 
     def _import_statement(self,db,result):
         """Also used by the demo generator inside its replacement transaction."""
@@ -224,7 +227,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
                         assert_supported(target);origin.backup(target)
                     inspect_database(self.path)
                     self._repair_category_semantics_on_open()
-                    self.repair_invalid_groups(source='restore')
+                    self.maintain_links(source='restore')
                 except Exception:
                     with closing(sqlite3.connect(before)) as origin, closing(sqlite3.connect(self.path)) as target:origin.backup(target)
                     raise
@@ -236,6 +239,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
     def correct_categories(self, corrections,learn=False):
         from .categories import CATEGORIES
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             for txid, category in corrections:
                 if category not in CATEGORIES:
                     raise ValueError('无效分类')
@@ -318,6 +322,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
         from .categories import CATEGORIES
         if category not in CATEGORIES:raise ValueError('无效模型分类')
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT kind,category,category_source FROM transactions WHERE id=?',(txid,)).fetchone()
             if not row or row['category_source']!='待确认':return False
             validate_kind_category(row['kind'],category)
@@ -371,6 +376,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
     def undo_category_batch(self,snapshot):
         count=0
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             for row in snapshot:
                 current=db.execute('SELECT category,category_source,kind FROM transactions WHERE id=?',(row['id'],)).fetchone()
                 if current and current['category']==row['new'] and current['category_source']=='用户修正':

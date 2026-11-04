@@ -87,6 +87,7 @@ def generate_demo(store,options,*,space,seed=None):
     # The caller can preview this count before confirming replacement.
     removed=0
     with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
         if options.replace_months:
             placeholders=','.join('?' for _ in summary['months'])
             ids=[r[0] for r in db.execute(f"SELECT id FROM transactions WHERE substr(date,1,7) IN ({placeholders}) AND status<>'deleted'",summary['months'])]

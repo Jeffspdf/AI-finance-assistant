@@ -108,7 +108,8 @@ class Reconciliation:
             members=members_by_group[group['id']]
             rows=[byid[m['transaction_id']] for m in members if m['transaction_id'] in byid]
             purchases=[m['transaction_id'] for m in members if m['role']=='purchase']
-            if len(rows)!=len(members) or not valid_group(rows,accounts) or len(purchases)!=1:
+            if (len(rows)!=len(members) or not valid_group(rows,accounts) or len(purchases)!=1 or
+                any(m['role'] not in ('purchase','funding') for m in members)):
                 invalid_groups[group['id']]='当前来源不再符合排重约束'
                 frame.loc[frame.id.isin([r['id'] for r in rows]),'link_group_id']=None
                 notes.update({r['id']:'关联失效 · 已恢复计数，请复核' for r in rows})
@@ -126,17 +127,33 @@ class Reconciliation:
         frame.attrs['invalid_groups']=invalid_groups
         return frame
 
+    def _invalid_confirmed_groups(self,db):
+        invalid=dict(self._source_frame(db).attrs['invalid_groups'])
+        from .refund_rules import resolve_event,RefundInvariantError
+        for group in db.execute("SELECT id FROM link_groups WHERE status='confirmed' AND kind='refund_duplicate'"):
+            member=db.execute('SELECT transaction_id FROM link_members WHERE group_id=? LIMIT 1',(group['id'],)).fetchone()
+            try:
+                if not member:raise RefundInvariantError('退款组缺少成员，请核对来源')
+                resolve_event(db,member['transaction_id'],'refund')
+            except RefundInvariantError as exc:invalid[group['id']]=str(exc)
+        return invalid
+
     def repair_invalid_groups(self,*,db=None,source='manual',identifier=None):
         """Explicit write operation; ordinary readers never persist repairs or audit."""
         if self.read_only:raise ValueError('只读账本不能执行关联修复，请用可写模式打开')
         if db is None:
-            with self.connect() as connection:return self.repair_invalid_groups(db=connection,source=source,identifier=identifier)
+            with self.connect() as connection:
+                connection.execute('BEGIN IMMEDIATE')
+                return self.repair_invalid_groups(db=connection,source=source,identifier=identifier)
+        if not db.in_transaction:db.execute('BEGIN IMMEDIATE')
         if identifier is not None and not db.execute('SELECT 1 FROM link_groups WHERE id=?',(identifier,)).fetchone():
             raise ValueError('关联组不存在')
-        invalid=self._source_frame(db).attrs['invalid_groups']
+        invalid=self._invalid_confirmed_groups(db)
         repaired=0
         for gid,reason in invalid.items():
             if identifier is not None and gid!=identifier:continue
+            from .refunds import invalidate_refund_links
+            invalidate_refund_links(db,[r[0] for r in db.execute('SELECT transaction_id FROM link_members WHERE group_id=?',(gid,))],'关联组修复：'+reason,group_ids=[gid])
             changed=db.execute("UPDATE link_groups SET status='needs_review',decided_at=CURRENT_TIMESTAMP,decided_by='system' WHERE id=? AND status='confirmed'",(gid,)).rowcount
             if changed:
                 audit(db,'link_invalidated',gid,dict(reason=reason,algorithm_version=ALGORITHM,trigger=source));repaired+=1
@@ -144,7 +161,8 @@ class Reconciliation:
 
     def source_transactions(self):
         """All active source legs, including refunds and excluded funding legs."""
-        with self.connect(read_only=True) as db:return self._source_frame(db)
+        with self.connect(read_only=True) as db:
+            db.execute('BEGIN');return self._source_frame(db)
 
     def pending_refunds(self,month=None):
         rows=self.source_transactions()
@@ -154,10 +172,11 @@ class Reconciliation:
 
     def reconciliation_groups(self):
         with self.connect(read_only=True) as db:
-            invalid=self._source_frame(db).attrs['invalid_groups']
+            db.execute('BEGIN');invalid=self._invalid_confirmed_groups(db)
             groups=[dict(r) for r in db.execute('SELECT * FROM link_groups ORDER BY created_at DESC,id')]
             for g in groups:
                 g['stored_status']=g['status'];g['repair_pending']=g['id'] in invalid
+                g['review_reason']=invalid.get(g['id'],'')
                 if g['repair_pending']:g['status']='needs_review'
                 g['members']=[dict(r) for r in db.execute('''SELECT t.*,m.role FROM link_members m
                     JOIN transactions t ON t.id=m.transaction_id WHERE m.group_id=? ORDER BY m.role,t.id''',(g['id'],))]
@@ -166,7 +185,9 @@ class Reconciliation:
     def generate_candidates(self):
         """Indexed buckets + bisect; at most 20 inspected neighbours per purchase."""
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             self.repair_invalid_groups(db=db,source='candidate_scan')
+            self.repair_refund_links(db=db,source='candidate_scan')
             frame=self._source_frame(db)
             accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
             links=[dict(r) for r in db.execute('SELECT * FROM funding_links')]
@@ -208,7 +229,7 @@ class Reconciliation:
                         similar=SequenceMatcher(None,text1,text2).ratio()>=.55 or bool(left['merchant'] and left['merchant']==right['merchant'])
                         pairs[pair]=(left,right,strong_match,similar)
             # Only refresh undecided proposals; rejected/split/edited decisions survive reruns.
-            db.execute("UPDATE link_groups SET status='stale' WHERE status='candidate'")
+            db.execute("UPDATE link_groups SET status='stale' WHERE status='candidate' AND kind='purchase_duplicate'")
             created=0
             for pair,(a,b,strong_match,similar) in pairs.items():
                 unique=strong_match and len(strong[a['id']])==len(strong[b['id']])==1 and not ({a['id'],b['id']}&overflow)
@@ -232,6 +253,7 @@ class Reconciliation:
     def clean_stale_candidates(self):
         """Remove undecided expired proposals only, never user decisions or raw evidence."""
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             ids=[r[0] for r in db.execute("SELECT id FROM link_groups WHERE status='stale' AND decided_by IS NULL")]
             for gid in ids:
                 db.execute('DELETE FROM link_members WHERE group_id=?',(gid,))
@@ -313,7 +335,7 @@ class Reconciliation:
                 rep=representative(rows,accounts)
                 db.execute("UPDATE link_members SET role=CASE WHEN transaction_id=? THEN 'purchase' ELSE 'funding' END WHERE group_id=?",(rep['id'],identifier))
             from .refunds import invalidate_refund_links
-            invalidate_refund_links(db,[r[0] for r in db.execute('SELECT transaction_id FROM link_members WHERE group_id=?',(identifier,))],'消费组决定改变：'+decision)
+            invalidate_refund_links(db,[r[0] for r in db.execute('SELECT transaction_id FROM link_members WHERE group_id=?',(identifier,))],'消费组决定改变：'+decision,group_ids=[identifier])
             db.execute("UPDATE link_groups SET status=?,decided_at=CURRENT_TIMESTAMP,decided_by='user' WHERE id=?",(decision,identifier))
             audit(db,'link_'+decision,identifier,{'algorithm_version':group['algorithm_version'],'reason':group['reason'],
                                                 'non_wallet_acknowledged':bool(decision=='confirmed' and wallet_count==0 and acknowledge_no_wallet is True)})
@@ -332,7 +354,7 @@ class Reconciliation:
                 _refund_members(db,[r['id'] for r in rows])
             elif not valid_group(rows,accounts):raise ValueError('当前来源金额、类型、钱包数量或状态不符合排重条件，请先核对交易')
             from .refunds import invalidate_refund_links
-            invalidate_refund_links(db,[r['id'] for r in rows],'关联组重新核对')
+            invalidate_refund_links(db,[r['id'] for r in rows],'关联组重新核对',group_ids=[identifier])
             db.execute("UPDATE link_groups SET status='candidate',decided_at=CURRENT_TIMESTAMP,decided_by='user' WHERE id=?",(identifier,))
             audit(db,'link_reopened',identifier,{'previous_status':group['status']})
 

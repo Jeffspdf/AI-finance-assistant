@@ -1,0 +1,78 @@
+{
+  "data": "synthetic only",
+  "execution": "Python source, not packaged EXE",
+  "scenarios": [
+    {
+      "scenario": "full",
+      "import_adapters": [
+        "wechat_csv",
+        "bank_template_v1"
+      ],
+      "source_rows": 4,
+      "refund_source_rows": 2,
+      "confirmed_refund_events": 1,
+      "gross_cents": 10000,
+      "net_cents": 0,
+      "cash_months": {
+        "2026-09": 10000,
+        "2026-10": -10000
+      },
+      "original_months": {
+        "2026-09": 0,
+        "2026-10": 0
+      },
+      "source_refund_statuses": [
+        "refund_pending"
+      ],
+      "repair_pending": []
+    },
+    {
+      "scenario": "partial",
+      "import_adapters": [
+        "wechat_csv",
+        "bank_template_v1"
+      ],
+      "source_rows": 4,
+      "refund_source_rows": 2,
+      "confirmed_refund_events": 1,
+      "gross_cents": 10000,
+      "net_cents": 7000,
+      "cash_months": {
+        "2026-09": 10000,
+        "2026-10": -3000
+      },
+      "original_months": {
+        "2026-09": 7000,
+        "2026-10": 0
+      },
+      "source_refund_statuses": [
+        "refund_pending"
+      ],
+      "repair_pending": []
+    },
+    {
+      "scenario": "multiple",
+      "import_adapters": [
+        "wechat_csv",
+        "bank_template_v1"
+      ],
+      "source_rows": 6,
+      "refund_source_rows": 4,
+      "confirmed_refund_events": 2,
+      "gross_cents": 10000,
+      "net_cents": 5000,
+      "cash_months": {
+        "2026-09": 10000,
+        "2026-10": -5000
+      },
+      "original_months": {
+        "2026-09": 5000,
+        "2026-10": 0
+      },
+      "source_refund_statuses": [
+        "refund_pending"
+      ],
+      "repair_pending": []
+    }
+  ]
+}

@@ -290,8 +290,11 @@ class Reconciliation:
     def decide_group(self,identifier,decision,*,acknowledge_no_wallet=False):
         if decision not in ('confirmed','rejected','split'):raise ValueError('无效对账决定')
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             group=db.execute('SELECT * FROM link_groups WHERE id=?',(identifier,)).fetchone()
             if not group:raise ValueError('关联组不存在')
+            if group['kind']=='refund_duplicate':
+                return self._decide_refund_group(db,group,decision,acknowledge_no_wallet)
             if decision=='split' and group['status']!='confirmed':raise ValueError('只有已确认的关联组可以拆分')
             if decision=='confirmed':
                 if group['status']!='candidate':raise ValueError('此组已有决定或候选已过期，请重新核对来源')
@@ -309,6 +312,8 @@ class Reconciliation:
                     raise ValueError('本组没有钱包消费，可能是两笔真实消费；需要再次核对来源并明确确认')
                 rep=representative(rows,accounts)
                 db.execute("UPDATE link_members SET role=CASE WHEN transaction_id=? THEN 'purchase' ELSE 'funding' END WHERE group_id=?",(rep['id'],identifier))
+            from .refunds import invalidate_refund_links
+            invalidate_refund_links(db,[r[0] for r in db.execute('SELECT transaction_id FROM link_members WHERE group_id=?',(identifier,))],'消费组决定改变：'+decision)
             db.execute("UPDATE link_groups SET status=?,decided_at=CURRENT_TIMESTAMP,decided_by='user' WHERE id=?",(decision,identifier))
             audit(db,'link_'+decision,identifier,{'algorithm_version':group['algorithm_version'],'reason':group['reason'],
                                                 'non_wallet_acknowledged':bool(decision=='confirmed' and wallet_count==0 and acknowledge_no_wallet is True)})
@@ -316,17 +321,25 @@ class Reconciliation:
     def reopen_group(self,identifier):
         """Only an explicit user action may undo a rejected/split/invalidated decision."""
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             group=db.execute('SELECT * FROM link_groups WHERE id=?',(identifier,)).fetchone()
             if not group or group['status'] not in ('rejected','split','needs_review','candidate','stale'):
                 raise ValueError('请选择待核对、已拒绝或已拆分的组')
             rows=[dict(r) for r in db.execute('SELECT t.* FROM transactions t JOIN link_members m ON t.id=m.transaction_id WHERE m.group_id=?',(identifier,))]
             accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
-            if not valid_group(rows,accounts):raise ValueError('当前来源金额、类型、钱包数量或状态不符合排重条件，请先核对交易')
+            if group['kind']=='refund_duplicate':
+                from .refunds import _refund_members
+                _refund_members(db,[r['id'] for r in rows])
+            elif not valid_group(rows,accounts):raise ValueError('当前来源金额、类型、钱包数量或状态不符合排重条件，请先核对交易')
+            from .refunds import invalidate_refund_links
+            invalidate_refund_links(db,[r['id'] for r in rows],'关联组重新核对')
             db.execute("UPDATE link_groups SET status='candidate',decided_at=CURRENT_TIMESTAMP,decided_by='user' WHERE id=?",(identifier,))
             audit(db,'link_reopened',identifier,{'previous_status':group['status']})
 
     @staticmethod
     def invalidate_groups(db,txid,reason):
+        from .refunds import invalidate_refund_links
+        invalidate_refund_links(db,[txid],reason)
         groups=[r[0] for r in db.execute("SELECT g.id FROM link_groups g JOIN link_members m ON m.group_id=g.id WHERE m.transaction_id=? AND g.status IN ('candidate','confirmed')",(txid,))]
         for gid in groups:
             db.execute("UPDATE link_groups SET status='needs_review',decided_at=CURRENT_TIMESTAMP,decided_by='system' WHERE id=?",(gid,))

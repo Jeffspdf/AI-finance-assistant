@@ -4,7 +4,7 @@ import pandas as pd
 from .categories import category_in_question
 from .analytics import yuan
 from .categories import CATEGORIES
-from .evidence import effective_frame,calculation
+from .evidence import effective_frame,calculation,count_records
 
 def month_shift(today, offset):
     index=today.year*12+today.month-1+offset
@@ -141,11 +141,11 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         answer=f'{label}的月均'+('支出' if metric=='average_expense' else '收入')+f'为 {total/100/n:,.2f} 元。计算式：{yuan(total)} 元 ÷ {n} 个有记录月份。缺失月份：'+('、'.join(missing) if missing else '无')+'。缺失月不视为零消费。'
     elif metric in ['expense','income']:
         description='支出' if metric=='expense' else '收入'
-        answer=f'{label}的{item}{description}合计 {yuan(total)} 元，共 {len(tx)} 笔。计算方式：逐笔金额相加。'
+        answer=f'{label}的{item}{description}合计 {yuan(total)} 元，共 {count_records(tx)} 笔。计算方式：逐笔金额相加。'
     elif metric=='balance':
         income=int(tx.loc[tx.kind=='收入','amount_cents'].sum()); expense=int(tx.loc[tx.kind=='支出','amount_cents'].sum())
         answer=f'{label}的{item}结余为 {yuan(income-expense)} 元：收入 {yuan(income)} 元减支出 {yuan(expense)} 元。转账不计入收支。'
-    elif metric=='count': answer=f'{label}的{item}交易共 {len(tx)} 笔。计算式：匹配记录逐笔计数。'
+    elif metric=='count': answer=f'{label}的{item}交易共 {count_records(tx)} 笔。计算式：匹配记录逐笔计数。'
     elif metric=='top':
         grouped=tx.groupby('category').amount_cents.sum(); winners=grouped[grouped==grouped.max()]
         names='、'.join(winners.index)
@@ -155,7 +155,8 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         if not category:
             return {'answer':'请指定分类，例如“上个月餐饮占比是多少？”','evidence':[],'status':'unsupported','parser':source}
         all_expenses=full[full.kind=='支出']; denominator=int(all_expenses.amount_cents.sum())
-        answer=f'{label}的{category}占总支出的 {total/denominator*100:.2f}%：{yuan(total)} 元 ÷ {yuan(denominator)} 元 × 100%。'
+        answer=(f'{label}的{category}占比不适用：总支出为 {yuan(denominator)} 元，分母不大于零。' if denominator<=0 else
+                f'{label}的{category}占总支出的 {total/denominator*100:.2f}%：{yuan(total)} 元 ÷ {yuan(denominator)} 元 × 100%。')
         tx=all_expenses  # Both numerator and denominator need evidence.
     else:
         if month=='all' or not category:
@@ -173,6 +174,9 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     if trace['evidence'] and any(e['type']=='LinkDecision' for e in trace['evidence']):
         answer+=' 已按人工确认的关联组排除重复资金腿；关联决定可在对账中撤销。'
     refund=frame.attrs.get('refund_pending',{})
-    if refund.get('count'):
+    if frame.attrs.get('projection')=='spending_view':
+        answer+=' 净支出口径：'+('退款发生月（现金口径）。' if frame.attrs['spending_basis']=='cash' else '原消费月口径。')
+        if refund.get('count'):answer+=f' 另有{refund["count"]}笔退款待处理，尚未计入抵扣。'
+    elif refund.get('count'):
         answer+=f' 退款仍待处理（{refund["count"]} 笔），当前支出未扣退款，净支出待定。'
     return {'answer':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}

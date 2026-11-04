@@ -2,7 +2,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 import json
+from collections import defaultdict
 from .reconciliation import ACTIVE,is_wallet,representative,valid_group
+from .categories import validate_kind_category
 
 ALGORITHM='m2-refund-1'
 SNAPSHOT_FIELDS=('id','external_id','date','merchant','description','amount_cents','kind','category','channel',
@@ -55,6 +57,9 @@ def _source(db,identifier,kind):
         if row['kind']!='收入' or row['status']!='refund_pending' or row['category']=='转账':
             raise RefundInvariantError('必须选择独立的待处理退款流水，不能用普通收入、转账或原消费状态抵扣')
     else:raise RefundInvariantError('不支持的逻辑事件类型')
+    try:validate_kind_category(row['kind'],row['category'])
+    except ValueError as exc:
+        raise RefundInvariantError('来源分类与类型不一致，请先在“历史分类待修正”中修正：'+str(exc)) from None
     return row
 
 
@@ -110,10 +115,78 @@ def _snapshot_ids(context,kind):
     return {v for v in values if isinstance(v,str)} if isinstance(values,list) else set()
 
 
+def assess_confirmed_links(db):
+    """Revalidate ALL confirmations without writes; invalidate related components together."""
+    items=[];owners={};parents=[];by_refund=defaultdict(list);by_purchase=defaultdict(list)
+    def root(i):
+        while parents[i]!=i:
+            parents[i]=parents[parents[i]];i=parents[i]
+        return i
+    for row in db.execute("SELECT * FROM refund_links WHERE status='confirmed' ORDER BY id"):
+        link=dict(row);previous=_decode_context(link['context_json']);i=len(items);parents.append(i)
+        item=dict(link=link,refund=None,purchase=None,context=None,reasons=[])
+        for kind,field in [('refund','refund_txn_id'),('purchase','original_txn_id')]:
+            try:item[kind]=resolve_event(db,link[field],kind)
+            except RefundInvariantError as exc:item['reasons'].append(str(exc))
+            ids={link[field]}|_snapshot_ids(previous,kind)
+            if item[kind] is not None:ids.update(item[kind].member_ids)
+            for identifier in ids:
+                token=(kind,identifier)
+                if token in owners:parents[root(i)]=root(owners[token])
+                else:owners[token]=i
+        try:
+            _,_,item['context']=_context(db,link['refund_txn_id'],link['original_txn_id'],link['amount_cents'])
+            if previous!=item['context']:item['reasons'].append('来源或组上下文已变化，需要先复核；不会自动搬移代表')
+        except RefundInvariantError as exc:item['reasons'].append(str(exc))
+        if item['refund'] is not None:by_refund[item['refund'].key].append(i)
+        if item['purchase'] is not None:by_purchase[item['purchase'].key].append(i)
+        items.append(item)
+    for indices in by_refund.values():
+        if len(indices)>1:
+            for i in indices:items[i]['reasons'].append('同一逻辑退款事件存在多条已确认关联，不能重复抵扣')
+    for indices in by_purchase.values():
+        total=sum(items[i]['link']['amount_cents'] for i in indices)
+        limit=items[indices[0]]['purchase'].representative['amount_cents']
+        if total>limit:
+            for i in indices:items[i]['reasons'].append('累计退款超过同一消费事件金额，相关确认全部需要复核')
+    invalid_roots={root(i) for i,item in enumerate(items) if item['reasons']}
+    for i,item in enumerate(items):
+        if root(i) in invalid_roots and not item['reasons']:
+            item['reasons'].append('同一消费或退款事件的相关决定已失效，需一并重新确认')
+        item['reasons']=list(dict.fromkeys(item['reasons']))
+        item['valid']=not item['reasons']
+    return items
+
+
+def refund_inventory(db,assessed=None):
+    """Logical refund events and derived association state; source status never changes."""
+    assessed=assess_confirmed_links(db) if assessed is None else assessed
+    linked={item['refund'].key for item in assessed if item['valid']}
+    invalid_ids=set()
+    for item in assessed:
+        if item['valid']:continue
+        invalid_ids.add(item['link']['refund_txn_id'])
+        invalid_ids.update(_snapshot_ids(_decode_context(item['link']['context_json']),'refund'))
+        if item['refund'] is not None:invalid_ids.update(item['refund'].member_ids)
+    events={}
+    for row in db.execute("""SELECT t.* FROM transactions t LEFT JOIN import_batches b ON b.id=t.import_batch_id
+        WHERE t.status='refund_pending' AND COALESCE(b.status,'')<>'deleted' ORDER BY t.id"""):
+        row=dict(row);reasons=[]
+        try:
+            event=resolve_event(db,row['id'],'refund');key=event.key;rep=event.representative;members=sorted(event.member_ids)
+        except RefundInvariantError as exc:
+            key='refund:'+row['id'];rep=row;members=[row['id']];reasons=[str(exc)]
+        if key in events:continue
+        state='linked' if key in linked else 'needs_review' if reasons or invalid_ids.intersection(members) else 'pending'
+        events[key]=dict(event_key=key,representative_id=rep['id'],member_ids=members,date=rep['date'],
+                         amount_cents=rep['amount_cents'],source_status=rep['status'],association_status=state,reasons=reasons)
+    return list(events.values())
+
+
 def validate_refund_link(db,refund_txn_id,original_txn_id,amount_cents=None):
     """Validate a whole-refund proposal inside the caller's read or write transaction.
 
-    This does not reserve capacity. A future confirmation must validate and write
+    This does not reserve capacity. A confirmation must validate and write
     in the same BEGIN IMMEDIATE transaction, rather than reuse a preview result.
     """
     if refund_txn_id==original_txn_id:raise RefundInvariantError('退款和原消费不能是同一来源')

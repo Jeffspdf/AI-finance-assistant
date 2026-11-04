@@ -1,0 +1,123 @@
+{
+  "stage": "M2-2 services and projection; UI and full M2 acceptance pending",
+  "timestamp": "2026-11-04T14:09:42.012724+08:00",
+  "branch": "m2/refund-net",
+  "base_commit": "cd7d7c68dca12675a0db5d5d745da63adbb61bf7",
+  "data": "synthetic only; no personal ledger or API key accessed",
+  "stable_release": "v0.8.5 / schema 4",
+  "development_schema": 5,
+  "migrations_unchanged_from_m2_1": true,
+  "previous_tests_unmodified": true,
+  "pytest": {
+    "total": 373,
+    "previous": 322,
+    "new_m2_2": 51,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 34.105,
+    "timestamp": "2026-11-04T14:05:04.045985+08:00",
+    "command": "python -m pytest -q"
+  },
+  "source_desktop": {
+    "processes_passed": 6,
+    "artifacts": {
+      "m1a-self-test.json": {
+        "data": "synthetic only",
+        "before_cents": 12000,
+        "confirmed_cents": 6000,
+        "split_cents": 12000,
+        "pending_refund_cents": 1000,
+        "transfer_cents": 50000,
+        "source_rows": 6,
+        "automatic": false,
+        "checks": [
+          "overview",
+          "ledger",
+          "budget",
+          "question",
+          "planning_estimate",
+          "link_evidence",
+          "split_persistence"
+        ]
+      },
+      "round5-self-test.json": {
+        "data": "synthetic only",
+        "alipay_confidence": "A",
+        "confirmed_expense_cents": 2000,
+        "category_changed_expense_cents": 4000,
+        "group_status": "needs_review",
+        "cache_cleared": true,
+        "two_wallets_rejected": true,
+        "legacy_invalid_group_repaired": true,
+        "auto_detect_wechat": true,
+        "changed_parser_conflicts": 1,
+        "C_confirm_rejected": true,
+        "demo_reseeded": false
+      },
+      "round6-self-test.json": {
+        "data": "synthetic only",
+        "invalid_transfer_category_rejected": true,
+        "confirmed_expense_cents": 6000,
+        "valid_category_change_expense_cents": 8000,
+        "read_queries_unchanged": true,
+        "read_only_view": true,
+        "explicit_repair_cleared_cache": true,
+        "no_wallet_ack_required": true,
+        "C_binding_gap_named": true,
+        "C_upgraded_to_A": true,
+        "legacy_category_backup_and_normalization": true
+      },
+      "round7-self-test.json": {
+        "data": "synthetic only",
+        "income_expense_categories_guarded": true,
+        "targeted_repair_only_selected": true,
+        "query_bytes_unchanged": true,
+        "legacy_income_expense_preserved": true,
+        "backup_discoverable_after_restart": true,
+        "backup_preview_and_explicit_delete": true,
+        "read_only_delete_rejected": true
+      },
+      "round8-self-test.json": {
+        "data": "synthetic only",
+        "legacy_conflicts_discovered_readonly": true,
+        "no_startup_income_expense_rewrite": true,
+        "explicit_correction_preserves_kind_amount": true,
+        "stale_snapshot_identity_rejected": true,
+        "fresh_confirmation_deletes_only_selected": true,
+        "live_database_unchanged_by_cleanup": true
+      }
+    },
+    "warning_observed": true
+  },
+  "decisions": {
+    "source_status_strategy": "A: retain refund_pending; derive association status",
+    "invalid_legacy_categories": "reject until explicitly corrected",
+    "confirmation": "BEGIN IMMEDIATE -> global revalidation -> proposal revalidation -> decision + audit -> commit",
+    "concurrency": [
+      "same refund: one success",
+      "same logical event / different purchases: one success",
+      "80 + 80 against 100: one success",
+      "30 + 30 against 100: both succeed"
+    ]
+  },
+  "business_results": "business-results.json",
+  "pending": [
+    "M2-3 complete maintenance matrix and explicit repair/idempotence",
+    "M2-4 all-page UI integration and projection contract",
+    "M2-5 root-cause console write warning, actual packaged EXE, v0.9.0 release",
+    "G-DATA real samples and participants unavailable"
+  ],
+  "source_sha256_lf": {
+    "finance/analytics.py": "44d4caa0af1b951dc868d4a6ee90593c8caa005d8a105fa52e6d275d816822cf",
+    "finance/evidence.py": "755d73259b994ecb31841ec80e5dbbcf54e921a99c753f762ee4210b2dcc3417",
+    "finance/qa.py": "90f72deaf7ed36dba5c5b549a6afef7454669cae406c690e2efac0c3e3404454",
+    "finance/reconciliation.py": "67bd4b91eceef5bbc92d540dfee337ee70302cc930a86c4dc3e74f19d617f9c3",
+    "finance/refund_rules.py": "c7b66efb6d618176e5f3429b4aa13bd5ba7a43a3804369d69c0a14c52f3a0846",
+    "finance/refunds.py": "3338128ad918318f5468891f0f36741bf8a3d05b201f990e1ec55fea6c406221",
+    "finance/spending.py": "4e1b748f61b8202484cdf80cdd36b78c2d533dff8c1e7b947c4242ea19d00d0b",
+    "finance/storage.py": "9431bced11aeadf4c0ae1dd7e78433fd5ed0ea8fc0cd2e9cc51601c35d8e8a78",
+    "scripts/reproduce_m2_refunds.py": "e92527e6ef4030be87a3b4de45fe969c7df9a9072e6d194f10c3f1fdbf02332e",
+    "tests/test_m2_2.py": "527187b71c9bc733e4ca5471e8a3f09d17f2542afd9ca05c20ba2477030cea03"
+  }
+}

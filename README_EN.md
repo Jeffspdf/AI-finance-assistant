@@ -4,7 +4,7 @@
 
 A local Windows application for student spending analysis, budgets, and explainable savings planning. Tkinter is the delivered desktop UI; Streamlit remains a web prototype. Optional compatible Chat Completions providers suggest categories and parse bounded questions. All money calculations run in deterministic Python code.
 
-**M2 development branch**: only [M2-1 migration and read-only refund validation](docs/M2_1_ACCEPTANCE.md) is implemented. It upgrades test databases to schema 5, but has no net projection or refund UI. Use a separate test data directory, not your personal ledger. Stable v0.8.5 uses schema 4 and cannot open the upgraded database. No new installer is released; v0.9.0 requires M2-5 acceptance.
+**M2 development branch**: M2-1 and [M2-2 refund decisions, event deduplication and net projection](docs/M2_2_ACCEPTANCE.md) are implemented at the service layer. UI integration remains pending. Use a separate test data directory: development databases use schema 5, while stable v0.8.5 uses schema 4 and cannot open upgraded databases. No new installer is released; v0.9.0 requires M2-5 acceptance.
 
 ## Run
 
@@ -14,9 +14,9 @@ The desktop supports CSV/XLSX import, conflict-aware deduplication, audited edit
 
 ## Cross-source reconciliation (0.8.0)
 
-M2 implementation: the user approved the [gap analysis and implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md), with the cash-date default and net-based budgets while retaining gross. Only M2-1 is implemented; client refund netting remains pending. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
+M2 implementation: the user approved the [implementation plan](docs/M2_GAP_AND_IMPLEMENTATION_PLAN.md), with the cash-date default and net-based budgets while retaining gross. Refund services and `spending_view` are implemented; all-page integration is a separate M2-4 acceptance package. [Offline pilot tools and collection protocol](docs/REAL_VALIDATION_PROTOCOL.md) are available; no real samples or user-study results have been collected.
 
-M1a is accepted at v0.8.5 for the tested import formats, manual decisions, shared projection, category domains, explicit maintenance and legacy/snapshot visibility. The existing learned-rule manager already lists and deletes old rules; invalid income/expense rules are ignored during import. Refund netting remains a later M2 milestone. See [ninth-review assessment and closeout](docs/ROUND9_RESPONSE.md).
+M1a is accepted at v0.8.5 for the tested import formats, manual decisions, shared projection, category domains, explicit maintenance and legacy/snapshot visibility. The existing learned-rule manager already lists and deletes old rules; invalid income/expense rules are ignored during import. Stable v0.8.5 has no refund netting; development progress is described above. See [ninth-review assessment and closeout](docs/ROUND9_RESPONSE.md).
 
 Version 0.8.5 implements review F1–F4: read-only discovery of legacy category conflicts across all source months, exact-ID navigation and explicit correction; kind-filtered web manual editing; snapshot identity checks across confirmation and before deletion; and clear scan/write/manual-confirmation boundaries. The file checks reduce races, without claiming atomic protection against a hostile local process. See [assessment and evidence](docs/ROUND8_RESPONSE.md).
 

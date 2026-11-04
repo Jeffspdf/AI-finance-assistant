@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_CEILING
 import pandas as pd
-from .evidence import effective_frame
+from .evidence import effective_frame,count_records
 
 def yuan(cents):
     return f'{int(cents)/100:,.2f}'
@@ -22,7 +22,7 @@ def overview(frame):
         rows.append({'月份':month,'收入':income/100,'支出':expense/100,'结余':(income-expense)/100})
     costs=tx[tx.kind=='支出'].groupby('category')['amount_cents'].sum()
     total=int(costs.sum())
-    categories=pd.DataFrame([{'分类':k,'支出':int(v)/100,'占比':round(int(v)/total*100,2) if total else 0} for k,v in costs.items()])
+    categories=pd.DataFrame([{'分类':k,'支出':int(v)/100,'占比':round(int(v)/total*100,2) if total>0 else None} for k,v in costs.items()])
     if not categories.empty: categories=categories.sort_values('支出',ascending=False)
     return pd.DataFrame(rows),categories
 
@@ -67,12 +67,15 @@ def estimate_from_records(frame,today=None,months=3):
     for month in requested:
         tx=month_records(frame,month)
         if tx.empty:continue
-        rows.append(dict(month=month,income_cents=int(tx.loc[tx.kind=='收入','amount_cents'].sum()),expense_cents=int(tx.loc[tx.kind=='支出','amount_cents'].sum()),count=len(tx)))
+        rows.append(dict(month=month,income_cents=int(tx.loc[tx.kind=='收入','amount_cents'].sum()),expense_cents=int(tx.loc[tx.kind=='支出','amount_cents'].sum()),count=count_records(tx)))
     if not rows:raise ValueError('最近三个完整月份没有导入记录，请先导入账单。')
     used=[r['month'] for r in rows]
-    return dict(months=used,missing_months=[m for m in requested if m not in used],rows=rows,record_count=sum(r['count'] for r in rows),
+    result=dict(months=used,missing_months=[m for m in requested if m not in used],rows=rows,record_count=sum(r['count'] for r in rows),
                 average_income_cents=int((Decimal(sum(r['income_cents'] for r in rows))/len(rows)).quantize(Decimal('1'))),
                 average_expense_cents=int((Decimal(sum(r['expense_cents'] for r in rows))/len(rows)).quantize(Decimal('1'))))
+    if frame.attrs.get('projection')=='spending_view':
+        result.update(spending_basis=frame.attrs['spending_basis'],requires_explicit_budget=result['average_expense_cents']<0)
+    return result
 
 def goal_progress(goal,contributions,today=None):
     today=today or date.today()

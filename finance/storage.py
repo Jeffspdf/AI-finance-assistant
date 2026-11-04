@@ -11,8 +11,9 @@ from .migrations import ensure_schema, assert_supported, backup_database, inspec
 from .reconciliation import Reconciliation, audit
 from .categories import validate_kind_category,category_options
 from .backup_management import BackupManagement
+from .refunds import Refunds
 
-class Store(Reconciliation,BackupManagement):
+class Store(Refunds,Reconciliation,BackupManagement):
     def __init__(self, path, *, read_only=False):
         self.path = str(path)
         self._lock=threading.RLock()
@@ -62,11 +63,12 @@ class Store(Reconciliation,BackupManagement):
                 audit(db,'invalid_category_rule_removed',rule['merchant'],dict(kind=rule['kind'],category=rule['category']))
 
     def transactions(self):
-        """The only statistical projection; source_transactions retains all source legs."""
-        frame=self.source_transactions()
-        pending=frame[frame.status=='refund_pending']
-        frame.attrs['refund_pending']=dict(count=len(pending),amount_cents=int(pending.amount_cents.sum()))
-        return frame[frame.included_in_stats].copy()
+        """Gross projection, unchanged source amounts; use spending_view for net amounts."""
+        from .refund_rules import refund_inventory
+        with self.connect(read_only=True) as db:
+            db.execute('BEGIN');frame=self._source_frame(db)
+            frame.attrs['refund_pending']=self._pending_refund_summary(refund_inventory(db))
+            return frame[frame.included_in_stats].copy()
 
     def import_rows(self, rows):
         with self.connect() as db:return self._insert_rows(db,rows)
@@ -181,6 +183,7 @@ class Store(Reconciliation,BackupManagement):
 
     def delete_import_batch(self,identifier):
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             batch=db.execute('SELECT * FROM import_batches WHERE id=?',(identifier,)).fetchone()
             if not batch or batch['status']=='deleted':raise ValueError('批次不存在或已经删除')
             ids=[r[0] for r in db.execute("SELECT id FROM transactions WHERE import_batch_id=? AND status<>'deleted'",(identifier,))]

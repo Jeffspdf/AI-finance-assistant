@@ -1,0 +1,57 @@
+{
+  "data": "synthetic only",
+  "tests_per_function": {
+    "test_packaging_smoke_rejects_unknown_write_warning_and_failed_acceptance": 3,
+    "test_release_migration_rehearsal_preserves_old_data_and_rolls_back_faults": 1,
+    "test_repaired_refund_group_leaves_blockers_but_preserves_explicit_reopen": 1,
+    "test_web_repaired_group_has_reopen_only_and_does_not_remain_a_blocker": 1,
+    "test_web_mutation_audit_failure_is_friendly_and_rolls_back": 3
+  },
+  "cases": [
+    {
+      "name": "test_packaging_smoke_rejects_unknown_write_warning_and_failed_acceptance[write_warning]",
+      "seconds": 0.02,
+      "status": "passed"
+    },
+    {
+      "name": "test_packaging_smoke_rejects_unknown_write_warning_and_failed_acceptance[exit_failure]",
+      "seconds": 0.01,
+      "status": "passed"
+    },
+    {
+      "name": "test_packaging_smoke_rejects_unknown_write_warning_and_failed_acceptance[missing_marker]",
+      "seconds": 0.01,
+      "status": "passed"
+    },
+    {
+      "name": "test_release_migration_rehearsal_preserves_old_data_and_rolls_back_faults",
+      "seconds": 0.439,
+      "status": "passed"
+    },
+    {
+      "name": "test_repaired_refund_group_leaves_blockers_but_preserves_explicit_reopen",
+      "seconds": 0.199,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_repaired_group_has_reopen_only_and_does_not_remain_a_blocker",
+      "seconds": 1.372,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_mutation_audit_failure_is_friendly_and_rolls_back[basis]",
+      "seconds": 0.987,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_mutation_audit_failure_is_friendly_and_rolls_back[repair]",
+      "seconds": 0.955,
+      "status": "passed"
+    },
+    {
+      "name": "test_web_mutation_audit_failure_is_friendly_and_rolls_back[revoke]",
+      "seconds": 0.81,
+      "status": "passed"
+    }
+  ]
+}

@@ -111,7 +111,7 @@ class Refunds:
         """Merge relation blockers and invalid refund groups; do not conflate group-only issues with global relation locks."""
         rows=[dict(kind='link',**row) for row in self.refund_confirmation_blockers()]
         for group in self.reconciliation_groups():
-            if group['kind']!='refund_duplicate' or group['status']!='needs_review':continue
+            if group['kind']!='refund_duplicate' or not group['repair_pending']:continue
             rows.append(dict(kind='group',id=group['id'],reasons=[group.get('review_reason') or '退款组已失效，请核对来源后重新确认'],
                 member_ids=[r['id'] for r in group['members']],repair_pending=group['repair_pending'],
                 actions=['inspect_sources','repair_invalid_groups','split_group']))

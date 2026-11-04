@@ -12,7 +12,8 @@ def render_refunds(st,store):
     st.info(BASIS_CHANGE_NOTICE)
     consent=st.checkbox('我确认重算当前空间净额，原始账单不变',key='basis_consent')
     if st.button('应用净支出口径',disabled=not consent):
-        store.set_spending_basis(basis,confirmed=True);st.rerun()
+        try:store.set_spending_basis(basis,confirmed=True);st.rerun()
+        except Exception as exc:st.error('口径未保存：'+str(exc))
     events=store.refund_sources();links=store.refund_links();groups=[g for g in store.reconciliation_groups() if g['kind']=='refund_duplicate']
     sources={r['id']:r for r in store.source_transactions().to_dict('records')}
     st.caption('退款整笔关联一个原消费；有效关联必须先撤销再重新确认。原消费仅有“已退款”状态但缺独立退款流水时不抵扣。')
@@ -27,14 +28,14 @@ def render_refunds(st,store):
                 role=st.checkbox('确认所选是原消费，不是退款流水')
                 if st.button('确认原消费角色',disabled=not role):
                     try:store.confirm_purchase_role(original,reason=reason);st.rerun()
-                    except ValueError as exc:st.error(str(exc))
+                    except Exception as exc:st.error(str(exc))
             confirm=st.checkbox('已核对完整退款及原消费来源')
             if st.button('确认退款关联',disabled=not confirm or event['association_status']=='linked' or sources[original]['status']=='review'):
                 try:store.confirm_refund_link(event['representative_id'],original,reason=reason);st.rerun()
-                except ValueError as exc:st.error(str(exc))
+                except Exception as exc:st.error(str(exc))
     st.subheader('待复核与阻塞')
     work=store.refund_work_items()
-    if not work:st.success('没有尚未修复的退款关联阻塞或待复核退款组。')
+    if not work:st.success('没有尚未修复的退款关联或退款组阻塞。已修复的组请在“退款来源去重”中重新核对。')
     else:
         selected=st.selectbox('选择待复核事项',work,format_func=lambda r:r['kind']+' · '+r['id'])
         st.warning('；'.join(selected['reasons']))
@@ -46,9 +47,11 @@ def render_refunds(st,store):
             if st.button('查看阻塞来源与证据'):st.json(dict(group=group,sources=[store.transaction_source(r['id']) for r in group['members']]))
         agree=st.checkbox('确认保存所选组件的复核状态，不自动重新确认金额')
         if st.button('保存定点修复',disabled=not agree):
-            if selected['kind']=='link':store.repair_refund_links(identifier=selected['id'],source='web_selected')
-            else:store.repair_invalid_groups(identifier=selected['id'],source='web_selected')
-            st.rerun()
+            try:
+                if selected['kind']=='link':store.repair_refund_links(identifier=selected['id'],source='web_selected')
+                else:store.repair_invalid_groups(identifier=selected['id'],source='web_selected')
+                st.rerun()
+            except Exception as exc:st.error('修复未保存：'+str(exc))
     if links:
         st.subheader('关联历史与撤销')
         selected=st.selectbox('关联历史',links,format_func=lambda r:r['id']+' · '+r['status'])
@@ -56,22 +59,24 @@ def render_refunds(st,store):
         if st.button('查看关联证据'):st.json(store.refund_link_evidence(selected['id']))
         revoke=st.checkbox('确认撤销所选关联，保留来源和审计')
         if st.button('撤销选中关联',disabled=not revoke or selected['stored_status'] not in ('confirmed','needs_review')):
-            store.revoke_refund_link(selected['id']);st.rerun()
+            try:store.revoke_refund_link(selected['id']);st.rerun()
+            except Exception as exc:st.error('撤销未保存：'+str(exc))
     st.subheader('退款来源去重')
     refund_ids=[identifier for identifier,r in sources.items() if r['status']=='refund_pending']
     if len(refund_ids)>=2:
         first=st.selectbox('退款来源一',refund_ids);second=st.selectbox('退款来源二',refund_ids,index=1)
         if st.button('提出同退款候选'):
             try:store.create_refund_group([first,second],reason='用户核对跨源退款');st.rerun()
-            except ValueError as exc:st.error(str(exc))
+            except Exception as exc:st.error(str(exc))
     if groups:
         group=st.selectbox('退款组',groups,format_func=lambda g:g['id']+' · '+g['status'])
         st.caption(group.get('review_reason') or group['reason'])
         same=st.checkbox('已核对为同一退款；若无钱包，另行确认并非两笔退款')
-        action=st.selectbox('退款组动作',['确认','拆分','重新核对'])
+        actions=['确认'] if group['stored_status']=='candidate' else ['拆分'] if group['stored_status']=='confirmed' else ['重新核对']
+        action=st.selectbox('退款组动作',actions)
         if st.button('保存退款组决定',disabled=not same):
             try:
                 if action=='重新核对':store.reopen_group(group['id'])
                 else:store.decide_group(group['id'],'confirmed' if action=='确认' else 'split',acknowledge_no_wallet=same)
                 st.rerun()
-            except ValueError as exc:st.error(str(exc))
+            except Exception as exc:st.error(str(exc))

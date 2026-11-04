@@ -1,0 +1,12 @@
+{
+  "data": "synthetic only",
+  "migration": "schema 4 -> 5",
+  "pre_migration_backup_matches": true,
+  "original_tables_rows_ids_audit_checksum_preserved": true,
+  "v5_backup_restore_and_v4_restore_upgrade": true,
+  "failed_restore_business_and_audit_rollback": true,
+  "failed_ddl_schema_rows_audit_rollback": true,
+  "future_schema_rejected_without_write": true,
+  "read_only_bytes_unchanged": true,
+  "integrity_and_foreign_keys_ok": true
+}

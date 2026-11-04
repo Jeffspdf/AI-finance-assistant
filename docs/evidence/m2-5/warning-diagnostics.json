@@ -1,0 +1,104 @@
+{
+  "warning": "can't open file for write !",
+  "root_cause": "UNRESOLVED",
+  "release_gate": "NOT PASSED",
+  "previously_observed": true,
+  "old_log": ".test_m2_3_evidence/source-smoke.log",
+  "current_minimal_import_tk_and_desktop": "exit 0; no same warning captured",
+  "previous_18336e5_replay": [
+    {
+      "commit": "18336e5",
+      "flag": "--self-test",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commit": "18336e5",
+      "flag": "--self-test-m1a",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commit": "18336e5",
+      "flag": "--self-test-round5",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commit": "18336e5",
+      "flag": "--self-test-round6",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commit": "18336e5",
+      "flag": "--self-test-round7",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commit": "18336e5",
+      "flag": "--self-test-round8",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "current_packaged_processes": [
+    {
+      "flag": "--self-test",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-m1a",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round5",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round6",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round7",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round8",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-m2",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-m2-migration",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    }
+  ],
+  "interpretation": "Non-reproduction is not a root-cause fix; do not attribute to environment or close the issue",
+  "prevention": "packaging smoke captures per-process streams and rejects the known warning, failed exit or missing marker"
+}

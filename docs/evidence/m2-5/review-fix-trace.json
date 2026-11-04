@@ -1,0 +1,67 @@
+{
+  "data": "synthetic only",
+  "trace": [
+    {
+      "action": "external source defect is read-only detected",
+      "work_items": [
+        {
+          "kind": "link",
+          "id": "RL-f6b28822bd824c2aa9c3fea577eb5dc3"
+        },
+        {
+          "kind": "group",
+          "id": "RG-01d311304a5e479bbb774a6dffe08338"
+        }
+      ],
+      "group_status": "confirmed",
+      "group_repair_pending": true,
+      "net_cents": 10000,
+      "query_bytes_unchanged": true
+    },
+    {
+      "action": "persist relation review",
+      "work_items": [
+        {
+          "kind": "group",
+          "id": "RG-01d311304a5e479bbb774a6dffe08338"
+        }
+      ],
+      "group_status": "confirmed",
+      "group_repair_pending": true,
+      "net_cents": 10000,
+      "query_bytes_unchanged": true
+    },
+    {
+      "action": "persist group review; leaves blockers, remains in dedup",
+      "work_items": [],
+      "group_status": "needs_review",
+      "group_repair_pending": false,
+      "net_cents": 10000,
+      "query_bytes_unchanged": true
+    },
+    {
+      "action": "explicit reopen after source correction",
+      "work_items": [],
+      "group_status": "candidate",
+      "group_repair_pending": false,
+      "net_cents": 10000,
+      "query_bytes_unchanged": true
+    },
+    {
+      "action": "explicit group confirmation; money still not reapplied",
+      "work_items": [],
+      "group_status": "confirmed",
+      "group_repair_pending": false,
+      "net_cents": 10000,
+      "query_bytes_unchanged": true
+    },
+    {
+      "action": "explicit refund reconfirmation",
+      "work_items": [],
+      "group_status": "confirmed",
+      "group_repair_pending": false,
+      "net_cents": 7000,
+      "query_bytes_unchanged": true
+    }
+  ]
+}

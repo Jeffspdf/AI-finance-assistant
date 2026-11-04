@@ -1,0 +1,10 @@
+{
+  "version": "0.9.0",
+  "exe": "AIFinanceHelper.exe",
+  "system_dpi": 144,
+  "client_size": [
+    1800,
+    1200
+  ],
+  "temporary_synthetic_data": true
+}

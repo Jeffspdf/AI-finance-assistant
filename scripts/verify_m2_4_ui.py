@@ -1,6 +1,7 @@
 """Exercise real Tk controls on synthetic adapter imports; never opens personal data."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from contextlib import nullcontext
 from unittest.mock import patch
 from datetime import date
 import argparse,ctypes,json,os,sys
@@ -15,18 +16,24 @@ def descendants(widget):
     for child in widget.winfo_children():yield child;yield from descendants(child)
 
 
-def verify(output):
+def verify(output,*,desktop_class=None,data_dir=None):
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
-    with TemporaryDirectory(prefix='.test_m2_4_ui_',dir=ROOT) as directory:
+    if desktop_class is not None and data_dir is None:raise ValueError('Packaged acceptance requires an explicit isolated data directory')
+    context=nullcontext(str(data_dir)) if data_dir is not None else TemporaryDirectory(prefix='.test_m2_4_ui_',dir=ROOT)
+    with context as directory:
         folder=Path(directory);os.environ['FINANCE_DESKTOP_DATA_DIR']=str(folder)
+        folder.mkdir(parents=True,exist_ok=True)
+        if (folder/'demo.sqlite3').exists():raise ValueError('M2 UI acceptance requires a fresh isolated directory')
         store,ids=seed_ui_refunds(folder/'demo.sqlite3')
         (folder/'preferences.json').write_text(json.dumps(dict(space='demo',month='2026-10')),encoding='utf-8')
-        from desktop import Desktop
+        if desktop_class is None:
+            from desktop import Desktop
+        else:Desktop=desktop_class
         from finance.ui_scale import set_window_geometry
         from PIL import ImageGrab
         app=Desktop();errors=[];app.report_callback_exception=lambda *args:errors.append(repr(args))
         app.update();app.toggle_animation();set_window_geometry(app,1100,720);app.update()
-        result=dict(data='synthetic only',execution='real Tk widgets, Python source; not packaged EXE',reference_date='2026-11-04',checks=[],layout_checks=[])
+        result=dict(data='synthetic only',execution='real Tk widgets, packaged EXE' if getattr(sys,'frozen',False) else 'real Tk widgets, Python source; not packaged EXE',reference_date='2026-11-04',checks=[],layout_checks=[])
         def screen(name,widget):
             app.update();handle=ctypes.windll.user32.GetParent(widget.winfo_id()) or widget.winfo_id()
             ImageGrab.grab(window=handle).save(output/(name+'.png'))
@@ -102,6 +109,7 @@ def verify(output):
         layout('actionable_review',window);screen('actionable_review',window);yes(controls['repair_work'])
         choose(state['work_tree'],next(i for i,r in enumerate(state['work']) if r['kind']=='group'));yes(controls['repair_work'])
         assert app.store.refund_links()[0]['stored_status']=='needs_review'
+        assert state['work']==[], 'Repaired groups must leave the blocker list; reopen from source deduplication'
         # Use the real existing source editor to repair the bank leg.
         assert app.locate_transaction(ids['R-B'],expected_path=store.path);app.edit_selected();app.update()
         editor=next(w for w in app.winfo_children() if isinstance(w,__import__('tkinter').Toplevel) and w.title()=='编辑交易')

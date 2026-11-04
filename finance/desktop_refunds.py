@@ -116,7 +116,8 @@ class RefundFeatures:
                     if isinstance(saved,dict) and isinstance(saved.get('member_ids'),list):members.update(v for v in saved['member_ids'] if isinstance(v,str))
                 except (TypeError,ValueError):pass
                 if event and members.intersection(event['member_ids']):matches.append((link['stored_status']=='confirmed',link['stored_status']=='needs_review',index))
-            state['link_tree'].selection_remove(*state['link_tree'].selection())
+            selected_links=state['link_tree'].selection()
+            if selected_links:state['link_tree'].selection_remove(*selected_links)
             state['link_id']=None
             if matches:
                 index=max(matches)[2];state['link_tree'].selection_set(str(index));state['link_id']=state['links'][index]['id']

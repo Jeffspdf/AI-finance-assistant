@@ -850,6 +850,22 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
 
 
 if __name__ == '__main__':
+    if '--self-test-m2' in sys.argv or '--self-test-m2-migration' in sys.argv:
+        # Explicit engineering mode; never opens a default personal data directory.
+        if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):sys.exit('M2 acceptance requires FINANCE_DESKTOP_DATA_DIR')
+        try:
+            if '--self-test-m2-migration' in sys.argv:
+                from finance.m2_release_acceptance import verify_m2_migration
+                verify_m2_migration(DATA_DIR)
+            else:
+                from scripts.verify_m2_4_ui import verify
+                verify(DATA_DIR/'m2-ui',desktop_class=Desktop,data_dir=DATA_DIR)
+        except Exception:
+            import traceback
+            DATA_DIR.mkdir(parents=True,exist_ok=True)
+            (DATA_DIR/'m2-acceptance-error.log').write_text(traceback.format_exc(),encoding='utf-8')
+            sys.exit(1)
+        sys.exit(0)
     if '--self-test-round8' in sys.argv:
         if not os.environ.get('FINANCE_DESKTOP_DATA_DIR'):raise ValueError('自检须指定隔离数据目录 FINANCE_DESKTOP_DATA_DIR')
         from finance.round8_acceptance import verify_round8

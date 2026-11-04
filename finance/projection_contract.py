@@ -16,6 +16,7 @@ SOURCE_READERS={
  ('finance/m1a_demo.py','seed_six'):'isolated engineering sample initialization',
 }
 ENGINEERING={
+ ('finance/m2_release_acceptance.py','verify_m2_migration'),
  ('finance/m1a_demo.py','verify_six'),('finance/demo_generator.py','verify_generator'),
  ('finance/round5_acceptance.py','verify_round5'),('finance/round6_acceptance.py','verify_round6'),
  ('finance/round7_acceptance.py','verify_round7'),('finance/round8_acceptance.py','verify_round8')}

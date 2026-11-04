@@ -1,0 +1,108 @@
+{
+  "stage": "M2-5 local candidate; formal release gate NOT PASSED",
+  "timestamp": "2026-11-04T18:16:36.164692+08:00",
+  "base_commit": "dcb53f6ef4aa0ca56da6883e21ed3b130d9355ad",
+  "branch": "m2/refund-net",
+  "candidate_version": "0.9.0",
+  "stable_public_version": "0.8.5",
+  "schema": 5,
+  "personal_data_or_real_keys_accessed": false,
+  "installed_client_replaced": false,
+  "previous_492_tests_unmodified": true,
+  "migrations_unchanged": true,
+  "static_contract_violations": [],
+  "pytest": {
+    "total": 501,
+    "previous": 492,
+    "new": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 75.28
+  },
+  "packaged_checks": [
+    {
+      "flag": "--self-test",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-m1a",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round5",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round6",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round7",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-round8",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-m2",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "flag": "--self-test-m2-migration",
+      "marker_present": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    }
+  ],
+  "frozen_app_version_constant": "0.9.0",
+  "installer_product_version": "0.9.0",
+  "dpapi_restart_test": "synthetic encrypted configuration retained across two actual EXE restarts; no live model",
+  "artifacts": {
+    "dist/AIFinanceHelper/AIFinanceHelper.exe": {
+      "bytes": 9899229,
+      "sha256": "a9507152dbe33801b8b7e04e879f8db7254dfc395f13250f9994c4641aa2aa62"
+    },
+    "release/AIFinanceHelper-0.9.0-Setup-x64.exe": {
+      "bytes": 37930731,
+      "sha256": "bb5b794cec4377d205bd73bdd4f0d42becfa1ec81da1c0f8bf909e2a902b4239"
+    },
+    "release/AIFinanceHelper-0.9.0-Windows-x64.zip": {
+      "bytes": 51575251,
+      "sha256": "c7cdf40ee5c04364512ec4f721a8f888a0b7c8749f54c10eb460b2064cbe4106"
+    }
+  },
+  "source_archive": "allowlisted archive and SHA256SUMS regenerated after evidence; not a published release",
+  "limits": [
+    "historical native write-warning root cause unlocated; do not release",
+    "no overwrite installation into live user directory, no clean VM installation/uninstallation certification, unsigned",
+    "G-DATA unrun; synthetic evidence is not real-user validation"
+  ],
+  "source_sha256_lf": {
+    "desktop.py": "8d32609ac6399bb449b1c8be68ff3079b1521afbf2cc89f6e8fb3e5f045eeff2",
+    "finance/desktop_refunds.py": "e43cca13b85d10c8322f095747b3873694e86437b285f397ebbd6be83585d362",
+    "finance/m2_release_acceptance.py": "dde2c16d32665d21acaef98ff79de224e1bcea87931e805a9ccf111e9eaf551d",
+    "finance/projection_contract.py": "3eae13656affae0182d247b1cfb7cc36ccc0058a0fa56cd34e8cf78cd2f770b6",
+    "finance/refunds.py": "4bc7f89e24cb8ea45158afdf982cf28ab9792f2b04642e2bbdc762dbc5ea2d50",
+    "finance/updates.py": "892517e0a2a1570eb0dd93e4f9b734f42556f758adbc648ba5ecc2277aee819f",
+    "finance/web_refunds.py": "88164aa40da65bf801870515c75e81bd05a842f1f064e8de7a3b0a6e90b45996",
+    "packaging/smoke_executable.py": "8d8759561e995186f144308662f3f232b0beeba60d33f2e89e5b978561bf47da",
+    "scripts/verify_m2_4_ui.py": "4a43d3371282a4de6af1e1b051d0f4a2842d6cdd855312be50dae3f69d4ce161",
+    "tests/test_m2_5.py": "300befe4c6f58798645231ff275134d99a837d9c151bbedbfd6d7fda2d9e730c"
+  }
+}

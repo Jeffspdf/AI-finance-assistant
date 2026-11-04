@@ -11,6 +11,6 @@
   "independent_recall": null,
   "automatic_real_validation_pass": false,
   "empty_collection_tables": 10,
-  "synthetic_tool_tests": 11,
-  "combined_regression_tests_passed": 258
+  "synthetic_tool_tests": 13,
+  "combined_regression_tests_passed": 260
 }

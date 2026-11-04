@@ -7,7 +7,7 @@ from statistics import median
 TABLES={
     'files':['file_id','participant_id','source','bank_alias','format_version','data_kind','consent_ref','status','expected_rows','parsed_rows','mapping_seconds'],
     'transactions':['transaction_id','file_id','kind','record_type'],
-    'candidates':['left_id','right_id','relation','level','algorithm_version','run_id'],
+    'candidates':['left_id','right_id','relation','level','algorithm_version','run_id','precision_sample'],
     'ground_truth':['left_id','right_id','relation','labeler_a','label_a','labeler_b','label_b','adjudicator','final_label'],
     'scan_coverage':['transaction_id','labeler_id','reviewed','blind_to_candidates'],
     'classifications':['transaction_id','predicted_category','automatic','labeler_a','label_a','labeler_b','label_b','adjudicator','final_category','user_corrected'],
@@ -26,7 +26,8 @@ def initialize(directory):
     targets=[directory/'manifest.json',*(directory/(name+'.csv') for name in TABLES)]
     if any(path.exists() for path in targets):raise ValueError('采集模板已存在；为避免覆盖记录，请使用新目录')
     manifest=dict(schema_version=1,dataset_id='',data_kind='uncollected',application_version='',ground_truth_scope='',
-                  independent_scan_declared_complete=False,candidate_snapshot_ref='',notes='')
+                  independent_scan_declared_complete=False,candidate_snapshot_ref='',candidate_snapshot_complete=False,
+                  precision_sampling_plan='',notes='')
     (directory/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     for name,columns in TABLES.items():
         with (directory/(name+'.csv')).open('w',encoding='utf-8-sig',newline='') as stream:
@@ -131,6 +132,7 @@ def evaluate(directory):
         if key in predicted or row['level'] not in ('A','B','C') or not row['algorithm_version'] or not row['run_id']:
             raise ValueError('候选不可重复，须记录等级、算法版本和单次运行标识')
         predicted[key]=row
+        _boolean(row['precision_sample'])
     if len({r['run_id'] for r in predicted.values()})>1:raise ValueError('一次评估只能使用同一冻结候选快照')
     for row in tables['ground_truth']:
         key=pair(row)
@@ -144,15 +146,17 @@ def evaluate(directory):
         seen_scans.add(key)
         if _boolean(row['reviewed']) and _boolean(row['blind_to_candidates']):scans[key[1]].add(key[0])
     complete_scanners=sum(ids==set(transactions) for ids in scans.values()) if transactions else 0
-    independent=bool(transactions and complete_scanners>=2 and manifest.get('ground_truth_scope') and manifest.get('candidate_snapshot_ref') and
+    independent=bool(transactions and complete_scanners>=2 and manifest.get('ground_truth_scope') and manifest.get('candidate_snapshot_ref') and manifest.get('candidate_snapshot_complete') is True and
                      manifest.get('independent_scan_declared_complete') is True and truth and all(v is not None for v in truth.values()))
     def duplicate_metrics(keys):
         labeled=[key for key in keys if truth.get(key) is not None]
-        tp=sum(truth[key]=='duplicate' for key in labeled)
+        sample=[key for key in keys if _boolean(predicted[key]['precision_sample'])]
+        labeled_sample=[key for key in sample if truth.get(key) is not None]
+        tp=sum(truth[key]=='duplicate' for key in labeled_sample)
         positives={key for key,value in truth.items() if value=='duplicate'}
-        return dict(candidates=len(keys),labeled_candidates=len(labeled),true_positive_candidates=tp,
-                    candidate_label_coverage=_ratio(len(labeled),len(keys)),precision_on_labeled_candidates=_ratio(tp,len(labeled)),
-                    precision_wilson95=_wilson(tp,len(labeled)),
+        return dict(candidates=len(keys),labeled_candidates=len(labeled),precision_sample_size=len(sample),labeled_precision_sample=len(labeled_sample),precision_sample_true_positives=tp,
+                    candidate_label_coverage=_ratio(len(labeled),len(keys)),precision_sample_label_coverage=_ratio(len(labeled_sample),len(sample)),
+                    precision_on_labeled_candidates=_ratio(tp,len(labeled_sample)),precision_wilson95=_wilson(tp,len(labeled_sample)),
                     recall=_ratio(len(set(keys)&positives),len(positives)) if independent else None,
                     ground_truth_positive_pairs=len(positives) if independent else None)
     duplicates=dict(prediction_unit='candidate pair, not an automatic or user-confirmed merge',
@@ -234,7 +238,9 @@ def evaluate(directory):
     require(bool(files) and all(r['format_version'] and (r['source']!='bank' or r['bank_alias']) for r in files.values()),'需补来源格式版本与银行代号')
     require({r['source'] for r in files.values()}>={'wechat','alipay','bank'},'需覆盖微信、支付宝与银行来源')
     require(independent,'独立盲扫分母尚未完整，不发布召回率')
-    require(bool(manifest.get('candidate_snapshot_ref')) and all(truth.get(k) is not None for k in predicted),'冻结候选快照或候选标注尚未完成')
+    sample={k for k,v in predicted.items() if _boolean(v['precision_sample'])}
+    require(bool(manifest.get('candidate_snapshot_ref')) and manifest.get('candidate_snapshot_complete') is True,'需冻结完整候选快照，抽样结果不能代替全量候选')
+    require(bool(manifest.get('precision_sampling_plan')) and len(sample)>=min(50,len(predicted)) and all(truth.get(k) is not None for k in sample),'精度抽样方案或抽样标签尚未齐备（候选少于50则全标）')
     require(finalized>=200,'双人标注/仲裁分类不足200笔')
     require(task_summary['participants_with_all_five_tasks']>=5,'五位用户的完整任务记录尚未齐备')
     require(answered>0 and should_refuse>0,'金额回答与应拒答案例均需记录')

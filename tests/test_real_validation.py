@@ -13,12 +13,13 @@ def write(directory,name,rows):
 def practice(tmp_path):
     initialize(tmp_path)
     manifest=json.loads((tmp_path/'manifest.json').read_text())
-    manifest.update(data_kind='synthetic',ground_truth_scope='six synthetic source rows',candidate_snapshot_ref='synthetic-run-1',independent_scan_declared_complete=True)
+    manifest.update(data_kind='synthetic',ground_truth_scope='six synthetic source rows',candidate_snapshot_ref='synthetic-run-1',candidate_snapshot_complete=True,
+                    precision_sampling_plan='all two synthetic candidates',independent_scan_declared_complete=True)
     (tmp_path/'manifest.json').write_text(json.dumps(manifest))
     write(tmp_path,'files',[dict(file_id='f',participant_id='p',source='bank',bank_alias='b',format_version='fixture',data_kind='synthetic',consent_ref='not-real',status='parsed',expected_rows=6,parsed_rows=6,mapping_seconds=1)])
     write(tmp_path,'transactions',[dict(transaction_id=t,file_id='f',kind='支出',record_type='ordinary') for t in 'abcdef'])
     def pair(a,b):return dict(left_id=a,right_id=b,relation='purchase_duplicate')
-    write(tmp_path,'candidates',[dict(pair(a,b),level='A',algorithm_version='test-only',run_id='one') for a,b in [('a','b'),('c','d')]])
+    write(tmp_path,'candidates',[dict(pair(a,b),level='A',algorithm_version='test-only',run_id='one',precision_sample='true') for a,b in [('a','b'),('c','d')]])
     write(tmp_path,'ground_truth',[dict(pair(a,b),labeler_a='r1',label_a=label,labeler_b='r2',label_b=label,adjudicator='',final_label=label)
                                   for a,b,label in [('a','b','duplicate'),('c','d','not_duplicate'),('e','f','duplicate')]])
     write(tmp_path,'scan_coverage',[dict(transaction_id=t,labeler_id=r,reviewed='true',blind_to_candidates='true') for r in ['r1','r2'] for t in 'abcdef'])
@@ -112,3 +113,19 @@ def test_import_compatibility_is_reported_per_format_not_hidden_in_source_averag
     report=evaluate(tmp_path);byformat={r['format_version']:r for r in report['imports']}
     assert byformat['good']['file_success_rate']==1 and byformat['unsupported']['file_success_rate']==0
     assert report['requires_blocker_review']
+
+
+def test_sampled_candidate_snapshot_does_not_claim_full_recall(tmp_path):
+    practice(tmp_path);manifest=json.loads((tmp_path/'manifest.json').read_text());manifest['candidate_snapshot_complete']=False
+    (tmp_path/'manifest.json').write_text(json.dumps(manifest))
+    result=evaluate(tmp_path)['duplicate_detection']['all_levels']
+    assert result['precision_on_labeled_candidates']==.5 and result['recall'] is None
+
+
+def test_precision_sample_and_recall_full_snapshot_have_different_denominators(tmp_path):
+    practice(tmp_path)
+    write(tmp_path,'candidates',[dict(left_id=a,right_id=b,relation='purchase_duplicate',level='A',algorithm_version='test',run_id='one',precision_sample=sample)
+                                for a,b,sample in [('a','b','true'),('c','d','true'),('e','f','false')]])
+    result=evaluate(tmp_path)['duplicate_detection']['all_levels']
+    assert result['candidates']==3 and result['precision_sample_size']==2
+    assert result['precision_on_labeled_candidates']==.5 and result['recall']==1

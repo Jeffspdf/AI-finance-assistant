@@ -1,0 +1,110 @@
+{
+  "commit": "18336e5",
+  "timestamp": "2026-11-04T18:41:14.350872+08:00",
+  "historical_synthetic_data_unchanged": true,
+  "path_scope": "Chinese source, working and fresh data directories; same interpreter",
+  "runs": [
+    {
+      "path": "chinese",
+      "data_mode": "fresh",
+      "method": "direct_pipes",
+      "returncode": 0,
+      "warning_logs": [],
+      "markers": {
+        "--self-test": true,
+        "--self-test-m1a": true,
+        "--self-test-round5": true,
+        "--self-test-round6": true,
+        "--self-test-round7": true,
+        "--self-test-round8": true
+      },
+      "details": [
+        {
+          "flag": "--self-test",
+          "exit": 0,
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        {
+          "flag": "--self-test-m1a",
+          "exit": 0,
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        {
+          "flag": "--self-test-round5",
+          "exit": 0,
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        {
+          "flag": "--self-test-round6",
+          "exit": 0,
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        {
+          "flag": "--self-test-round7",
+          "exit": 0,
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        {
+          "flag": "--self-test-round8",
+          "exit": 0,
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "chinese",
+      "data_mode": "fresh",
+      "method": "powershell_merged",
+      "returncode": 0,
+      "warning_logs": [],
+      "markers": {
+        "--self-test": true,
+        "--self-test-m1a": true,
+        "--self-test-round5": true,
+        "--self-test-round6": true,
+        "--self-test-round7": true,
+        "--self-test-round8": true
+      },
+      "details": []
+    },
+    {
+      "path": "chinese",
+      "data_mode": "fresh",
+      "method": "powershell_split",
+      "returncode": 0,
+      "warning_logs": [],
+      "markers": {
+        "--self-test": true,
+        "--self-test-m1a": true,
+        "--self-test-round5": true,
+        "--self-test-round6": true,
+        "--self-test-round7": true,
+        "--self-test-round8": true
+      },
+      "details": []
+    },
+    {
+      "path": "chinese",
+      "data_mode": "fresh",
+      "method": "start_process",
+      "returncode": 0,
+      "warning_logs": [],
+      "markers": {
+        "--self-test": true,
+        "--self-test-m1a": true,
+        "--self-test-round5": true,
+        "--self-test-round6": true,
+        "--self-test-round7": true,
+        "--self-test-round8": true
+      },
+      "details": []
+    }
+  ],
+  "note": "No target warning reproduced; not a root-cause fix"
+}

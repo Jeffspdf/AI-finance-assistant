@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-11-04T18:49:07.643235+08:00",
+  "product_commit": "75c9ce5",
+  "replay_commit": "18336e5",
+  "root_cause": "UNRESOLVED",
+  "formal_release": "NOT APPROVED",
+  "historical_logs": {
+    ".test_m2_2_evidence\\source-smoke.log": {
+      "bytes": 31,
+      "sha256": "7a3ef3b802d4f0992134c9fbd15de9aa236406614307b700739e38b6b476df5d"
+    },
+    ".test_m2_3_evidence\\source-smoke.log": {
+      "bytes": 31,
+      "sha256": "7a3ef3b802d4f0992134c9fbd15de9aa236406614307b700739e38b6b476df5d"
+    }
+  },
+  "completed_controls": 24,
+  "successful_new_markers": 24,
+  "target_warning_reproduced": false,
+  "historical_reuse": {
+    "status": "not a successful six-stage acceptance",
+    "reason": "M1a previously decided candidates trigger len(groups)==2 assertion; different from target warning"
+  },
+  "ascii_control": {
+    "status": "NOT COMPLETED",
+    "reason": "ASCII roots were not writable; privileged temporary resolution fell back to Chinese workspace; restricted ASCII temp extraction failed"
+  },
+  "defender": {
+    "status": "inconclusive",
+    "preference_error": "0x800106ba",
+    "event_query": "No matching 1123/1124 events for 2026-11-04 14:00-15:00; not proof of no blocking"
+  },
+  "native_module_inspection": {
+    "loaded_after_tk": 139,
+    "complete_warning_text_matches": 0,
+    "interpretation": "not attribution"
+  },
+  "procmon": {
+    "source": "https://download.sysinternals.com/files/ProcessMonitor.zip",
+    "version": "4.12",
+    "signature": "Valid / Microsoft Corporation",
+    "bytes": 2237720,
+    "sha256": "28495e642b2a465474a4edc58380eaf8b7ee580f3fbcb4141061deadafe9b885",
+    "capture_performed": false,
+    "admin_token_available": false
+  },
+  "product_sources_unchanged": true,
+  "candidate_artifacts_unchanged": true,
+  "full_regression_rerun": false,
+  "main_unchanged": "d56850c29fb4458ec6a27a2b36b3abab779cb46b",
+  "tag_or_release_created": false,
+  "privacy": "synthetic inputs only; no personal ledger or real API key; no raw Procmon trace collected or uploaded"
+}

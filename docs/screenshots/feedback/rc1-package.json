@@ -1,0 +1,36 @@
+{
+  "release": "v0.9.0-rc.1",
+  "channel": "course prerelease",
+  "packaged_checks": [
+    "--self-test",
+    "--self-test-m1a",
+    "--self-test-round5",
+    "--self-test-round6",
+    "--self-test-round7",
+    "--self-test-round8",
+    "--self-test-m2",
+    "--self-test-m2-migration"
+  ],
+  "known_write_warning_detected_in_initial_strict_attempt": true,
+  "known_warning_reporting_enabled_for_rc_only": true,
+  "source_archive_private_data_check": "passed",
+  "artifacts": {
+    "AIFinanceHelper-0.9.0-rc.1-Setup-x64.exe": {
+      "bytes": 37940824,
+      "sha256": "75bce7a6afd7ff7320ade93dfe35a21cabd79a869b08dd7a67d2a8893de8707d"
+    },
+    "AIFinanceHelper-0.9.0-rc.1-Windows-x64.zip": {
+      "bytes": 51583405,
+      "sha256": "de8c5b3c96686fc16826fbf36fe194d8d33fba210f019715cfdfe744d8aef705"
+    },
+    "AIFinanceHelper.exe": {
+      "bytes": 9907416,
+      "sha256": "9495537583df3d5af023d46e82192291257b0ff156ce6a077512f1597171676a"
+    }
+  },
+  "tests": {
+    "passed": 558,
+    "failures": 0,
+    "errors": 0
+  }
+}

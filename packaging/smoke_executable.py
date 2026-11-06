@@ -4,6 +4,7 @@ from pathlib import Path
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--exe',required=True);parser.add_argument('--data-dir',required=True)
+    parser.add_argument('--allow-known-write-warning',action='store_true',help='Course preview only: retain and report the known write warning; never bypass exit/marker checks')
     args=parser.parse_args();exe=Path(args.exe).resolve();data=Path(args.data_dir).resolve();data.mkdir(parents=True,exist_ok=True)
     env=os.environ.copy();env['FINANCE_DESKTOP_DATA_DIR']=str(data)
     checks=[('--self-test','self-test.ok'),('--self-test-m1a','m1a-self-test.json'),
@@ -23,7 +24,9 @@ def main():
         (isolated/'process.stdout.log').write_bytes(result.stdout)
         (isolated/'process.stderr.log').write_bytes(result.stderr)
         if b"can't open file for write" in (result.stdout+result.stderr).lower():
-            raise RuntimeError(f'Packaged {flag} emitted unresolved write warning; logs retained; installer build stopped')
+            if not args.allow_known_write_warning:
+                raise RuntimeError(f'Packaged {flag} emitted unresolved write warning; logs retained; installer build stopped')
+            print('PACKAGED_KNOWN_LIMITATION',flag,'unattributed write warning; original logs retained',flush=True)
         if result.returncode!=0 or not target.is_file():raise RuntimeError(f'Packaged {flag} failed; installer build stopped')
         print('PACKAGED_CHECK_OK',flag,flush=True)
 

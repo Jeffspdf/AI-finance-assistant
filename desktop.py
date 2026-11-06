@@ -18,7 +18,7 @@ from finance.analytics import overview, plan_savings, yuan
 from finance.qa import answer_question
 from finance.categories import CATEGORIES,category_options
 from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer,update_error_message,version_status,can_download,UpdateDiagnostics
-from finance.llm import ModelClient,connection_error_message
+from finance.llm import ModelClient,connection_error_message,model_status_text
 from finance.model_settings import ModelSettings
 import json
 from finance.animation import SpritePlayer
@@ -30,16 +30,13 @@ from finance.desktop_demo import DemoGeneratorFeatures
 from finance.desktop_refunds import RefundFeatures
 from finance.spending_presenter import spending_totals,basis_label,refund_status_summary,refund_status_text
 from finance.evidence import count_records
-from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form
+from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form,BG,INK,MUTED,PRIMARY
 enable_dpi_awareness()
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('FINANCE_DESKTOP_DATA_DIR', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ShiguangLedger')))
-BG = '#f7f8f7'
-INK = '#1b2a26'
-MUTED = '#6c7a75'
-BLUE = '#0f766e'
-GREEN = '#0f766e'
+BLUE = PRIMARY
+GREEN = PRIMARY
 
 
 class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,ConversationFeatures,ReviewFeatures,tk.Tk):
@@ -77,13 +74,14 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 15, 'bold')).pack(anchor='w', padx=px(16), pady=px((18, 5)))
         tk.Label(side, text='PERSONAL FINANCE', bg='white', fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', padx=px(18), pady=px((0, 12)))
         self.nav = {}
-        for label, page in [('01    财务概览', 'home'), ('02    交易账本', 'records'), ('03    预算与提醒', 'budget_page'), ('04    储蓄规划', 'plan'), ('05    问问助手', 'assistant')]:
+        for label, page in [('财务概览', 'home'), ('交易账本', 'records'), ('预算与提醒', 'budget_page'), ('储蓄规划', 'plan'), ('问问助手', 'assistant')]:
             b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=px(0), padx=px(20), pady=px(7), cursor='hand2')
             b.pack(fill='x', padx=px(14), pady=px(1)); self.nav[page] = b
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=px(18), pady=px(6))
         self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=px(3))
         self.space_label.pack()
-        tk.Button(spaces,text='设置与连接',command=lambda:self.show('settings'),relief='flat',bg='#edf5f1',fg=GREEN,pady=px(8)).pack(fill='x',pady=px(5))
+        settings_button=tk.Button(spaces,text='设置与连接',command=lambda:self.show('settings'),relief='flat',bg='#edf5f1',fg=GREEN,pady=px(8))
+        settings_button.pack(fill='x',pady=px(5));self.nav['settings']=settings_button
         self.update_window = None
         self.guide = tk.Frame(side, bg='#f3f9f5', padx=px(12), pady=px(6))
         self.guide.pack(side='bottom', fill='x', padx=px(16), pady=px(8))
@@ -160,7 +158,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         remember = tk.BooleanVar(value=self.model_settings.get('remember_key',True))
         tk.Checkbutton(box,text='记住密钥和启用状态（本机加密，重启/更新后恢复）',variable=remember,bg=BG,fg=INK).pack(anchor='w',pady=px(4))
         self.label(box, '密钥使用当前 Windows 用户加密保存；取消记住则仅本次有效。\n问答发送问题文本；分类另行确认发送商户、描述和收支类型。\n启动恢复不会请求接口，测试连接及实际模型调用可能产生费用。', 10, MUTED).configure(wraplength=px(590))
-        status = self.label(box, self.model_notice or '保存设置后生效；已记住的配置将在下次启动时自动恢复。', 10, GREEN); status.config(wraplength=px(580))
+        status = self.label(box, self.model_notice or model_status_text(self.model_client), 10, GREEN); status.config(wraplength=px(580))
         endpoint_var=tk.StringVar(value=fields['base_url'].get());fields['base_url'].configure(textvariable=endpoint_var)
         previous_endpoint=[endpoint_var.get().strip().rstrip('/')]
         def endpoint_changed(*_):
@@ -170,10 +168,14 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
                 status.config(text='接口地址已更改，请填写该接口的密钥；本地免密接口可留空。')
                 previous_endpoint[0]=base
         endpoint_var.trace_add('write',endpoint_changed)
+        tested_client=[None]
         def client():
             base=fields['base_url'].get().strip()
             if base.endswith('/chat/completions'): raise ValueError('请填写 Base URL，不要包含 /chat/completions')
-            return ModelClient(base, fields['model'].get().strip(), fields['api_key'].get().strip(), enabled=True)
+            name=fields['model'].get().strip();key=fields['api_key'].get().strip()
+            for candidate in (tested_client[0],self.model_client):
+                if candidate and (candidate.endpoint,candidate.model,candidate.api_key)==(base.rstrip('/')+'/chat/completions',name,key):return candidate
+            return ModelClient(base,name,key,enabled=True)
         def save():
             try:
                 model = client() if enabled.get() else None
@@ -188,6 +190,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         def test():
             try: model=client()
             except Exception as exc: status.config(text=str(exc)); return
+            tested_client[0]=model
             test_button.config(state='disabled'); status.config(text='正在测试连接…最长约 60 秒，只发送一条测试消息。')
             def worker():
                 try: model.test_connection(); mailbox.put('连接成功，模型返回有效结果。保存并启用后生效。')
@@ -198,6 +201,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
             try: text=mailbox.get_nowait()
             except queue.Empty: window.poll=window.after(100,poll); return
             status.config(text=text); test_button.config(state='normal')
+            self.refresh_model_state()
         test_button=self.button(buttons,'测试连接',test)
         self.button(buttons,'保存设置',save)
         def clear():
@@ -213,6 +217,14 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         def cleanup(event):
             if event.widget is window and hasattr(window,'poll'): window.after_cancel(window.poll)
         window.bind('<Destroy>',cleanup)
+
+    def refresh_model_state(self):
+        state=model_status_text(self.model_client)
+        if self.page=='assistant':
+            self.tip.config(text=state)
+            self.model_status_label.config(text=state)
+        elif self.page=='settings':
+            self.settings_model_status_label.config(text=state)
 
     def show_updates(self):
         if self.update_window is not None and self.update_window.winfo_exists():
@@ -425,6 +437,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         tips['budget_page']=('先看预算，再核对对应的账单。','查看概览 →','home')
         tips['settings']=('在这里管理模型、版本和本机数据。','返回概览 →','home')
         tip, action, target = tips[page]
+        if page=='assistant':tip=model_status_text(self.model_client)
         self.tip.config(text=tip)
         self.guide_action.config(text=action, command=lambda p=target: self.show(p))
         for child in self.main.winfo_children(): child.destroy()
@@ -447,7 +460,6 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
                 self.selected_month=self.month_picker.get();self.save_preferences();self.show(self.page)
             self.month_picker.bind('<<ComboboxSelected>>',select_month)
             if self.selected_month!='全部月份':self.frame=self.frame[self.frame.date.str.startswith(self.selected_month)].copy()
-        tk.Button(header,text='设置',command=lambda:self.show('settings'),bg='white',fg=GREEN,relief='flat',padx=px(10),pady=px(8)).pack(side='right')
         self.space_label.config(text='我的账本 · 本机数据' if self.mode=='personal' else '演示空间 · 合成账单')
         tk.Button(header,text='搜索 Ctrl+K',command=self.command_palette,bg='white',fg=MUTED,relief='flat',padx=px(10),pady=px(8)).pack(side='right',padx=px(8))
         tk.Button(header,text='+ 记一笔',command=self.quick_entry,bg='white',fg=BLUE,relief='flat',padx=px(12),pady=px(8)).pack(side='right',padx=px(4))
@@ -459,18 +471,19 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         if self.store.semantic_backup:
             self.label(self.main,'旧记录的转账类型/分类冲突已按原收支类型修正，金额不变，分类标为待确认；修复前已保存备份。',10,'#ae6450').configure(wraplength=px(760))
             self.button(self.main,'查看修复明细与备份',self.semantic_backups_window)
-        if self.mode=='demo':
+        if self.mode=='demo' and page=='settings':
             demo_actions=tk.Frame(self.main,bg=BG);demo_actions.pack(fill='x',pady=px((0,6)))
             self.button(demo_actions,'生成演示账单',self.demo_generator_window)
             self.label(demo_actions,'自选月份和金额 · 本地生成合成数据',10,MUTED)
-        if page in ('home','records','budget_page','plan','assistant'):
+        if page in ('budget_page','plan'):
             summary=refund_status_summary(self.frame.attrs['refund_sources'],self.selected_month if page in ('home','records','budget_page') else None)
             self.refund_status_label=self.label(self.main,refund_status_text(summary)+'（按实际退款月列流水状态）',10,'#ae6450')
             self.refund_status_label.configure(wraplength=px(720))
             actions=tk.Frame(self.main,bg=BG);actions.pack(fill='x')
             self.button(actions,'退款与待复核',self.refund_window)
         if page == 'assistant':
-            self.label(self.main, '已连接模型 · 条件理解与本机计算' if self.model_client else '本地助手 · 无需联网即可查询', 10, GREEN)
+            self.model_status_label=self.label(self.main,model_status_text(self.model_client),10,GREEN)
+            self.model_status_label.configure(wraplength=px(720))
         getattr(self, page)()
 
     def table(self,parent,columns,rows,height=9):
@@ -552,26 +565,34 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.source_frame=self.store.source_transactions()
         if self.selected_month!='全部月份':self.source_frame=self.source_frame[self.source_frame.date.str.startswith(self.selected_month)].copy()
         bar = tk.Frame(self.main, bg=BG); bar.pack(fill='x')
-        self.button(bar, '＋ 导入账单', self.import_file)
-        self.button(bar, '查看源记录', self.source)
-        self.category = ttk.Combobox(bar, values=category_options('支出'), state='readonly', width=12)
-        self.category.set('餐饮'); self.category.pack(side='left', padx=px(8))
-        self.button(bar,'批量设为分类',self.correct)
-        self.button(bar,'编辑交易',self.edit_selected)
-        ai=self.button(bar,'AI 分类建议',self.suggest_categories_ui)
-        if not self.model_client:ai.config(state='disabled')
-        more=tk.Frame(self.main,bg=BG);more.pack(fill='x')
-        self.button(more,'同商户全部应用',lambda:self.batch_correct(True))
-        self.button(more,'撤销上次批量',self.undo_batch)
-        self.button(more,'跨来源对账',self.reconciliation_window)
-        self.button(more,'导入批次',self.import_history_window)
-        self.button(more,'历史分类待修正',self.category_conflicts_window)
-        self.button(more,'导出净额明细',self.export_spending)
-        filters=tk.Frame(self.main,bg=BG);filters.pack(fill='x',pady=px(8))
+        self.button(bar,'导入账单',self.import_file)
         self.search_var=tk.StringVar(value=self.search_text)
-        ttk.Entry(filters,textvariable=self.search_var,width=32).pack(side='left',padx=px((0,10)))
+        search=ttk.Entry(bar,textvariable=self.search_var,width=20);search.pack(side='left',padx=px((0,8)))
+        search.bind('<Return>',lambda _:self.reset_record_filter())
+        self.button(bar,'搜索',self.reset_record_filter)
+        filters=tk.Frame(self.main,bg=BG)
+        def toggle_filters():
+            if filters.winfo_manager():filters.pack_forget()
+            else:filters.pack(fill='x',after=bar,pady=px(6))
+        self.button(bar,'筛选',toggle_filters)
+        more=tk.Menubutton(bar,text='更多 ▾',bg='white',fg=BLUE,relief='flat',padx=px(12),pady=px(7))
+        more.pack(side='left',padx=px(4));menu=tk.Menu(more,tearoff=False);more.configure(menu=menu)
+        for title,command in [('查看源记录',self.source),('跨来源对账',self.reconciliation_window),('退款与待复核',self.refund_window),('导入批次',self.import_history_window),('历史分类待修正',self.category_conflicts_window),('导出净额明细',self.export_spending),('撤销上次批量',self.undo_batch),('AI 分类建议',self.suggest_categories_ui)]:
+            menu.add_command(label=title,command=command,state='disabled' if title=='AI 分类建议' and not self.model_client else 'normal')
         self.filter_picker=ttk.Combobox(filters,values=['全部分类','待确认分类',*CATEGORIES],state='readonly',width=12)
         self.filter_picker.set(self.category_filter);self.filter_picker.pack(side='left')
+        self.selection_bar=tk.Frame(self.main,bg='#e6f4f1')
+        self.selection_label=self.label(self.selection_bar,'已选 0 笔',10,BLUE)
+        self.selection_label.pack_forget();self.selection_label.pack(side='left',padx=px(8))
+        self.category=ttk.Combobox(self.selection_bar,values=category_options('支出'),state='readonly',width=8)
+        self.category.set('餐饮');self.category.pack(side='left',padx=px(4))
+        self.button(self.selection_bar,'改分类',self.correct)
+        self.button(self.selection_bar,'编辑',self.edit_selected)
+        self.button(self.selection_bar,'同商户应用',lambda:self.batch_correct(True))
+        def clear_selection():
+            chosen=self.tree.selection()
+            if chosen:self.tree.selection_remove(*chosen)
+        self.button(self.selection_bar,'取消选择',clear_selection)
         self.result_count=tk.Label(self.main,bg=BG,fg=MUTED,justify='left',anchor='w',wraplength=px(720));self.result_count.pack(fill='x')
         self.result_count.bind('<Configure>',lambda event:self.result_count.configure(wraplength=max(px(240),event.width-px(8))))
         self.tree=self.table(self.main,['日期','商户','类型','金额 / 元','分类','分类来源','统计口径'],[],12)
@@ -620,6 +641,9 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
 
     def update_category_choices(self,event=None):
         selected=[self.record_rows[self.row_index(self.tree,item)] for item in self.tree.selection()]
+        self.selection_label.config(text=f'已选 {len(selected)} 笔')
+        if selected:self.selection_bar.pack(fill='x',before=self.result_count,pady=px(4))
+        else:self.selection_bar.pack_forget()
         kinds={r['kind'] for r in selected}
         choices=category_options(next(iter(kinds))) if len(kinds)==1 else [] if kinds else category_options('支出')
         self.category.configure(values=choices)
@@ -815,6 +839,8 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         (DATA_DIR/'preferences.json').write_text(json.dumps(self.preferences),encoding='utf-8')
 
     def settings(self):
+        self.settings_model_status_label=self.label(self.main,model_status_text(self.model_client),10,GREEN)
+        self.settings_model_status_label.configure(wraplength=px(720))
         if self.model_notice:self.label(self.main,self.model_notice,10,'#ae6450').configure(wraplength=px(760))
         items=[('大模型接口','可记住本机加密密钥及启用状态，重启和更新后自动恢复。',self.show_model_settings,'配置模型'),
                ('退款与统计口径','管理退款、待复核及全局口径；预算使用净支出。',self.refund_window,'退款与统计口径'),

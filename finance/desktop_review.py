@@ -139,6 +139,9 @@ class ReviewFeatures:
     def estimate_plan(self):
         try:r=estimate_from_records(self.store.spending_view())
         except ValueError as exc:messagebox.showinfo('账单估算',str(exc));return
+        names=('每月收入 / 元','方案 A 月预算 / 元','方案 B 月预算 / 元')
+        if any(self.inputs[name].get().strip() for name in names):
+            if not messagebox.askyesno('确认替换规划输入','将用近三个月估算替换当前收入和方案 A/B 预算；历史净额为负时会清空预算。是否继续？'):return
         income=r['average_income_cents'];expense=r['average_expense_cents']
         self.plan_estimate=r
         if r.get('requires_explicit_budget'):
@@ -198,12 +201,14 @@ class ReviewFeatures:
         window=tk.Toplevel(self);window.title('AI 分类建议 · 人工核对');set_window_geometry(window, 780, 500);window.configure(bg=BG)
         self.label(window,'正在获取建议，关闭此窗口可取消；规则分类与人工修正不会被覆盖。',10,MUTED)
         progress=Meter(window,maximum=len(candidates));progress.pack(fill='x',padx=px(15),pady=px(8))
-        mailbox=queue.Queue();cancel=threading.Event();results=[];failures=[0];tree_holder=[None]
+        mailbox=queue.Queue();cancel=threading.Event();results=[];failures=[0];tree_holder=[None];failure_reasons=set()
         def worker():
             for row in candidates:
                 if cancel.is_set():return
                 try:category=model.suggest_category(row['merchant'],row['description'],row['kind']);mailbox.put(('item',(row,category)))
-                except Exception:mailbox.put(('failed',None))
+                except Exception as exc:
+                    from .llm import connection_error_message
+                    mailbox.put(('failed',connection_error_message(exc)))
             mailbox.put(('done',None))
         def apply():
             tree=tree_holder[0];selection=tree.selection()
@@ -220,8 +225,10 @@ class ReviewFeatures:
                 try:kind,value=mailbox.get_nowait()
                 except queue.Empty:break
                 if kind=='item':results.append(value);progress['value']=len(results)+failures[0]
-                elif kind=='failed':failures[0]+=1;progress['value']=len(results)+failures[0]
+                elif kind=='failed':
+                    failures[0]+=1;progress['value']=len(results)+failures[0];failure_reasons.add(value)
                 else:
+                    if failure_reasons:self.label(window,'；'.join(sorted(failure_reasons)),10,'#dc2626').configure(wraplength=px(720))
                     self.label(window,f'成功 {len(results)} 笔，失败 {failures[0]} 笔；仅接受选中项，其余不保存。',10,MUTED)
                     tree_holder[0]=self.table(window,['商户','描述','原分类','模型建议'],[[r['merchant'],r['description'],r['category'],c] for r,c in results],7)
                     self.button(window,'接受选中建议',apply);return

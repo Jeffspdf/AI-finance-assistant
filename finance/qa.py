@@ -13,6 +13,19 @@ def month_shift(today, offset):
 
 def parse_question(question):
     if not question.strip() or len(question)>500: return None
+    dates=re.findall(r'(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)',question)
+    if dates:
+        if len(dates)!=2:return None
+        try:
+            start,end=map(date.fromisoformat,dates)
+            if not 2000<=start.year<=end.year<=2100 or start>end:return None
+        except ValueError:return None
+        match=re.search(r'(?:从|在)?\s*'+re.escape(dates[0])+r'\s*(?:到|至|之间|—|~|-)\s*'+re.escape(dates[1])+r'(?:之间|期间)?',question)
+        if not match:return None
+        remainder=question[:match.start()]+question[match.end():]
+        intent=parse_question(remainder)
+        if not intent or intent['period']!='all' or intent['metric']=='budget':return None
+        return dict(intent,date_from=dates[0],date_to=dates[1])
     unsupported=['投资','股票','基金','收益率','明年','下个月','预测','贷款','房价','信用','昨天','今天','上周','本周','去年','今年','退款']
     if any(w in question for w in unsupported): return None
     # Day-level ranges, merchants and category comparisons need extra parsing.
@@ -32,7 +45,7 @@ def parse_question(question):
     elif any(w in question for w in ['支出','花了','花费','消费','开销','多少钱']): metric='expense'
     else: return None
     # Require known wording and reject unparsed qualifiers instead of answering a broader question.
-    scrub=question
+    scrub=question.replace('交易','记录')
     tokens=['上个月','上月','这个月','本月','全部','所有','累计','总共','总','我的','我','请问','请','记录','一共','的','是','有','了','在','多少','几笔','笔数','多少笔','支出','花费','花了','消费','开销','多少钱','收入','工资','生活费','结余','净收入','收支差','预算','超支','占比','比例','最多','最高','最大','哪个','哪一类','分类','类别','餐饮','吃饭','饮食','伙食','交通','购物','居住','生活缴费','教育','医疗','娱乐','其他收入','其他支出','转账','金额','使用','情况','用了','还剩','剩余','目前','？','?','。',' ','，',',']
     for token in sorted(tokens,key=len,reverse=True):
         scrub=scrub.replace(token,'')
@@ -72,7 +85,8 @@ def validate_model_intent(question, intent):
     if '近三个月' in question or '最近三个月' in question:
         if period!='last_3_complete_months':return None
     if period=='last_3_complete_months' and not any(w in question for w in ['近三个月','最近三个月']):return None
-    merchant_match=re.search(r'在(.+?)(?:花|消费|支出|餐饮|的)',question)
+    merchant_question=re.sub(r'\d{4}-\d{2}-\d{2}','',question)
+    merchant_match=re.search(r'在([^到至]+?)(?:花|消费|支出|餐饮|的)',merchant_question)
     if merchant_match and intent.get('merchant')!=merchant_match.group(1):return None
     categories=[c for c in CATEGORIES if c in question]
     compare=intent.get('compare_categories')
@@ -128,7 +142,7 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     question=question.replace('消费总额','支出').replace('净支出','支出')
     if gross_requested and frame.attrs.get('projection')=='spending_view':
         frame=frame[frame.projection_kind!='refund_adjustment'].copy()
-    today=today or date.today(); budgets=budgets or {}
+    today=today or date.today(); budgets=budgets or {};model_error=None
     intent=parse_question(question)
     source='本地解析'
     if intent is None and model is not None:
@@ -140,10 +154,12 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
             if intent is not None:
                 mentioned=[m for m in frame.merchant.unique() if m and m in question]
                 if mentioned and not intent.get('merchant'):intent=None
-        except Exception:
+        except Exception as exc:
+            from .llm import connection_error_message
+            model_error=connection_error_message(exc)
             source='模型不可用，回退本地解析'
     if intent is None:
-        return {'answer':'目前无法可靠理解这个问题或条件不足。请明确月份与分类；不推断未提供交易或未来收益。可改问：“上个月餐饮花了多少？”或“本月结余是多少？”。模型启用后另支持明确商户、日期区间和两个分类比较。','evidence':[],'status':'unsupported','parser':source}
+        return {'answer':model_error or '目前无法可靠理解这个问题或条件不足。请明确月份与分类；可改问：“上个月餐饮花了多少？”或明确起止日期。','evidence':[],'status':'unsupported','parser':source}
     period=intent['period']; metric=intent['metric']; category=intent.get('category')
     month=month_shift(today,0 if period=='this_month' else -1) if period in ['this_month','last_month'] else period
     if period=='last_3_complete_months':
@@ -230,7 +246,31 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         if period=='last_3_complete_months':events=[r for r in events if r['date'][:7] in months]
         if intent.get('date_from'):events=[r for r in events if intent['date_from']<=r['date'][:10]<=intent['date_to']]
         summary=refund_status_summary(events,None if month=='all' else month if month in frame.attrs.get('source_months',[]) else None)
-        answer+=' 退款流水状态（按实际发生月，可能与抵扣月份不同）：'+refund_status_text(summary)+'。'
-    elif refund.get('count'):
+        if not category:answer+=' 退款流水状态（按实际发生月，可能与抵扣月份不同）：'+refund_status_text(summary)+'。'
+    elif refund.get('count') and not category:
         answer+=f' 退款仍待处理（{refund["count"]} 笔），当前支出未扣退款，净支出待定。'
-    return {'answer':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}
+    # Keep the complete calculation explanation for evidence consumers; the UI shows
+    # the direct answer and one deterministic insight before expanding the details.
+    spend_title='消费总额' if gross_requested else '净支出' if frame.attrs.get('projection')=='spending_view' else '支出'
+    headline=answer.split('计算方式：')[0].split('计算式：')[0].split(' 数据范围：')[0]
+    if metric in ('expense','income'):
+        headline=f'{item}{description}合计 {yuan(total)} 元，共 {count_records(tx)} 笔。'
+    elif metric=='balance':headline=f'{item}结余为 {yuan(income-expense)} 元。'
+    elif metric=='count':headline=f'{item}交易共 {count_records(tx)} 笔。'
+    elif metric=='top':headline=f'{spend_title}最高的分类：{names}，每类 {yuan(int(grouped.max()))} 元。'
+    elif metric=='share':
+        headline=(f'{category}占比 {total/denominator*100:.2f}%（{yuan(total)} 元）。' if denominator>0 else f'{category}金额 {yuan(total)} 元；本期{spend_title}不大于零，占比不适用。')
+    elif metric=='budget':headline=f'{category}{spend_title} {yuan(total)} 元，预算剩余 {yuan(budget-total)} 元，超支 {yuan(over)} 元。'
+    elif metric=='compare':headline='；'.join(c+' '+yuan(totals[c])+' 元' for c in names)+'。'
+    elif metric in ('average_expense','average_income'):headline=f'月均'+(spend_title if metric=='average_expense' else '收入')+f' {total/100/n:,.2f} 元。'
+    insight=''
+    expenses=full[full.kind=='支出']
+    denominator=int(expenses.amount_cents.sum())
+    if category and metric=='expense':
+        insight=f'占本期{spend_title}的 {total/denominator*100:.2f}%。' if denominator>0 else f'本期{spend_title}不大于零，占比不适用。'
+    elif not tx.empty:
+        grouped=tx.groupby('merchant').amount_cents.sum()
+        if not grouped.empty and int(grouped.max())>0:
+            insight=f'本次范围内金额最高的商户：{grouped.idxmax()}，{yuan(int(grouped.max()))} 元。'
+    if not insight:insight=f'本次交易计数 {count_records(tx)} 笔；退款调整不增加消费笔数。'
+    return {'answer':answer,'display_answer':headline.strip()+'\n'+insight,'details':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}

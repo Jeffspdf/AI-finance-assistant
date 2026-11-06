@@ -14,7 +14,7 @@ class ConversationFeatures:
         self.label(self.main,'查询、追问或设置预算，所有金额由程序核对。',11,MUTED)
         if not self.model_client:
             box=tk.Frame(self.main,bg='#e6f4f1',padx=px(12),pady=px(8));box.pack(fill='x',pady=px(8))
-            self.label(box,'本地助手可直接使用；商户和日期区间等问题可连接自己的模型扩展。',10,PRIMARY)
+            self.label(box,'本地支持月份、起止日期和分类查询；连接模型可扩展商户等条件理解。',10,PRIMARY).configure(wraplength=px(680))
             self.button(box,'连接自己的模型',self.show_model_settings)
         self.chat_messages=tk.Frame(self.main,bg=BG);self.chat_messages.pack(fill='x')
         self.draw_chat()
@@ -42,11 +42,12 @@ class ConversationFeatures:
             mine=message['role']=='user';bubble=tk.Frame(self.chat_messages,bg='#e6f4f1' if mine else 'white',padx=px(14),pady=px(10),highlightbackground='#e6ece9',highlightthickness=px(1))
             bubble.pack(fill='x',padx=px((60,0) if mine else (0,40)),pady=px(6))
             self.label(bubble,'你' if mine else '小财灵',9,PRIMARY)
+            if message.get('parser'):self.label(bubble,message['parser'],9,MUTED)
             label=self.label(bubble,message['text'],11,INK);label.configure(wraplength=max(px(200),self.content_canvas.winfo_width()-px(100)))
             bubble.bind('<Configure>',lambda event,widget=label:widget.configure(wraplength=max(px(100),event.width-px(32))))
             evidence=message.get('evidence',[])
-            if evidence:self.button(bubble,f'查看 {len(evidence)} 笔计算依据',lambda rows=evidence:self.chat_evidence(rows))
-            if message.get('trace'):self.button(bubble,'公式与关联决定',lambda trace=message['trace']:self.show_calculation_trace(trace))
+            if evidence or message.get('trace') or message.get('details'):
+                self.button(bubble,'查看依据',lambda item=message:self.chat_details(item))
             if not mine:
                 followups=tk.Frame(bubble,bg='white');followups.pack(fill='x',pady=px((4,0)))
                 self.button(followups,'本月结余',lambda:self.ask('本月结余是多少？'))
@@ -57,8 +58,17 @@ class ConversationFeatures:
         self.label(window,'显示回答当时的源记录快照；后续修改不会重写历史答案。',10,MUTED)
         self.table(window,['日期','商户','类型','金额 / 元','分类','源文件','行号'],[[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:,.2f}",r['category'],r['source_file'],r['source_row']] for r in rows],8)
 
-    def _chat_reply(self,text,evidence=None,mode=None,trace=None):
-        mode=mode or self.mode;self.chat_histories[mode].append(dict(role='assistant',text=text,evidence=evidence or [],trace=trace))
+    def chat_details(self,message):
+        from .ui_theme import scrollable_form
+        window=tk.Toplevel(self);window.title('查看依据');set_window_geometry(window,740,600);window.configure(bg=BG)
+        box=scrollable_form(window)
+        self.label(box,message.get('parser','本地解析'),10,PRIMARY)
+        self.label(box,message.get('details',message['text']),11).configure(wraplength=px(660))
+        if message.get('evidence'):self.button(box,'查看源记录快照',lambda:self.chat_evidence(message['evidence']))
+        if message.get('trace'):self.button(box,'公式与关联决定',lambda:self.show_calculation_trace(message['trace']))
+
+    def _chat_reply(self,text,evidence=None,mode=None,trace=None,details=None,parser=None):
+        mode=mode or self.mode;self.chat_histories[mode].append(dict(role='assistant',text=text,evidence=evidence or [],trace=trace,details=details,parser=parser))
         self.chat_histories[mode]=self.chat_histories[mode][-20:]
         if self.mode==mode and self.page=='assistant':
             self.draw_chat();self.after_idle(lambda:self.content_canvas.yview_moveto(1))
@@ -117,7 +127,9 @@ class ConversationFeatures:
         else:self.finish_chat(answer_question(frame,q,budgets=budgets),mode)
 
     def finish_chat(self,result,mode):
-        self._chat_reply(result['answer'],result.get('evidence'),mode,trace=result.get('trace'))
+        parser=result.get('parser','本地解析')
+        self._chat_reply(result.get('display_answer',result['answer']),result.get('evidence'),mode,trace=result.get('trace'),details=result.get('details'),parser=parser)
         if self.page=='assistant' and self.mode==mode:
+            self.refresh_model_state()
             self.answer.config(text=result['answer']);self.chat_status.config(text='已按本机记录核对。' if result['status']=='ok' else '可以补充条件，或尝试下方问题。')
             self.animate_character('success' if result['status']=='ok' else 'idle')

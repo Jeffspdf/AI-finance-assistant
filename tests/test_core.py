@@ -139,7 +139,7 @@ def test_twenty_grounded_questions(store,question):
         assert sum(r['amount_cents'] for r in result['evidence'])==14500
     if question=='上个月餐饮超支多少？': assert '45.00' in result['answer']
 
-@pytest.mark.parametrize('question',['下个月股票收益多少？','昨天餐饮花了多少？','2026-09-01 餐饮支出多少？','上个月餐饮和交通各花了多少？','上个月在麦当劳花了多少？','2025-01 餐饮花了多少？','2026-09-01到2026-09-10支出多少？'])
+@pytest.mark.parametrize('question',['下个月股票收益多少？','昨天餐饮花了多少？','2026-09-01 餐饮支出多少？','上个月餐饮和交通各花了多少？','上个月在麦当劳花了多少？','2025-01 餐饮花了多少？','2026-09-10到2026-09-01支出多少？'])
 def test_unsupported_or_missing_never_fabricates(store,question):
     result=answer_question(store.transactions(),question,TODAY)
     assert result['status'] in ['missing','unsupported'] and not result['evidence']

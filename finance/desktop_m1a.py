@@ -72,6 +72,7 @@ class M1Features:
             try:store.end_funding_link(state['links'][self.row_index(state['tree'],selected[0])]['id'],end.get().strip());refresh()
             except ValueError as exc:status.config(text=str(exc),fg=DANGER)
         self.button(row,'添加账户',add);self.button(actions,'保存支付绑定',declare);self.button(actions,'结束选中绑定',finish);refresh()
+        return window
 
     def select_import(self):
         filename=filedialog.askopenfilename(filetypes=[('账单文件','*.csv *.xlsx')])
@@ -90,7 +91,21 @@ class M1Features:
         def proceed():
             choice={'自动检测（推荐）':'auto','通用 CSV/XLSX':'generic','微信 CSV':'wechat_csv','银行模板 v1 XLSX':'bank_template_v1'}[adapter.get()]
             selected=accounts[account.get()];window.destroy();self.import_async(filename,choice,selected)
-        self.button(row,'开始预览',proceed);self.button(row,'管理账户',self.account_window)
+        def manage_accounts():
+            existing=set(accounts.values())
+            manager=self.account_window()
+            def refresh_accounts(event):
+                if event.widget is not manager or not window.winfo_exists():return
+                previous=accounts.get(account.get())
+                rows=self.store.accounts()
+                accounts.clear();accounts['未指定账户（只能提供人工核对线索）']=None
+                accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in rows})
+                new=[r['id'] for r in rows if r['id'] not in existing]
+                selected=new[-1] if new else previous
+                account.configure(values=list(accounts))
+                account.set(next((label for label,identifier in accounts.items() if identifier==selected),next(iter(accounts))))
+            manager.bind('<Destroy>',refresh_accounts,add='+')
+        self.button(row,'开始预览',proceed);self.button(row,'管理账户',manage_accounts)
 
     def six_row_demo(self):
         from .storage import Store

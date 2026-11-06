@@ -73,7 +73,7 @@ def verify(output,*,desktop_class=None,data_dir=None):
         app.show('assistant');app.ask('2026-10 支出多少？');app.update()
         assert '-30.00' in app.answer.cget('text') and '现金口径' in app.answer.cget('text') and '退款待处理' not in app.answer.cget('text')
         app.show('plan');app.update()
-        with patch('finance.desktop_review.estimate_from_records',side_effect=lambda f:estimate_from_records(f,date(2026,11,4))):app.estimate_plan()
+        with patch('finance.desktop_review.messagebox.askyesno',return_value=True), patch('finance.desktop_review.estimate_from_records',side_effect=lambda f:estimate_from_records(f,date(2026,11,4))):app.estimate_plan()
         assert app.plan_estimate['average_expense_cents']==3500 and app.inputs['方案 A 月预算 / 元'].get()=='35.00'
         result['cash']=dict(home=-3000,ledger=-3000,budget_used=-3000,budget_remaining=13000,qa=-3000,plan_average=3500)
         before=Path(store.path).read_bytes();controls['basis'].set(BASIS_LABELS['original_purchase_month'])
@@ -86,7 +86,7 @@ def verify(output,*,desktop_class=None,data_dir=None):
         app.show('assistant');app.ask('2026-10 支出多少？');app.update();assert '0.00' in app.answer.cget('text') and '原消费月' in app.answer.cget('text')
         app.selected_month='2026-09';app.show('home');app.update();assert app.home_totals['net_cents']==7000
         app.show('plan');app.update()
-        with patch('finance.desktop_review.estimate_from_records',side_effect=lambda f:estimate_from_records(f,date(2026,11,4))):app.estimate_plan()
+        with patch('finance.desktop_review.messagebox.askyesno',return_value=True), patch('finance.desktop_review.estimate_from_records',side_effect=lambda f:estimate_from_records(f,date(2026,11,4))):app.estimate_plan()
         assert app.plan_estimate['average_expense_cents']==7000 and app.inputs['方案 A 月预算 / 元'].get()=='70.00'
         exported=output/'net-original.csv'
         with patch('finance.desktop_refunds.filedialog.asksaveasfilename',return_value=str(exported)):app.export_spending()
@@ -133,7 +133,7 @@ def verify(output,*,desktop_class=None,data_dir=None):
             db.execute("UPDATE transactions SET date='2026-10-01' WHERE external_id IN ('R-W','R-B')")
         app.store.repair_refund_links();app.store.confirm_refund_link(ids['R-W'],ids['P-W'])
         app.show('plan');app.update()
-        with patch('finance.desktop_review.estimate_from_records',side_effect=lambda f:estimate_from_records(f,date(2026,11,4))):app.estimate_plan()
+        with patch('finance.desktop_review.messagebox.askyesno',return_value=True), patch('finance.desktop_review.estimate_from_records',side_effect=lambda f:estimate_from_records(f,date(2026,11,4))):app.estimate_plan()
         assert app.plan_estimate['average_expense_cents']==-3000 and app.inputs['方案 A 月预算 / 元'].get()=='' and app.calculate() is False
         app.inputs['方案 A 月预算 / 元'].insert(0,'100');app.inputs['方案 B 月预算 / 元'].insert(0,'90');assert app.calculate()
         result['checks'].append('negative historical average -> no automatic future budget; explicit nonnegative inputs required')

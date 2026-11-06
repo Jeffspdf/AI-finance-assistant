@@ -1,0 +1,36 @@
+{
+  "scale": 1.5,
+  "viewport": [
+    1920,
+    1080
+  ],
+  "viewport_type": "simulated 1920x1080 work area with 60px taskbar and 150% Tk scale",
+  "window": [
+    1800,
+    948
+  ],
+  "pages": {
+    "home": {
+      "horizontal_clipping": []
+    },
+    "records": {
+      "horizontal_clipping": []
+    },
+    "records_selected": {
+      "horizontal_clipping": []
+    },
+    "budget_page": {
+      "horizontal_clipping": []
+    },
+    "plan": {
+      "horizontal_clipping": []
+    },
+    "assistant": {
+      "horizontal_clipping": []
+    },
+    "settings": {
+      "horizontal_clipping": []
+    }
+  },
+  "callback_errors": []
+}

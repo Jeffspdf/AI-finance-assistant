@@ -81,7 +81,7 @@ def test_rule_precedence_and_drop_filter_safety(store):
     model=Fake(dict(metric='income',category=None,period='all'))
     assert answer_question(store.transactions(),'上个月餐饮花了多少？',date(2026,10,9),model=model)['status']=='ok'
     assert model.calls==0
-    for q in ['上个月在麦当劳餐饮花了多少？','下个月股票收益多少？','昨天花了多少？','2026-09-01到2026-09-10支出多少？']:
+    for q in ['上个月在麦当劳餐饮花了多少？','下个月股票收益多少？','昨天花了多少？','2026-09-10到2026-09-01支出多少？']:
         assert answer_question(store.transactions(),q,date(2026,10,9),model=Fake(dict(metric='expense',category=None,period='all')))['status']=='unsupported'
 
 @pytest.mark.parametrize('changes',[{'date_from':'1999-01-01','date_to':'2026-01-01'},{'date_from':'2026-02-02','date_to':'2026-01-01'},{'category':'无效'},{'sql':'DELETE'},{'merchant':'x'*51}])

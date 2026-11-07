@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from contextlib import closing
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 BASE = [
     '''CREATE TABLE IF NOT EXISTS transactions (
@@ -119,6 +119,24 @@ def _upgrade_to_v4(db):
     db.execute('PRAGMA user_version=4')
 
 
+M3 = [
+    'ALTER TABLE accounts ADD COLUMN archived_at TEXT',
+    'ALTER TABLE accounts ADD COLUMN updated_at TEXT',
+]
+
+
+def _require_v5_layout(db):
+    _require_v4_layout(db)
+    required={'refund_links':{'id','refund_txn_id','original_txn_id','amount_cents','status','context_json'},
+              'ledger_settings':{'key','value','updated_at'},
+              'accounts':{'id','channel','type','label','last4','created_at'}}
+    for table,columns in required.items():
+        if not columns<={r[1] for r in db.execute('PRAGMA table_info('+table+')')}:
+            raise ValueError('模式5结构不完整，请核对或恢复备份；未执行模式6升级')
+    if not db.execute("SELECT 1 FROM schema_migrations WHERE version=5 AND checksum<>''").fetchone():
+        raise ValueError('模式5迁移记录缺失；未执行模式6升级')
+
+
 def _require_v4_layout(db):
     required={'transactions','accounts','funding_links','source_documents','raw_rows',
               'import_batches','link_groups','link_members','schema_migrations','audit_events',
@@ -182,6 +200,7 @@ def ensure_schema(path, hook=None):
         if version == SCHEMA_VERSION:return None
         if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':
             raise ValueError('迁移前数据库完整性检查失败')
+        if db.execute('PRAGMA foreign_key_check').fetchone() is not None:raise ValueError('迁移前外键完整性检查失败')
         db.execute('BEGIN IMMEDIATE')
         # Serialize migrations/writers before taking the consistent pre-DDL snapshot.
         version=assert_supported(db)
@@ -189,13 +208,18 @@ def ensure_schema(path, hook=None):
             db.rollback();return None
         existing=db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
         backup=backup_database(path) if existing else None
-        if version<4:_upgrade_to_v4(db)
-        _require_v4_layout(db)
-        for statement in M2:db.execute(statement)
+        if version<4:_upgrade_to_v4(db);version=4
+        if version<5:
+            _require_v4_layout(db)
+            for statement in M2:db.execute(statement)
+            db.execute('INSERT INTO schema_migrations(version,checksum) VALUES (?,?)',(5,sha256('\n'.join(M2).encode()).hexdigest()))
+            db.execute('PRAGMA user_version=5');version=5
+        if version<6:
+            _require_v5_layout(db)
+            for statement in M3:db.execute(statement)
+            db.execute('INSERT INTO schema_migrations(version,checksum) VALUES (?,?)',(6,sha256('\n'.join(M3).encode()).hexdigest()))
+            db.execute('PRAGMA user_version=6')
         if hook:hook(db)
-        checksum=sha256('\n'.join(M2).encode()).hexdigest()
-        db.execute('INSERT INTO schema_migrations(version,checksum) VALUES (?,?)',(SCHEMA_VERSION,checksum))
-        db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':raise ValueError('迁移完整性检查失败')
         if db.execute('PRAGMA foreign_key_check').fetchone() is not None:raise ValueError('迁移外键完整性检查失败')
         db.commit()

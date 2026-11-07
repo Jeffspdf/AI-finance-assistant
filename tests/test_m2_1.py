@@ -46,18 +46,20 @@ def refund_group(store):
         db.executemany("INSERT INTO link_members VALUES ('GR',?,'refund')",[('R-W',),('R-B',)])
 
 
-def test_v4_to_v5_preserves_all_old_rows_objects_history_and_gross(tmp_path):
+def test_v4_to_current_preserves_all_old_rows_objects_history_and_gross(tmp_path):
     path=tmp_path/'ledger.sqlite3';create_v4(path);before=snapshot(path)
     backup=ensure_schema(path);after=snapshot(path)
-    assert before['version']==4 and after['version']==SCHEMA_VERSION==5
+    assert before['version']==4 and after['version']==SCHEMA_VERSION==6
     assert backup and snapshot(backup)==before
     assert set(after['rows'])-set(before['rows'])=={'refund_links','ledger_settings'}
-    for name,obj in before['objects'].items():assert after['objects'][name]==obj
+    for name,obj in before['objects'].items():
+        if name!='accounts':assert after['objects'][name]==obj
     for name,rows in before['rows'].items():
         if name=='schema_migrations':assert after['rows'][name][0]==rows[0]
+        elif name=='accounts':assert after['rows'][name]==[tuple(r)+(None,None) for r in rows]
         else:assert after['rows'][name]==rows
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()==[(4,),(5,)]
+        assert db.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()==[(4,),(5,),(6,)]
         assert db.execute('SELECT checksum FROM schema_migrations WHERE version=4').fetchone()[0]==V4_CHECKSUM
         assert db.execute("SELECT value FROM ledger_settings WHERE key='spending_basis'").fetchone()[0]=='cash'
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
@@ -67,11 +69,11 @@ def test_v4_to_v5_preserves_all_old_rows_objects_history_and_gross(tmp_path):
     assert store.migration_backup is None and store.semantic_backup is None
 
 
-def test_new_database_retains_frozen_v4_checksum_then_records_v5(tmp_path):
+def test_new_database_retains_frozen_v4_checksum_then_records_v5_v6(tmp_path):
     store=Store(tmp_path/'new.sqlite3')
     with store.connect(read_only=True) as db:
         rows=dict(db.execute('SELECT version,checksum FROM schema_migrations'))
-        assert set(rows)=={4,5} and rows[4]==V4_CHECKSUM
+        assert set(rows)=={4,5,6} and rows[4]==V4_CHECKSUM
         assert len(rows[5])==64 and rows[5]!=rows[4]
     assert store.transactions().empty and store.migration_backup is None
 
@@ -131,18 +133,18 @@ def test_incomplete_v4_is_not_partially_upgraded(tmp_path,damage):
     assert snapshot(path)==before
 
 
-def test_future_v6_and_readonly_v4_refused_before_writes(tmp_path):
+def test_future_v7_and_readonly_v4_refused_before_writes(tmp_path):
     path=tmp_path/'old.sqlite3';create_v4(path);before=path.read_bytes()
     with pytest.raises(ValueError,match='可写模式'):Store(path,read_only=True)
     assert path.read_bytes()==before and not (tmp_path/'backups').exists()
-    with closing(sqlite3.connect(path)) as db:db.execute('PRAGMA user_version=6')
+    with closing(sqlite3.connect(path)) as db:db.execute('PRAGMA user_version=7')
     before=path.read_bytes()
     for read_only in (False,True):
         with pytest.raises(ValueError,match='升级'):Store(path,read_only=read_only)
     assert path.read_bytes()==before and not (tmp_path/'backups').exists()
 
 
-def test_v5_reopen_is_byte_idempotent_and_readonly_supported(tmp_path):
+def test_current_reopen_is_byte_idempotent_and_readonly_supported(tmp_path):
     store=ledger(tmp_path);path=Path(store.path);before=path.read_bytes()
     assert ensure_schema(path) is None
     reopened=Store(path);assert reopened.migration_backup is None
@@ -153,16 +155,17 @@ def test_v5_reopen_is_byte_idempotent_and_readonly_supported(tmp_path):
     assert path.read_bytes()==before and len(list((tmp_path/'backups').glob('*.sqlite3')))==1
 
 
-def test_restore_v4_snapshot_into_v5_uses_staged_upgrade(tmp_path):
+def test_restore_v4_snapshot_into_current_uses_staged_upgrade(tmp_path):
     store=ledger(tmp_path);old=store.migration_backup;original=snapshot(old)
     save_confirmed(store,store.validate_refund_link('R-W','P-W'),'RL-1')
     recovery=store.restore(old,confirmed=True)
-    assert inspect_database(recovery)['version']==5 and inspect_database(recovery)['counts']['refund_links']==1
-    assert inspect_database(store.path)['version']==5
+    assert inspect_database(recovery)['version']==6 and inspect_database(recovery)['counts']['refund_links']==1
+    assert inspect_database(store.path)['version']==6
     with store.connect(read_only=True) as db:assert db.execute('SELECT COUNT(*) FROM refund_links').fetchone()[0]==0
     current=snapshot(store.path)
     for name,rows in original['rows'].items():
-        if name!='schema_migrations':assert current['rows'][name]==rows
+        if name=='accounts':assert current['rows'][name]==[tuple(r)+(None,None) for r in rows]
+        elif name!='schema_migrations':assert current['rows'][name]==rows
 
 
 def test_two_migrations_serialize_and_create_one_v4_backup(tmp_path):
@@ -171,7 +174,7 @@ def test_two_migrations_serialize_and_create_one_v4_backup(tmp_path):
     assert sum(r is not None for r in results)==1
     assert len(list((tmp_path/'backups').glob('*.sqlite3')))==1
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()==[(4,),(5,)]
+        assert db.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()==[(4,),(5,),(6,)]
 
 
 @pytest.mark.parametrize('field,value',[

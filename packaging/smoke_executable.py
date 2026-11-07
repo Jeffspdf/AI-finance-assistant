@@ -19,6 +19,8 @@ def main():
             sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
             from m2_v4_fixture import create_v4
             create_v4(isolated/'personal.sqlite3')
+            from m3_v5_fixture import create_v5
+            create_v5(isolated/'frozen-v5.sqlite3')
         result=subprocess.run([str(exe),flag],env=env,shell=False,timeout=90,capture_output=True,
                               creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         (isolated/'process.stdout.log').write_bytes(result.stdout)

@@ -6,7 +6,7 @@ from shutil import copyfile
 import json
 import sqlite3
 from .storage import Store
-from .migrations import ensure_schema,inspect_database
+from .migrations import ensure_schema,inspect_database,SCHEMA_VERSION
 from .spending_presenter import spending_totals
 
 
@@ -20,14 +20,15 @@ def verify_m2_migration(folder):
                         objects=db.execute('SELECT name,type,sql FROM sqlite_master ORDER BY name').fetchall())
     before=snapshot(path)
     assert before['version']==4,'Requires frozen synthetic schema-4 fixture'
-    store=Store(path);assert inspect_database(path)['version']==5
+    store=Store(path);assert inspect_database(path)['version']==SCHEMA_VERSION
     assert snapshot(store.migration_backup)==before
     upgraded=snapshot(path)
     for name,rows in before['rows'].items():
         if name=='schema_migrations':assert upgraded['rows'][name][0]==rows[0]
+        elif name=='accounts':assert upgraded['rows'][name]==[tuple(r)+(None,None) for r in rows]
         else:assert upgraded['rows'][name]==rows
-    assert all(obj in upgraded['objects'] for obj in before['objects'])
-    result=dict(data='synthetic only',migration='schema 4 -> 5',pre_migration_backup_matches=True,
+    assert all(obj in upgraded['objects'] for obj in before['objects'] if obj[0]!='accounts')
+    result=dict(data='synthetic only',migration='schema 4 -> 6',pre_migration_backup_matches=True,
                 original_tables_rows_ids_audit_checksum_preserved=True)
     link=store.confirm_refund_link('R-W','P-W')
     assert spending_totals(store.spending_view())['net_cents']==7000
@@ -38,7 +39,7 @@ def verify_m2_migration(folder):
     store.restore(store.migration_backup,confirmed=True)
     assert spending_totals(store.spending_view())['net_cents']==10000 and not store.refund_links()
     store.restore(valid_backup,confirmed=True)
-    result['v5_backup_restore_and_v4_restore_upgrade']=True
+    result['current_backup_restore_and_v4_restore_upgrade']=True
     expected=snapshot(path)
     with patch.object(Store,'maintain_links',side_effect=RuntimeError('synthetic restore maintenance failure')):
         try:store.restore(valid_backup,confirmed=True)
@@ -54,7 +55,7 @@ def verify_m2_migration(folder):
     assert snapshot(failure)==before
     result['failed_ddl_schema_rows_audit_rollback']=True
     future=folder/'future.sqlite3';copyfile(path,future)
-    with closing(sqlite3.connect(future)) as db:db.execute('PRAGMA user_version=6');db.commit()
+    with closing(sqlite3.connect(future)) as db:db.execute('PRAGMA user_version='+str(SCHEMA_VERSION+1));db.commit()
     future_bytes=future.read_bytes()
     try:Store(future)
     except ValueError:pass
@@ -70,5 +71,26 @@ def verify_m2_migration(folder):
         assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
     result['integrity_and_foreign_keys_ok']=True
+    frozen=folder/'frozen-v5.sqlite3'
+    if frozen.exists():
+        old5=snapshot(frozen);assert old5['version']==5
+        upgraded5=Store(frozen);new5=snapshot(frozen)
+        assert new5['version']==6 and snapshot(upgraded5.migration_backup)==old5
+        for name,rows in old5['rows'].items():
+            if name=='accounts':assert new5['rows'][name]==[tuple(r)+(None,None) for r in rows]
+            elif name=='schema_migrations':assert new5['rows'][name][:len(rows)]==rows
+            else:assert new5['rows'][name]==rows
+        initial5=frozen.read_bytes();Store(frozen);assert frozen.read_bytes()==initial5
+        failure5=folder/'failure-v5.sqlite3';copyfile(upgraded5.migration_backup,failure5)
+        try:ensure_schema(failure5,hook=fail)
+        except RuntimeError:pass
+        else:raise AssertionError('Frozen v5 rollback not exercised')
+        assert snapshot(failure5)==old5
+        old_bytes=Path(upgraded5.migration_backup).read_bytes()
+        try:Store(upgraded5.migration_backup,read_only=True)
+        except ValueError:pass
+        else:raise AssertionError('Readonly v5 migration was accepted')
+        assert Path(upgraded5.migration_backup).read_bytes()==old_bytes
+        result['frozen_v5_upgrade_backup_history_rollback_readonly']=True
     (folder/'m2-migration.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     return result

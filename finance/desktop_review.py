@@ -31,6 +31,8 @@ class ReviewFeatures:
     def budget_page(self):
         month=self.selected_month if self.selected_month!='全部月份' else date.today().strftime('%Y-%m')
         self.budget_month=month
+        if month not in self.store.spending_view().attrs.get('source_months',[]):
+            self.label(self.main,'尚无记录：该月份还没有已导入交易。可以设置预算，但不会把缺失记录当作零消费。',10,MUTED).configure(wraplength=px(760))
         form=tk.Frame(self.main,bg='white',padx=px(16),pady=px(12));form.pack(fill='x',pady=px(8))
         self.label(form,'设置分类预算（元） · '+month,13,bold=True)
         row=tk.Frame(form,bg='white');row.pack(fill='x')

@@ -187,7 +187,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
 
     def import_batches(self):
         with self.connect(read_only=True) as db:
-            return [dict(r) for r in db.execute('SELECT b.*,d.filename,d.sha256 FROM import_batches b JOIN source_documents d ON d.id=b.document_id ORDER BY b.started_at DESC,b.id')]
+            return [dict(r) for r in db.execute('SELECT b.*,d.filename,d.sha256,a.label AS account_label,a.archived_at AS account_archived_at FROM import_batches b JOIN source_documents d ON d.id=b.document_id LEFT JOIN accounts a ON a.id=b.account_id ORDER BY b.started_at DESC,b.id')]
 
     def delete_import_batch(self,identifier):
         with self.connect() as db:
@@ -217,9 +217,9 @@ class Store(Refunds,Reconciliation,BackupManagement):
 
     def transaction_source(self,identifier):
         with self.connect(read_only=True) as db:
-            row=db.execute('''SELECT t.*,d.sha256,d.parser_version,r.raw_json,r.parse_status
+            row=db.execute('''SELECT t.*,d.sha256,d.parser_version,r.raw_json,r.parse_status,a.label AS account_label,a.archived_at AS account_archived_at
               FROM transactions t LEFT JOIN source_documents d ON d.id=t.source_document_id
-              LEFT JOIN raw_rows r ON r.id=t.raw_row_id WHERE t.id=?''',(identifier,)).fetchone()
+              LEFT JOIN raw_rows r ON r.id=t.raw_row_id LEFT JOIN accounts a ON a.id=t.account_id WHERE t.id=?''',(identifier,)).fetchone()
             if not row:raise ValueError('交易不存在')
             return dict(row)
 

@@ -1,4 +1,4 @@
-param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.9.0', [switch]$CoursePreview)
+param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.9.1', [switch]$CoursePreview)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 if ($CoursePreview -and $Version -notmatch '^\d+\.\d+\.\d+-rc\.\d+$') { throw 'CoursePreview requires an explicit x.y.z-rc.N version; stable release gates cannot be bypassed.' }
@@ -12,6 +12,7 @@ foreach ($asset in $tlsAssets) { $tlsArgs += @('--add-data', "$asset;.") }
 & $Python -m PyInstaller --noconfirm --clean --windowed --onedir --name AIFinanceHelper --icon assets/app.ico --add-data 'assets;assets' @tlsArgs --collect-all openpyxl --exclude-module streamlit --exclude-module pytest --exclude-module pyarrow desktop.py
 Check-Exit
 $packageSmokeDir = Join-Path (Get-Location).Path ('build\package-smoke-' + [guid]::NewGuid().ToString('N'))
+if (-not (Test-Path -LiteralPath 'dist/AIFinanceHelper/_internal/assets/help.md')) { throw 'Packaged offline help resource missing.' }
 $smokeArgs = @()
 if ($CoursePreview) { $smokeArgs += '--allow-known-write-warning' }
 & $Python packaging/smoke_executable.py --exe 'dist\AIFinanceHelper\AIFinanceHelper.exe' --data-dir $packageSmokeDir @smokeArgs

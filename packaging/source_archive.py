@@ -8,6 +8,7 @@ files = ['desktop.py', 'app.py', 'README.md', 'README_EN.md', 'DESKTOP_README.md
          'requirements-desktop.txt', 'pytest.ini', '.gitignore', 'start_desktop.bat',
          'start.bat', 'start.ps1']
 for directory, pattern in [('finance', '*.py'), ('tests', '*.py'), ('packaging', '*.py'),
+                           ('assets', '*.md'), ('tests/fixtures', '*.sql'),
                            ('packaging', '*.ps1'), ('packaging', '*.iss'), ('samples', '*.csv'),
                            ('.github/workflows', '*.yml'), ('assets', '*.ico'), ('assets', '*.png'), ('assets', '*.txt')]:
     files.extend(str(p.relative_to(root)) for p in (root / directory).glob(pattern))

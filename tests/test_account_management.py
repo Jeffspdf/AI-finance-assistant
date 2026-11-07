@@ -45,6 +45,9 @@ def test_archive_requires_ended_binding_and_blocks_all_new_uses(tmp_path):
     store.archive_account(wallet['id'],confirmed=True)
     assert store.spending_view().amount_cents.tolist()==before
     assert store.transaction_source(ids['P-W'])['account_id']==wallet['id']
+    assert store.transaction_source(ids['P-W'])['account_label']==wallet['label']
+    assert store.transaction_source(ids['P-W'])['account_archived_at']
+    assert any(b['account_label']==wallet['label'] and b['account_archived_at'] for b in store.import_batches())
     with pytest.raises(ValueError,match='归档'):store.add_funding_link(wallet['id'],bank['id'],date.today().isoformat())
     with pytest.raises(ValueError,match='归档'):store.end_funding_link(link['id'],date.today().isoformat())
     content='交易时间,交易对方,商品,收/支,金额(元),当前状态,交易单号\n2026-11-01 12:00:00,合成餐厅,午餐,支出,10.00,支付成功,NEW\n'

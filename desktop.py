@@ -15,7 +15,8 @@ from finance.storage import Store
 from finance.demo import demo_bytes,initialize_demo
 from finance.importer import parse_statement, money_to_cents
 from finance.analytics import overview, plan_savings, yuan
-from finance.qa import answer_question
+from finance.qa import answer_question,month_shift
+from finance.help_content import load_help
 from finance.categories import CATEGORIES,category_options
 from finance.updates import APP_VERSION, RELEASES_URL, check_latest, download_installer,update_error_message,version_status,can_download,UpdateDiagnostics
 from finance.llm import ModelClient,connection_error_message,model_status_text
@@ -75,13 +76,16 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         tk.Label(side, text='PERSONAL FINANCE', bg='white', fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', padx=px(18), pady=px((0, 12)))
         self.nav = {}
         for label, page in [('财务概览', 'home'), ('交易账本', 'records'), ('预算与提醒', 'budget_page'), ('储蓄规划', 'plan'), ('问问助手', 'assistant')]:
-            b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=px(0), padx=px(20), pady=px(7), cursor='hand2')
+            b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=px(0), padx=px(20), pady=px(4), cursor='hand2')
             b.pack(fill='x', padx=px(14), pady=px(1)); self.nav[page] = b
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=px(18), pady=px(6))
         self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=px(3))
         self.space_label.pack()
-        settings_button=tk.Button(spaces,text='设置与连接',command=lambda:self.show('settings'),relief='flat',bg='#edf5f1',fg=GREEN,pady=px(8))
-        settings_button.pack(fill='x',pady=px(5));self.nav['settings']=settings_button
+        support=tk.Frame(spaces,bg='white');support.pack(fill='x',pady=px(5))
+        settings_button=tk.Button(support,text='设置与连接',command=lambda:self.show('settings'),relief='flat',bg='#edf5f1',fg=GREEN,pady=px(8))
+        settings_button.pack(side='left',fill='x',expand=True);self.nav['settings']=settings_button
+        tk.Button(support,text='使用帮助 · F1',command=self.show_help_window,relief='flat',bg='white',fg=GREEN,pady=px(8)).pack(side='left',fill='x',expand=True)
+        self.bind('<F1>',lambda _:self.show_help_window())
         self.update_window = None
         self.guide = tk.Frame(side, bg='#f3f9f5', padx=px(12), pady=px(6))
         self.guide.pack(side='bottom', fill='x', padx=px(16), pady=px(8))
@@ -217,6 +221,27 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         def cleanup(event):
             if event.widget is window and hasattr(window,'poll'): window.after_cancel(window.poll)
         window.bind('<Destroy>',cleanup)
+
+    def show_help_window(self):
+        try:chapters=load_help(ROOT/'assets/help.md')
+        except (OSError,ValueError):
+            messagebox.showerror('帮助不可用','帮助资源缺失或不完整，请重新安装完整程序。',parent=self);return
+        window=tk.Toplevel(self);window.title('使用帮助 · 离线');set_window_geometry(window,900,600);window.configure(bg=BG)
+        actions=tk.Frame(window,bg=BG);actions.pack(side='bottom',fill='x',padx=px(14))
+        self.button(actions,'关闭帮助',window.destroy).pack_configure(side='right')
+        body=tk.Frame(window,bg=BG,padx=px(12),pady=px(10));body.pack(fill='both',expand=True)
+        topics=tk.Listbox(body,width=14,exportselection=False,bg='white',fg=INK,selectbackground='#d9eeea',selectforeground=INK,font=point_font())
+        topics.pack(side='left',fill='y',padx=px((0,12)))
+        scroll=ttk.Scrollbar(body);scroll.pack(side='right',fill='y')
+        text=tk.Text(body,wrap='word',bg='white',fg=INK,font=point_font(),padx=px(14),pady=px(12),yscrollcommand=scroll.set)
+        text.pack(fill='both',expand=True);scroll.configure(command=text.yview)
+        for title in chapters:topics.insert('end',title)
+        def show_topic(_=None):
+            if not topics.curselection():return
+            title=topics.get(topics.curselection()[0]);text.configure(state='normal');text.delete('1.0','end');text.insert('1.0',title+'\n\n'+chapters[title]);text.configure(state='disabled');text.yview_moveto(0)
+        topics.bind('<<ListboxSelect>>',show_topic);topics.selection_set(0);show_topic()
+        window.help_controls={'topics':topics,'text':text}
+        return window
 
     def refresh_model_state(self):
         state=model_status_text(self.model_client)
@@ -451,10 +476,11 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.space_picker.set('演示空间' if self.mode=='demo' else '我的账本');self.space_picker.pack(side='left',padx=px((0,12)))
         self.space_picker.bind('<<ComboboxSelected>>',lambda _:self.switch_space() if (self.space_picker.get()=='我的账本')!=(self.mode=='personal') else None)
         months=sorted(set(self.frame.attrs.get('source_months',[]))|set(self.frame.date.str[:7])|{date.today().strftime('%Y-%m')},reverse=True)
+        if page=='budget_page':months=sorted(set(months)|{month_shift(date.today(),offset) for offset in range(-24,13)},reverse=True)
         if self.selected_month not in ['全部月份',*months]:self.selected_month=months[0]
         if page in ('home','records','budget_page'):
             self.month_picker=ttk.Combobox(header,values=([*months] if page=='budget_page' else ['全部月份',*months]),state='readonly',width=13)
-            if page=='budget_page' and self.selected_month=='全部月份':self.selected_month=months[0]
+            if page=='budget_page' and self.selected_month=='全部月份':self.selected_month=date.today().strftime('%Y-%m')
             self.month_picker.set(self.selected_month);self.month_picker.pack(side='left')
             def select_month(_):
                 self.selected_month=self.month_picker.get();self.save_preferences();self.show(self.page)
@@ -851,6 +877,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.settings_model_status_label.configure(wraplength=px(720))
         if self.model_notice:self.label(self.main,self.model_notice,10,'#ae6450').configure(wraplength=px(760))
         items=[('大模型接口','可记住本机加密密钥及启用状态，重启和更新后自动恢复。',self.show_model_settings,'配置模型'),
+               ('使用帮助','离线查看导入、分类、账户、退款、对账、预算与备份说明。',self.show_help_window,'打开使用帮助'),
                ('退款与统计口径','管理退款、待复核及全局口径；预算使用净支出。',self.refund_window,'退款与统计口径'),
                ('版本与更新',f'当前 v{APP_VERSION} · 检查新版与下载安装包。',self.show_updates,'检查更新'),
                ('账户与支付绑定','声明钱包与银行卡账户，建立带有效期的支付绑定；不会自动合并交易。',self.account_window,'管理账户与绑定'),
@@ -960,6 +987,9 @@ if __name__ == '__main__':
             app.show('home');app.demo_generator_window();app.update()
             assert app.demo_generator_dialog.winfo_exists()
             app.demo_generator_dialog.destroy()
+            from finance.feedback_acceptance import verify_feedback_controls
+            closure_report=verify_feedback_controls(app,DATA_DIR/'feedback-ui')
+            (DATA_DIR/'feedback-self-test.json').write_text(json.dumps(closure_report,ensure_ascii=False,indent=2),encoding='utf-8')
             (DATA_DIR / 'self-test.ok').write_text('Desktop smoke test passed', encoding='utf-8')
             app.destroy()
         else:

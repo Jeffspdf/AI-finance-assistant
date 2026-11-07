@@ -293,7 +293,7 @@ class M1Features:
         def refresh():
             for child in holder.winfo_children():child.destroy()
             state['rows']=store.import_batches()[:200]
-            state['tree']=self.table(holder,['文件','时间','状态','新增','重复','冲突'],[[r['filename'],r['started_at'],'已删除' if r['status']=='deleted' else '已导入',r['added'],r['duplicates'],r['conflicts']] for r in state['rows']],9)
+            state['tree']=self.table(holder,['文件','账户','时间','状态','新增','重复','冲突'],[[r['filename'],(r['account_label'] or '未指定')+('（已归档）' if r['account_archived_at'] else ''),r['started_at'],'已删除' if r['status']=='deleted' else '已导入',r['added'],r['duplicates'],r['conflicts']] for r in state['rows']],9)
         def chosen():
             selection=state['tree'].selection()
             return state['rows'][self.row_index(state['tree'],selection[0])] if selection else None

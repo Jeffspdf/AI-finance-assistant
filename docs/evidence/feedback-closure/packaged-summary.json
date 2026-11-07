@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "--self-test",
+    "--self-test-m1a",
+    "--self-test-round5",
+    "--self-test-round6",
+    "--self-test-round7",
+    "--self-test-round8",
+    "--self-test-m2",
+    "--self-test-m2-migration"
+  ],
+  "help_asset_matches": true,
+  "help_chapters": 11,
+  "schema": 6,
+  "frozen_v5_rehearsal": true,
+  "exe_sha256": "ce9e754a887670b3117ded6a1c68721b3eb61ae5526fb6d32e8bc078532786bd"
+}

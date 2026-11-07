@@ -1,0 +1,49 @@
+{
+  "data": "isolated synthetic only",
+  "checks": [
+    "soft delete uses original record; cancellation is read-only; projections refreshed",
+    "account metadata edit -> archive -> absent in import -> restore -> import picker refresh",
+    "11 offline chapters; readonly text; chapter switching; fixed close button",
+    "one month selector; -24..+12 range; future budget persists; missing coverage not zero consumption"
+  ],
+  "layouts": {
+    "delete_confirmation_controls": {
+      "size": [
+        780,
+        975
+      ],
+      "horizontal_spill": []
+    },
+    "account_archived": {
+      "size": [
+        1275,
+        1110
+      ],
+      "horizontal_spill": []
+    },
+    "import_restored_account": {
+      "size": [
+        870,
+        645
+      ],
+      "horizontal_spill": []
+    },
+    "offline_help": {
+      "size": [
+        1350,
+        900
+      ],
+      "horizontal_spill": []
+    },
+    "future_budget": {
+      "size": [
+        1800,
+        1200
+      ],
+      "horizontal_spill": []
+    }
+  },
+  "callback_errors": [],
+  "ui_scale": 1.5,
+  "original_ledger_unchanged": true
+}

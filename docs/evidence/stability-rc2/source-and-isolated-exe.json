@@ -1,0 +1,22 @@
+{
+  "tests": 586,
+  "failures": 0,
+  "errors": 0,
+  "schema_version": 5,
+  "packaged_checks": [
+    "--self-test",
+    "--self-test-m1a",
+    "--self-test-round5",
+    "--self-test-round6",
+    "--self-test-round7",
+    "--self-test-round8",
+    "--self-test-m2",
+    "--self-test-m2-migration"
+  ],
+  "known_limits": [
+    "unattributed write warning retained; no investigation"
+  ],
+  "published_local_assets_unchanged": true,
+  "product_features_added": false,
+  "data": "isolated synthetic only"
+}

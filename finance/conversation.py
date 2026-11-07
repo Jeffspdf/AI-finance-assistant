@@ -2,10 +2,11 @@
 from .ui_scale import px, logical, point_font, set_window_geometry
 from datetime import date
 import re,queue,threading
+import sqlite3
 import tkinter as tk
 from tkinter import ttk,messagebox
 from .qa import answer_question,month_shift
-from .categories import CATEGORIES
+from .categories import CATEGORIES,category_options
 from .importer import money_to_cents
 from .ui_theme import BG,INK,MUTED,PRIMARY
 
@@ -86,13 +87,18 @@ class ConversationFeatures:
         action=re.fullmatch(r'(?:把)?(?:(本月|上个月))?('+categories+r')预算(?:设为|设置为|改为)\s*(\d+(?:\.\d{1,2})?)\s*(?:元)?[。！!]?',q)
         if action:
             period,category,value=action.groups();month=month_shift(date.today(),-1 if period=='上个月' else 0)
+            if category not in category_options('支出'):
+                self._chat_reply('预算仅支持支出分类，请选择餐饮、交通等分类。');return
             try:cents=money_to_cents(value,allow_zero=True)
             except ValueError as exc:self._chat_reply(str(exc));return
             if messagebox.askyesno('确认预算修改',f'将 {month} 的{category}预算设为 ¥{cents/100:,.2f}？'+('（未指定月份，默认本月）' if period is None else '')):
-                self.store.save_budget(month,category,cents)
-                from .evidence import calculation
-                trace=calculation('action','budget.user_confirmed',self.store.spending_view().iloc[:0],
-                                  inputs={'user_confirmed':True},extra=[dict(type='Budget',id=month+'/'+category,snapshot=dict(month=month,category=category,amount_cents=cents))])
+                try:
+                    from .evidence import calculation
+                    trace=calculation('action','budget.user_confirmed',self.store.spending_view().iloc[:0],
+                                      inputs={'user_confirmed':True},extra=[dict(type='Budget',id=month+'/'+category,snapshot=dict(month=month,category=category,amount_cents=cents))])
+                    self.store.save_budget(month,category,cents)
+                except (ValueError,sqlite3.Error) as exc:
+                    self._chat_reply('预算未保存：'+str(exc));return
                 self._chat_reply(f'已设置 {month} {category}预算 ¥{cents/100:,.2f}。可在预算页修改。',trace=trace)
             else:self._chat_reply('已取消，预算没有改变。')
             return

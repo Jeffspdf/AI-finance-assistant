@@ -6,6 +6,7 @@ from collections import defaultdict
 import json
 import threading
 import uuid
+from numbers import Integral
 from hashlib import sha256
 from .migrations import ensure_schema, assert_supported, backup_database, inspect_database
 from .reconciliation import Reconciliation, audit
@@ -252,10 +253,27 @@ class Store(Refunds,Reconciliation,BackupManagement):
                     if r and r['merchant'].strip():db.execute('INSERT INTO merchant_rules(merchant,kind,category) VALUES (?,?,?) ON CONFLICT(merchant,kind) DO UPDATE SET category=excluded.category,updated_at=CURRENT_TIMESTAMP',(r['merchant'].strip(),r['kind'],category))
             self.repair_invalid_groups(db=db,source='category_edit')
 
+    @staticmethod
+    def _validate_budget(month,category,cents):
+        import re
+        if not isinstance(month,str) or not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])',month):raise ValueError('无效月份，请使用 YYYY-MM')
+        if not isinstance(category,str):raise ValueError('请选择有效的支出分类')
+        validate_kind_category('支出',category)
+        if isinstance(cents,bool) or not isinstance(cents,Integral) or not 0<=cents<=10**12:raise ValueError('预算须为范围内的非负整数分')
+
     def save_budget(self, month, category, cents):
-        if cents < 0: raise ValueError('预算不能为负数')
+        if self.read_only:raise ValueError('只读账本不能修改预算')
+        self._validate_budget(month,category,cents)
         with self.connect() as db:
             db.execute('INSERT OR REPLACE INTO budgets VALUES (?,?,?)', (month,category,int(cents)))
+
+    def save_budgets(self,month,amounts):
+        """Apply one existing budget suggestion atomically, including validation."""
+        if self.read_only:raise ValueError('只读账本不能修改预算')
+        for category,cents in amounts.items():self._validate_budget(month,category,cents)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.executemany('INSERT OR REPLACE INTO budgets VALUES (?,?,?)',[(month,category,int(cents)) for category,cents in amounts.items()])
 
     def budgets(self, month):
         with self.connect(read_only=True) as db:
@@ -270,10 +288,11 @@ class Store(Refunds,Reconciliation,BackupManagement):
         with self.connect(read_only=True) as db:
             return pd.read_sql_query('SELECT * FROM goals ORDER BY id DESC', db)
 
-    def edit_transaction(self, txid, values):
+    def edit_transaction(self, txid, values, *, learn=False):
         from .categories import CATEGORIES
         from datetime import datetime
         import json
+        if self.read_only:raise ValueError('只读账本不能编辑交易')
         parsed=datetime.fromisoformat(values['date'])
         if not 2000<=parsed.year<=2100 or parsed.tzinfo:raise ValueError('日期须为 2000 至 2100 年本地时间')
         if values['kind'] not in ('收入','支出','转账') or values['category'] not in CATEGORIES:raise ValueError('无效类型或分类')
@@ -285,11 +304,14 @@ class Store(Refunds,Reconciliation,BackupManagement):
             db.execute('CREATE TABLE IF NOT EXISTS transaction_edits(id INTEGER PRIMARY KEY,transaction_id TEXT,old_values TEXT,changed_at TEXT DEFAULT CURRENT_TIMESTAMP)')
             old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
             if old is None:raise ValueError('记录不存在')
+            if old['status']=='deleted':raise ValueError('记录已删除，请关闭编辑窗口并刷新账本')
             db.execute('INSERT INTO transaction_edits(transaction_id,old_values) VALUES (?,?)',(txid,json.dumps(dict(old),ensure_ascii=False)))
             if any(old[k]!=values[k] for k in ['date','merchant','description','amount_cents','kind','category']):
                 self.invalidate_groups(db,txid,'交易关键字段已编辑')
             fields=['date','merchant','description','amount_cents','kind','category']
             db.execute('UPDATE transactions SET '+','.join(k+'=?' for k in fields)+',category_source=? WHERE id=?',[values[k] for k in fields]+['用户修正',txid])
+            if learn and values['merchant'].strip():
+                db.execute('INSERT INTO merchant_rules(merchant,kind,category) VALUES (?,?,?) ON CONFLICT(merchant,kind) DO UPDATE SET category=excluded.category,updated_at=CURRENT_TIMESTAMP',(values['merchant'].strip(),values['kind'],values['category']))
             self.repair_invalid_groups(db=db,source='transaction_edit')
 
     def update_goal(self, goal_id, plan):
@@ -388,9 +410,11 @@ class Store(Refunds,Reconciliation,BackupManagement):
 
     def copy_budgets(self,source,target,overwrite=False):
         import re
-        if any(not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])',m) for m in [source,target]):raise ValueError('无效月份')
+        if self.read_only:raise ValueError('只读账本不能修改预算')
+        if any(not isinstance(m,str) or not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])',m) for m in [source,target]):raise ValueError('无效月份')
         with self.connect() as db:
             rows=db.execute('SELECT category,amount_cents FROM budgets WHERE month=?',(source,)).fetchall()
+            for row in rows:self._validate_budget(target,row['category'],row['amount_cents'])
             operation='REPLACE' if overwrite else 'IGNORE'
             db.executemany(f'INSERT OR {operation} INTO budgets(month,category,amount_cents) VALUES (?,?,?)',[(target,r['category'],r['amount_cents']) for r in rows])
         return len(rows)

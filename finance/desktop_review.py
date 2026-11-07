@@ -3,6 +3,7 @@ from .ui_scale import px, logical, point_font, set_window_geometry
 from datetime import date
 from decimal import Decimal
 import queue
+import sqlite3
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -59,7 +60,7 @@ class ReviewFeatures:
             cents=money_to_cents(self.budget_amount.get(),allow_zero=True)
             self.store.save_budget(self.budget_month,self.budget_category.get(),cents)
             self.show('budget_page')
-        except ValueError as exc:messagebox.showerror('预算输入错误',str(exc))
+        except (ValueError,sqlite3.Error) as exc:messagebox.showerror('预算输入错误',str(exc))
 
     def budget_evidence(self,event=None):
         selected=self.budget_tree.selection()

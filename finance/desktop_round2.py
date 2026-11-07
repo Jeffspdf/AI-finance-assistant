@@ -2,6 +2,7 @@
 from .ui_scale import px, logical, point_font, set_window_geometry
 from datetime import date
 import re
+import sqlite3
 import tkinter as tk
 from tkinter import ttk,messagebox,filedialog
 from .importer import money_to_cents
@@ -104,14 +105,19 @@ class RoundTwo:
         overwrite=False
         if set(budgets)&set(self.store.budgets(target)):
             overwrite=messagebox.askyesno('预算冲突','是否覆盖同类别的现有预算？选“否”仅补齐未设置的类别。')
-        self.store.copy_budgets(source,target,overwrite);self.show('budget_page')
+        try:self.store.copy_budgets(source,target,overwrite)
+        except (ValueError,sqlite3.Error) as exc:
+            messagebox.showerror('预算未复制',str(exc));return
+        self.show('budget_page')
 
     def propose_budgets(self):
         try:budgets=suggested_budgets(self.store.spending_view())
         except ValueError as exc:messagebox.showinfo('预算建议',str(exc));return
         text='以最近三个完整月的分类平均支出 ×90% 作为建议，不是最优预算保证。\n'+ '\n'.join(f'{c}：¥{yuan(v)}' for c,v in budgets.items())
         if messagebox.askyesno('确认应用到 '+self.budget_month,text+'\n是否应用（覆盖同类别预算）？'):
-            for category,cents in budgets.items():self.store.save_budget(self.budget_month,category,cents)
+            try:self.store.save_budgets(self.budget_month,budgets)
+            except (ValueError,sqlite3.Error) as exc:
+                messagebox.showerror('预算未保存',str(exc));return
             self.show('budget_page')
 
     def learned_rules_window(self):

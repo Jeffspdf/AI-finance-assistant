@@ -77,27 +77,32 @@ class M1Features:
     def select_import(self):
         filename=filedialog.askopenfilename(filetypes=[('账单文件','*.csv *.xlsx')])
         if not filename:return
+        store=self.store;mode=self.mode
         window=tk.Toplevel(self);window.title('选择账单格式与账户');set_window_geometry(window,580,430);window.configure(bg=BG)
         box=scrollable_form(window,padx=20,pady=14)
         self.label(box,Path(filename).name,14,bold=True)
+        self.label(box,'导入到：'+('演示空间' if mode=='demo' else '个人空间'),10,MUTED)
         self.label(box,'账单格式',10,MUTED)
         adapter=ttk.Combobox(box,values=['自动检测（推荐）','通用 CSV/XLSX','微信 CSV','银行模板 v1 XLSX'],state='readonly');adapter.current(0);adapter.pack(fill='x')
         accounts={'未指定账户（只能提供人工核对线索）':None}
-        accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in self.store.accounts()})
+        accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in store.accounts()})
         self.label(box,'属于哪个账户？',10,MUTED)
         account=ttk.Combobox(box,values=list(accounts),state='readonly');account.current(0);account.pack(fill='x')
         self.label(box,'不确定时明确选“未指定”。同一文件再次导入会复用来源文档，保留本次批次记录。',10,MUTED).configure(wraplength=px(510))
         row=tk.Frame(box,bg=BG);row.pack(fill='x')
+        status=self.label(box,'',10,DANGER);status.configure(wraplength=px(510))
         def proceed():
+            if self.mode!=mode or Path(self.store.path).resolve()!=Path(store.path).resolve():
+                status.configure(text='空间已切换，请先回到打开此窗口时的空间，或关闭窗口后重新导入。');return
             choice={'自动检测（推荐）':'auto','通用 CSV/XLSX':'generic','微信 CSV':'wechat_csv','银行模板 v1 XLSX':'bank_template_v1'}[adapter.get()]
             selected=accounts[account.get()];window.destroy();self.import_async(filename,choice,selected)
         def manage_accounts():
             existing=set(accounts.values())
-            manager=self.account_window()
+            manager=self.account_window(store)
             def refresh_accounts(event):
                 if event.widget is not manager or not window.winfo_exists():return
                 previous=accounts.get(account.get())
-                rows=self.store.accounts()
+                rows=store.accounts()
                 accounts.clear();accounts['未指定账户（只能提供人工核对线索）']=None
                 accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in rows})
                 new=[r['id'] for r in rows if r['id'] not in existing]

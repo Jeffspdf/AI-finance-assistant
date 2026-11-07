@@ -687,8 +687,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
             try:
                 if not fields['category'].get().strip():raise ValueError('请先选择与收支类型对应的正确分类，再保存修改。')
                 values={k:e.get().strip() for k,e in fields.items()};values['amount_cents']=money_to_cents(values['amount_cents'])
-                store.edit_transaction(record['id'],values)
-                if remember.get():store.correct_categories([(record['id'],values['category'])],learn=True)
+                store.edit_transaction(record['id'],values,learn=remember.get())
                 window.destroy();self.show('records');self.animate_character('success')
             except Exception as exc:status.config(text=str(exc),fg='#b45f50')
         self.button(actions,'保存修改',save)

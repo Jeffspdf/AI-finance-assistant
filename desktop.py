@@ -690,7 +690,16 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
                 store.edit_transaction(record['id'],values,learn=remember.get())
                 window.destroy();self.show('records');self.animate_character('success')
             except Exception as exc:status.config(text=str(exc),fg='#b45f50')
-        self.button(actions,'保存修改',save)
+        def remove():
+            text=f"{record['date']}\n{record['merchant']} · {record['kind']} · ¥{yuan(record['amount_cents'])} · {record['category']}\n\n删除后不再进入概览、预算和问答统计；原始来源和审计保留。相关对账/退款关系会转为待复核。是否删除这笔交易？"
+            if not messagebox.askyesno('确认删除这笔交易',text,parent=window):return
+            try:
+                store.soft_delete_transaction(record['id'],confirmed=True)
+            except Exception as exc:status.config(text=str(exc),fg='#b45f50');return
+            window.destroy();self.show('records')
+        self.button(actions,'删除这笔交易',remove)
+        saving=self.button(actions,'保存修改',save);saving.pack_configure(side='right');saving.configure(bg=BLUE,fg='white')
+        self.button(actions,'取消',window.destroy).pack_configure(side='right')
 
     def locate_transaction(self,identifier,*,expected_path=None):
         if expected_path and Path(expected_path).resolve()!=Path(self.store.path).resolve():

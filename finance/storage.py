@@ -198,6 +198,19 @@ class Store(Refunds,Reconciliation,BackupManagement):
             self.repair_invalid_groups(db=db,source='batch_delete')
         return len(ids)
 
+    def soft_delete_transaction(self,txid,*,confirmed=False):
+        if self.read_only:raise ValueError('只读账本不能删除交易')
+        if confirmed is not True:raise ValueError('请先明确确认删除交易')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
+            if old is None:raise ValueError('交易不存在')
+            if old['status']=='deleted':return False
+            self.invalidate_groups(db,txid,'单笔交易已删除，请重新核对关联')
+            db.execute("UPDATE transactions SET status='deleted' WHERE id=?",(txid,))
+            audit(db,'transaction_soft_deleted',txid,dict(old_status=old['status'],date=old['date'],merchant=old['merchant'],amount_cents=old['amount_cents'],category=old['category'],kind=old['kind'],raw_source_retained=True))
+        return True
+
     def transaction_source(self,identifier):
         with self.connect(read_only=True) as db:
             row=db.execute('''SELECT t.*,d.sha256,d.parser_version,r.raw_json,r.parse_status

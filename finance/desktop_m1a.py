@@ -49,29 +49,79 @@ class M1Features:
         actions=tk.Frame(box,bg=BG);actions.pack(fill='x')
         link_holder=tk.Frame(box,bg=BG);link_holder.pack(fill='x')
         def refresh():
+            selected=selected_account() if state.get('account_tree') else None
             state['accounts']=store.accounts();choices.clear()
-            choices.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r for r in state['accounts']})
+            choices.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r for r in state['accounts'] if r['archived_at'] is None})
             wallet.configure(values=[k for k,r in choices.items() if r['type']=='wallet'])
             bank.configure(values=[k for k,r in choices.items() if r['type']!='wallet'])
+            for picker in (wallet,bank):
+                if picker.get() not in picker.cget('values'):picker.set('')
             for holder in (account_holder,link_holder):
                 for c in holder.winfo_children():c.destroy()
-            self.table(account_holder,['账户名称','平台','类型','末四位'],[[r['label'],r['channel'],{'wallet':'钱包','debit':'储蓄卡','credit':'信用卡'}[r['type']],r['last4']] for r in state['accounts']],4)
+            state['account_tree']=self.table(account_holder,['账户名称','平台','类型','末四位','状态'],[[r['label'],r['channel'],{'wallet':'钱包','debit':'储蓄卡','credit':'信用卡'}[r['type']],r['last4'],'已归档' if r['archived_at'] else '使用中'] for r in state['accounts']],4)
+            state['account_tree'].bind('<<TreeviewSelect>>',refresh_account_actions)
+            if selected:
+                for i,r in enumerate(state['accounts']):
+                    if r['id']==selected['id']:state['account_tree'].selection_set(str(i));break
             state['links']=store.funding_links();names={r['id']:r['label'] for r in state['accounts']}
             state['tree']=self.table(link_holder,['钱包','银行卡','生效','结束'],[[names[r['wallet_account_id']],names[r['bank_account_id']],r['active_from'],r['active_to'] or '长期'] for r in state['links']],4)
+            refresh_account_actions()
+        def selected_account():
+            tree=state.get('account_tree')
+            if tree is None or not tree.winfo_exists() or not tree.selection():return None
+            return state['accounts'][self.row_index(tree,tree.selection()[0])]
+        def refresh_account_actions(_=None):
+            chosen=selected_account();writable=not store.read_only
+            edit_button.config(state='normal' if chosen and writable else 'disabled')
+            archive_button.config(state='normal' if chosen and writable and not chosen['archived_at'] else 'disabled')
+            restore_button.config(state='normal' if chosen and writable and chosen['archived_at'] else 'disabled')
+        def edit_account():
+            chosen=selected_account()
+            if not chosen:return
+            editor=tk.Toplevel(window);editor.title('编辑账户');set_window_geometry(editor,520,460);editor.configure(bg=BG)
+            body=scrollable_form(editor);fields={}
+            self.label(body,'类型：'+{'wallet':'钱包','debit':'储蓄卡','credit':'信用卡'}[chosen['type']]+'（不可编辑）',11,PRIMARY)
+            for title,key in [('账户名称','label'),('平台','channel'),('卡号末四位（可空）','last4')]:
+                self.label(body,title,10,MUTED);entry=ttk.Entry(body);entry.insert(0,chosen[key]);entry.pack(fill='x',pady=px(5));fields[key]=entry
+            self.label(body,'修改平台会使相关对账/退款关系待复核；名称和末四位不改历史金额。',10,MUTED).configure(wraplength=px(450))
+            notice=self.label(body,'',10,DANGER)
+            notice.configure(wraplength=px(450))
+            def save_account():
+                if not messagebox.askyesno('确认修改账户','保存账户名称、平台和末四位？平台变化会使相关对账/退款关系待复核。',parent=editor):return
+                try:store.update_account(chosen['id'],confirmed=True,**{k:e.get() for k,e in fields.items()})
+                except Exception as exc:notice.config(text=str(exc));return
+                editor.destroy();refresh();status.config(text='账户已保存。',fg=PRIMARY)
+            self.button(body,'保存账户修改',save_account)
+        def archive_or_restore(restore=False):
+            chosen=selected_account()
+            if not chosen:return
+            title='恢复账户' if restore else '归档账户'
+            text=chosen['label']+' · '+chosen['channel']+'\n'+('恢复后可用于新导入和新绑定；不能与活动账户完全重复。' if restore else '归档后不再用于新导入或新绑定，历史交易保留。若仍有活动绑定，请先结束绑定（结束日期须早于今天）。')
+            if not messagebox.askyesno('确认'+title,text,parent=window):return
+            try:(store.restore_account if restore else store.archive_account)(chosen['id'],confirmed=True)
+            except Exception as exc:status.config(text=str(exc),fg=DANGER);return
+            refresh();status.config(text='已'+title+'，历史交易保持不变。',fg=PRIMARY)
         def add():
-            try:store.add_account(channel.get(),{'钱包':'wallet','储蓄卡':'debit','信用卡':'credit'}[kind.get()],label.get(),last4.get().strip());refresh();status.config(text='账户已保存。')
-            except (ValueError,KeyError) as exc:status.config(text=str(exc),fg=DANGER)
+            try:store.add_account(channel.get(),{'钱包':'wallet','储蓄卡':'debit','信用卡':'credit'}[kind.get()],label.get(),last4.get().strip());refresh();status.config(text='账户已保存。',fg=PRIMARY)
+            except Exception as exc:status.config(text=str(exc),fg=DANGER)
         def declare():
             try:
                 store.add_funding_link(choices[wallet.get()]['id'],choices[bank.get()]['id'],start.get().strip(),end.get().strip() or None)
                 refresh();status.config(text='支付绑定已保存，仍需人工确认对账。')
-            except (ValueError,KeyError) as exc:status.config(text=str(exc) if isinstance(exc,ValueError) else '请先选择钱包和银行卡',fg=DANGER)
+            except Exception as exc:status.config(text='请先选择钱包和银行卡' if isinstance(exc,KeyError) else str(exc),fg=DANGER)
         def finish():
             selected=state['tree'].selection()
             if not selected:return
             try:store.end_funding_link(state['links'][self.row_index(state['tree'],selected[0])]['id'],end.get().strip());refresh()
-            except ValueError as exc:status.config(text=str(exc),fg=DANGER)
-        self.button(row,'添加账户',add);self.button(actions,'保存支付绑定',declare);self.button(actions,'结束选中绑定',finish);refresh()
+            except Exception as exc:status.config(text=str(exc),fg=DANGER)
+        account_actions=tk.Frame(box,bg=BG);account_actions.pack(fill='x',before=status)
+        edit_button=self.button(account_actions,'编辑选中账户',edit_account)
+        archive_button=self.button(account_actions,'归档选中账户',archive_or_restore)
+        restore_button=self.button(account_actions,'恢复选中账户',lambda:archive_or_restore(True))
+        adding=self.button(row,'添加账户',add);binding=self.button(actions,'保存支付绑定',declare);ending=self.button(actions,'结束选中绑定',finish)
+        if store.read_only:
+            for b in (adding,binding,ending):b.config(state='disabled')
+        window.account_state=state;refresh()
         return window
 
     def select_import(self):
@@ -85,7 +135,7 @@ class M1Features:
         self.label(box,'账单格式',10,MUTED)
         adapter=ttk.Combobox(box,values=['自动检测（推荐）','通用 CSV/XLSX','微信 CSV','银行模板 v1 XLSX'],state='readonly');adapter.current(0);adapter.pack(fill='x')
         accounts={'未指定账户（只能提供人工核对线索）':None}
-        accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in store.accounts()})
+        accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in store.accounts(include_archived=False)})
         self.label(box,'属于哪个账户？',10,MUTED)
         account=ttk.Combobox(box,values=list(accounts),state='readonly');account.current(0);account.pack(fill='x')
         self.label(box,'不确定时明确选“未指定”。同一文件再次导入会复用来源文档，保留本次批次记录。',10,MUTED).configure(wraplength=px(510))
@@ -102,7 +152,7 @@ class M1Features:
             def refresh_accounts(event):
                 if event.widget is not manager or not window.winfo_exists():return
                 previous=accounts.get(account.get())
-                rows=store.accounts()
+                rows=store.accounts(include_archived=False)
                 accounts.clear();accounts['未指定账户（只能提供人工核对线索）']=None
                 accounts.update({r['label']+' · '+r['channel']+' · '+r['id'][-6:]:r['id'] for r in rows})
                 new=[r['id'] for r in rows if r['id'] not in existing]

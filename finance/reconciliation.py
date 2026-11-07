@@ -42,30 +42,89 @@ def audit(db, event, entity, detail):
 
 
 class Reconciliation:
-    def accounts(self):
-        with self.connect(read_only=True) as db:return [dict(r) for r in db.execute('SELECT * FROM accounts ORDER BY created_at,id')]
+    def accounts(self,*,include_archived=True):
+        with self.connect(read_only=True) as db:
+            return [dict(r) for r in db.execute('SELECT * FROM accounts'+('' if include_archived else ' WHERE archived_at IS NULL')+' ORDER BY archived_at IS NOT NULL,created_at,id')]
+
+    @staticmethod
+    def _account_values(channel,account_type,label,last4):
+        if account_type not in ('wallet','debit','credit'):raise ValueError('账户类型无效')
+        if any(not isinstance(v,str) for v in (label,channel,last4)):raise ValueError('账户名称、平台和末四位必须是文本')
+        label,channel,last4=label.strip(),channel.strip(),last4.strip()
+        if not 1<=len(label)<=60 or not 1<=len(channel)<=30:raise ValueError('请填写账户名称（1–60字）与平台（1–30字）')
+        if last4 and not re.fullmatch(r'[0-9]{4}',last4):raise ValueError('仅填写卡号末四位，或留空')
+        return dict(label=label,channel=channel,type=account_type,last4=last4)
+
+    @staticmethod
+    def _check_account_duplicate(db,values,identifier=None):
+        key=(values['label'].casefold(),values['channel'].casefold(),values['type'],values['last4'])
+        for row in db.execute('SELECT * FROM accounts WHERE archived_at IS NULL'):
+            if row['id']!=identifier and (row['label'].strip().casefold(),row['channel'].strip().casefold(),row['type'],row['last4'].strip())==key:
+                raise ValueError('已存在相同的使用中账户，请选择已有账户；恢复或编辑前请先处理重复账户')
 
     def add_account(self,channel,account_type,label,last4=''):
-        if account_type not in ('wallet','debit','credit'):raise ValueError('账户类型无效')
-        if not 1<=len(label.strip())<=60 or not 1<=len(channel.strip())<=30:raise ValueError('请填写账户名称与平台')
-        if last4 and not re.fullmatch(r'\d{4}',last4):raise ValueError('仅填写卡号末四位，或留空')
+        if self.read_only:raise ValueError('只读账本不能添加账户')
+        values=self._account_values(channel,account_type,label,last4)
         identifier='AC-'+uuid.uuid4().hex
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');self._check_account_duplicate(db,values)
             db.execute('INSERT INTO accounts(id,channel,type,label,last4) VALUES (?,?,?,?,?)',
-                       (identifier,channel.strip(),account_type,label.strip(),last4))
-            audit(db,'account_created',identifier,{'label':label.strip()})
+                       (identifier,values['channel'],account_type,values['label'],values['last4']))
+            audit(db,'account_created',identifier,{'label':values['label']})
         return identifier
+
+    def update_account(self,identifier,*,label=None,channel=None,last4=None,confirmed=False):
+        if self.read_only:raise ValueError('只读账本不能编辑账户')
+        if confirmed is not True:raise ValueError('请先明确确认账户修改')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT * FROM accounts WHERE id=?',(identifier,)).fetchone()
+            if old is None:raise ValueError('账户不存在')
+            values=self._account_values(old['channel'] if channel is None else channel,old['type'],old['label'] if label is None else label,old['last4'] if last4 is None else last4)
+            if all(old[k]==values[k] for k in values):return False
+            if old['archived_at'] is None:self._check_account_duplicate(db,values,identifier)
+            if values['channel']!=old['channel']:
+                for row in db.execute("SELECT id FROM transactions WHERE account_id=? AND status<>'deleted'",(identifier,)).fetchall():
+                    self.invalidate_groups(db,row['id'],'账户平台已修改，请重新核对关联')
+            db.execute('UPDATE accounts SET label=?,channel=?,last4=?,updated_at=? WHERE id=?',(values['label'],values['channel'],values['last4'],datetime.now().isoformat(timespec='microseconds'),identifier))
+            new=dict(db.execute('SELECT * FROM accounts WHERE id=?',(identifier,)).fetchone())
+            audit(db,'account_updated',identifier,{'old':dict(old),'new':new})
+        return True
+
+    def _set_account_archived(self,identifier,archived,confirmed):
+        if self.read_only:raise ValueError('只读账本不能归档或恢复账户')
+        if confirmed is not True:raise ValueError('请先明确确认账户归档或恢复')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT * FROM accounts WHERE id=?',(identifier,)).fetchone()
+            if old is None:raise ValueError('账户不存在')
+            if (old['archived_at'] is not None)==archived:return False
+            if archived:
+                if db.execute('SELECT 1 FROM funding_links WHERE (wallet_account_id=? OR bank_account_id=?) AND (active_to IS NULL OR active_to>=?)',(identifier,identifier,date.today().isoformat())).fetchone():
+                    raise ValueError('账户仍有活动或未结束的绑定，请先结束绑定（结束日期须早于今天）')
+            else:self._check_account_duplicate(db,dict(old),identifier)
+            now=datetime.now().isoformat(timespec='microseconds')
+            db.execute('UPDATE accounts SET archived_at=?,updated_at=? WHERE id=?',(now if archived else None,now,identifier))
+            audit(db,'account_archived' if archived else 'account_restored',identifier,{'old':dict(old),'new':dict(db.execute('SELECT * FROM accounts WHERE id=?',(identifier,)).fetchone())})
+        return True
+
+    def archive_account(self,identifier,*,confirmed=False):return self._set_account_archived(identifier,True,confirmed)
+
+    def restore_account(self,identifier,*,confirmed=False):return self._set_account_archived(identifier,False,confirmed)
 
     def funding_links(self):
         with self.connect(read_only=True) as db:return [dict(r) for r in db.execute('SELECT * FROM funding_links ORDER BY created_at,id')]
 
     def add_funding_link(self,wallet,bank,start,end=None):
+        if self.read_only:raise ValueError('只读账本不能添加绑定')
         start=date.fromisoformat(start).isoformat();end=date.fromisoformat(end).isoformat() if end else None
         if end and end<start:raise ValueError('绑定结束日期不能早于开始日期')
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             accounts={r['id']:dict(r) for r in db.execute('SELECT * FROM accounts')}
             if accounts.get(wallet,{}).get('type')!='wallet' or accounts.get(bank,{}).get('type') not in ('debit','credit'):
                 raise ValueError('请选择钱包账户和银行卡账户')
+            if accounts[wallet]['archived_at'] or accounts[bank]['archived_at']:raise ValueError('已归档账户不能新增绑定，请先恢复账户')
             # Overlapping declarations are retained only after the old interval is ended.
             overlap=db.execute('SELECT 1 FROM funding_links WHERE wallet_account_id=? AND active_from<=? AND COALESCE(active_to,?)>=?',
                                (wallet,end or '9999-12-31','9999-12-31',start)).fetchone()
@@ -79,8 +138,11 @@ class Reconciliation:
     def end_funding_link(self,identifier,end):
         end=date.fromisoformat(end).isoformat()
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT * FROM funding_links WHERE id=?',(identifier,)).fetchone()
             if not row or end<row['active_from']:raise ValueError('结束日期不能早于绑定开始日期')
+            if end>=date.today().isoformat() and db.execute('SELECT 1 FROM accounts WHERE id IN (?,?) AND archived_at IS NOT NULL',(row['wallet_account_id'],row['bank_account_id'])).fetchone():
+                raise ValueError('已归档账户不能重新启用绑定，请先恢复账户')
             db.execute('UPDATE funding_links SET active_to=? WHERE id=?',(end,identifier))
             audit(db,'funding_ended',identifier,{'to':end})
 

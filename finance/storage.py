@@ -108,6 +108,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
             row=dict(value)
             row.setdefault('currency','CNY');row.setdefault('status','normal')
             for key in ('account_id','source_document_id','raw_row_id','import_batch_id'):row.setdefault(key,None)
+            if row['account_id'] and db.execute('SELECT 1 FROM accounts WHERE id=? AND archived_at IS NOT NULL',(row['account_id'],)).fetchone():raise ValueError('已归档账户不能导入新交易，请先恢复账户')
             validate_kind_category(row['kind'],row['category'])
             old=existing.get(row['signature'])
             if row.get('source_document_id') and (not old or old['status']=='deleted'):
@@ -162,7 +163,10 @@ class Store(Refunds,Reconciliation,BackupManagement):
         if not result.document:raise ValueError('此预览没有来源信息，请重新使用导入入口解析')
         doc=result.document;document_id='DOC-'+doc['sha256'];batch_id='BATCH-'+uuid.uuid4().hex
         account=doc.get('account_id')
-        if account and not db.execute('SELECT 1 FROM accounts WHERE id=?',(account,)).fetchone():raise ValueError('所选账户已不存在')
+        if account:
+            selected=db.execute('SELECT * FROM accounts WHERE id=?',(account,)).fetchone()
+            if selected is None:raise ValueError('所选账户已不存在')
+            if selected['archived_at']:raise ValueError('所选账户已归档，请重新选择活动账户')
         if account and doc['channel'] in ('微信','银行'):
             selected=db.execute('SELECT * FROM accounts WHERE id=?',(account,)).fetchone()
             if (doc['channel']=='微信' and (selected['type']!='wallet' or selected['channel']!='微信')) or (doc['channel']=='银行' and selected['type']=='wallet'):

@@ -1,6 +1,6 @@
 # 储蓄规划 Agent：真实模型小样本 smoke
 
-范围：储蓄目标规划服务层，尚未接入客户端 UI。与旧的 `AI_EVALUATION.md` 查询解析评测分开。
+范围：本节记录接入 UI 前的储蓄目标规划服务层 smoke。当前 UI 与冻结补充集验收另见 `AGENT_UI_ACCEPTANCE.md`；与旧的 `AI_EVALUATION.md` 查询解析评测分开。
 模型：客户端已配置的 DeepSeek `deepseek-flash`，接口主机 `api.deepseek.com`。
 日期锚点：2026-11-09；账单为独立创建的 2026-08/09/10 合成记录，不读取个人账本。
 请求参数沿用现有适配器：temperature=0、非流式 JSON、max_tokens=1024；每次请求最多 15 秒，整段规划预算 90 秒。

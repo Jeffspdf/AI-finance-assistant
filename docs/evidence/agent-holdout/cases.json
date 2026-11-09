@@ -1,0 +1,149 @@
+{
+  "definition": "Developer-authored frozen supplementary set, not an independent blind evaluation; authored before this run, never used for prompt tuning.",
+  "prompt_sha256": "102a35ff873df4282b42f1db880041933f99a71c331088389cfa344971bc2302",
+  "base_commit": "2e0f813",
+  "cases": [
+    {
+      "id": "H1",
+      "kind": "live",
+      "mode": "assumption",
+      "question": "已有储蓄已经超过目标，检查未来九个月按输入收支会到多少，不要要求我重复攒目标金额。",
+      "inputs": {
+        "target_cents": 180000,
+        "months": 9,
+        "saved_cents": 200000,
+        "income_cents": 400000,
+        "budget_cents": 350000
+      },
+      "expected": {
+        "A": 650000,
+        "C": 650000
+      }
+    },
+    {
+      "id": "H2",
+      "kind": "live",
+      "mode": "assumption",
+      "question": "当前月度收支倒挂，请按确认的输入给九个月的储蓄方案，保留负结余并说明削减预算只是条件。",
+      "inputs": {
+        "target_cents": 900000,
+        "months": 9,
+        "saved_cents": 30000,
+        "income_cents": 180000,
+        "budget_cents": 220000
+      },
+      "expected": {
+        "A": -330000,
+        "C": 900003
+      }
+    },
+    {
+      "id": "H3",
+      "kind": "live",
+      "mode": "assumption",
+      "question": "按确认输入做七个月分币模拟；即使把预算削到零仍不够，也必须保留缺口，不能替我增加收入。",
+      "inputs": {
+        "target_cents": 1003,
+        "months": 7,
+        "saved_cents": 2,
+        "income_cents": 101,
+        "budget_cents": 99
+      },
+      "expected": {
+        "A": 16,
+        "C": 709
+      }
+    },
+    {
+      "id": "H4",
+      "kind": "live",
+      "mode": "assumption",
+      "question": "以确认的每月收入与预算假设，比较八个月储蓄方案，不使用历史账单。",
+      "inputs": {
+        "target_cents": 500000,
+        "months": 8,
+        "saved_cents": 10000,
+        "income_cents": 300000,
+        "budget_cents": 260000
+      },
+      "expected": {
+        "A": 330000,
+        "C": 500000
+      }
+    },
+    {
+      "id": "H5",
+      "kind": "live",
+      "mode": "assumption",
+      "question": "预算已修改，请按这次确认的新预算重新计算，不沿用上次结果。",
+      "inputs": {
+        "target_cents": 500000,
+        "months": 8,
+        "saved_cents": 10000,
+        "income_cents": 300000,
+        "budget_cents": 245000
+      },
+      "expected": {
+        "A": 450000,
+        "C": 500000
+      }
+    },
+    {
+      "id": "H6",
+      "kind": "live",
+      "mode": "historical",
+      "question": "按近三个月已导入记录做八个月储蓄规划。方案B只把餐饮压缩5%，不削减交通，比较A/B/C。",
+      "inputs": {
+        "target_cents": 800000,
+        "months": 8,
+        "saved_cents": 20000
+      },
+      "expected": {
+        "A": 300000,
+        "B": 340000,
+        "C": 800000
+      },
+      "cut_pct": 5,
+      "categories": [
+        "餐饮"
+      ]
+    },
+    {
+      "id": "H7",
+      "kind": "local_gate",
+      "mode": "historical",
+      "question": "我想开始为一笔未来开销存钱，尚未确认目标金额。",
+      "inputs": {
+        "months": 4,
+        "saved_cents": 0
+      },
+      "expected_status": "needs_input"
+    },
+    {
+      "id": "H8",
+      "kind": "local_gate",
+      "mode": "historical",
+      "question": "希望这个学期存到四千，但还没确认到底几个月。",
+      "inputs": {
+        "target_cents": 400000,
+        "saved_cents": 1000
+      },
+      "expected_status": "needs_input"
+    },
+    {
+      "id": "H9",
+      "kind": "local_gate",
+      "mode": "historical",
+      "question": "只导入一个月，想做七个月储蓄规划。",
+      "inputs": {
+        "target_cents": 420000,
+        "months": 7,
+        "saved_cents": 2000
+      },
+      "months_present": [
+        "10"
+      ],
+      "expected_status": "needs_assumptions"
+    }
+  ]
+}

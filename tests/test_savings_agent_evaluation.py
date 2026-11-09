@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 import sys
+import pytest
 
 from scripts import evaluate_savings_agent as evaluation
 
@@ -45,3 +46,13 @@ def test_missing_input_evaluation_case_makes_zero_provider_calls(tmp_path):
     result = evaluation.run_case(case, ForbiddenProvider(), tmp_path)
     assert result['passed'] and result['kind'] == 'local_gate'
     assert result['http_attempts'] == 0 and result['source_ledger_unchanged']
+
+
+def test_frozen_holdout_rejects_prompt_change_before_loading_credentials(tmp_path, monkeypatch):
+    frozen = tmp_path / 'holdout.json'
+    frozen.write_text(json.dumps(dict(prompt_sha256='different', cases=[])), encoding='utf-8')
+    def forbidden(*args, **kwargs): raise AssertionError('Hash failure must precede credentials/network')
+    monkeypatch.setattr(evaluation.ModelSettings, 'load', forbidden)
+    monkeypatch.setattr(sys, 'argv', ['evaluate_savings_agent.py', '--live', '--settings-dir', 'must-not-read', '--case-file', str(frozen)])
+    with pytest.raises(SystemExit) as stopped: evaluation.main()
+    assert stopped.value.code == 2

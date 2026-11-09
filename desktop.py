@@ -29,6 +29,7 @@ from finance.conversation import ConversationFeatures
 from finance.desktop_m1a import M1Features
 from finance.desktop_demo import DemoGeneratorFeatures
 from finance.desktop_refunds import RefundFeatures
+from finance.desktop_agent import open_savings_planner
 from finance.spending_presenter import spending_totals,basis_label,refund_status_summary,refund_status_text
 from finance.evidence import count_records
 from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form,BG,INK,MUTED,PRIMARY
@@ -766,6 +767,8 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         return self.select_import()
 
     def plan(self):
+        agent_bar = tk.Frame(self.main, bg=BG); agent_bar.pack(fill='x')
+        self.button(agent_bar, 'AI 储蓄规划 · A/B/C', lambda: open_savings_planner(self))
         form = tk.Frame(self.main, bg='white', padx=px(16), pady=px(8)); form.pack(fill='x', pady=px(10))
         for col in range(3):form.columnconfigure(col,weight=1,uniform='form')
         self.inputs = {}

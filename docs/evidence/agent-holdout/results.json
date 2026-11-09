@@ -1,0 +1,721 @@
+{
+  "timestamp": "2026-11-09T15:10:37.383113+00:00",
+  "reference_date": "2026-11-09",
+  "provider_host": "api.deepseek.com",
+  "model": "deepseek-flash",
+  "prompt_sha256": "102a35ff873df4282b42f1db880041933f99a71c331088389cfa344971bc2302",
+  "case_file_sha256": "2ee9578266df3077368b7a7f1e68c04d95ca68c66fd6c912a3366010917b4d0e",
+  "data": "authored synthetic records and confirmed synthetic inputs only",
+  "results": [
+    {
+      "id": "H1",
+      "kind": "live",
+      "question": "已有储蓄已经超过目标，检查未来九个月按输入收支会到多少，不要要求我重复攒目标金额。",
+      "inputs": {
+        "target_cents": 180000,
+        "months": 9,
+        "saved_cents": 200000,
+        "income_cents": 400000,
+        "budget_cents": 350000
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 4.204,
+      "http_attempts": 3,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "83fe80aa44359bc65c6181bc0ab3e60e9f0098c6e87d60cf70f79f2635f57c32",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 1.529
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "5acfe71cca05643ab223cf85e7804175d1781d77ab88799c9f23676de1544c59",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 0.727
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "c98050c0b72ef1f080f3f0b495b0d6a3c6f938099e8712211fd7b39d1d0ef207",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 5,
+          "seconds": 1.946
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 1,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 50000,
+          "projected_cents": 650000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 50000,
+          "projected_cents": 650000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：9 个月后达到 ¥1,800.00，已有储蓄 ¥2,000.00；每月需存 ¥0.00。\n输入假设：每月收入 ¥4,000.00、未来预算 ¥3,500.00；未使用历史账单。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 ¥500.00，期末预计 ¥6,500.00，缺口 ¥0.00。\nB：缺少分类预算依据，不能推算分类节省金额。\nC（按达标所需金额压缩）：每月压缩 ¥0.00，每月结余 ¥500.00，期末预计 ¥6,500.00，缺口 ¥0.00。\n口径：input_assumption。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    },
+    {
+      "id": "H2",
+      "kind": "live",
+      "question": "当前月度收支倒挂，请按确认的输入给九个月的储蓄方案，保留负结余并说明削减预算只是条件。",
+      "inputs": {
+        "target_cents": 900000,
+        "months": 9,
+        "saved_cents": 30000,
+        "income_cents": 180000,
+        "budget_cents": 220000
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 4.78,
+      "http_attempts": 3,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "4eb4593c91170358bc1fbc8afed36db70279ea8afdfa3f2d77ec51506849b21b",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 2.076
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "11af97e033f024ea5a240a35eaf2943108bb1cfcee565d630ac44521127d1d14",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 0.907
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "1b811dd876aec9d36e189d063a36de6a7efe8b8fb5132a8594f2e21f60f297f5",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 5,
+          "seconds": 1.796
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 1,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": -40000,
+          "projected_cents": -330000,
+          "gap_cents": 1230000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": true,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 136667,
+          "requested_cut_cents": 136667,
+          "monthly_available_cents": 96667,
+          "projected_cents": 900003,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：9 个月后达到 ¥9,000.00，已有储蓄 ¥300.00；每月需存 ¥966.67。\n输入假设：每月收入 ¥1,800.00、未来预算 ¥2,200.00；未使用历史账单。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 -¥400.00，期末预计 -¥3,300.00，缺口 ¥12,300.00。\nA 存在负现金流，不能作为可行储蓄方案。\nB：缺少分类预算依据，不能推算分类节省金额。\nC（按达标所需金额压缩）：每月压缩 ¥1,366.67，每月结余 ¥966.67，期末预计 ¥9,000.03，缺口 ¥0.00。\n口径：input_assumption。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    },
+    {
+      "id": "H3",
+      "kind": "live",
+      "question": "按确认输入做七个月分币模拟；即使把预算削到零仍不够，也必须保留缺口，不能替我增加收入。",
+      "inputs": {
+        "target_cents": 1003,
+        "months": 7,
+        "saved_cents": 2,
+        "income_cents": 101,
+        "budget_cents": 99
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 4.001,
+      "http_attempts": 3,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "f65a5dd5b89b25710235ee5e6e34436a19bd918054ea7f00cbf05e17537c8d43",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 1.22
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "9c67958e963fd993803cfc26ffcc003ecac1d06516ec93449b6909f7343b54f0",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 0.781
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "d71f27b6bb604a8595d4efb5989c2e1697c6e776895bc63b6a82baed40a22343",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 5,
+          "seconds": 1.997
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 1,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 2,
+          "projected_cents": 16,
+          "gap_cents": 987,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 99,
+          "requested_cut_cents": 141,
+          "monthly_available_cents": 101,
+          "projected_cents": 709,
+          "gap_cents": 294,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：7 个月后达到 ¥10.03，已有储蓄 ¥0.02；每月需存 ¥1.43。\n输入假设：每月收入 ¥1.01、未来预算 ¥0.99；未使用历史账单。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 ¥0.02，期末预计 ¥0.16，缺口 ¥9.87。\nB：缺少分类预算依据，不能推算分类节省金额。\nC（按达标所需金额压缩）：每月压缩 ¥0.99，每月结余 ¥1.01，期末预计 ¥7.09，缺口 ¥2.94。\nC 已达到可压缩预算上限，仍需调整收入或目标。\n口径：input_assumption。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    },
+    {
+      "id": "H4",
+      "kind": "live",
+      "question": "以确认的每月收入与预算假设，比较八个月储蓄方案，不使用历史账单。",
+      "inputs": {
+        "target_cents": 500000,
+        "months": 8,
+        "saved_cents": 10000,
+        "income_cents": 300000,
+        "budget_cents": 260000
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 4.24,
+      "http_attempts": 3,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "9444a595e310d169236c8bc2cc2729442caa28ee56b928b0df7c0318778251b4",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 1.273
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "2c031dcf55aefb332d42455169b8a44200dfecd5fc35da059c4f6f8d606dfe0e",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 1.23
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "f8a85bd4eafc16d6f6411d7fdf47b2352049c146cdde6b91b77cd718a7299b74",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 5,
+          "seconds": 1.735
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 1,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 40000,
+          "projected_cents": 330000,
+          "gap_cents": 170000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 21250,
+          "requested_cut_cents": 21250,
+          "monthly_available_cents": 61250,
+          "projected_cents": 500000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：8 个月后达到 ¥5,000.00，已有储蓄 ¥100.00；每月需存 ¥612.50。\n输入假设：每月收入 ¥3,000.00、未来预算 ¥2,600.00；未使用历史账单。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 ¥400.00，期末预计 ¥3,300.00，缺口 ¥1,700.00。\nB：缺少分类预算依据，不能推算分类节省金额。\nC（按达标所需金额压缩）：每月压缩 ¥212.50，每月结余 ¥612.50，期末预计 ¥5,000.00，缺口 ¥0.00。\n口径：input_assumption。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    },
+    {
+      "id": "H5",
+      "kind": "live",
+      "question": "预算已修改，请按这次确认的新预算重新计算，不沿用上次结果。",
+      "inputs": {
+        "target_cents": 500000,
+        "months": 8,
+        "saved_cents": 10000,
+        "income_cents": 300000,
+        "budget_cents": 245000
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 4.232,
+      "http_attempts": 3,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "d037d562f47d3c2040f8025b514e9c7e748907e396ab2862b4115a835bf5179d",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 1.48
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "20543bb117d6ecb13335343974d0da0548dba923b252cdc2db5932262b924a13",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 0.973
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "ed265ef60ea84379d10857520b39a5149d1d5ac70fb15de11e056d86b88f3b00",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 5,
+          "seconds": 1.776
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 1,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 55000,
+          "projected_cents": 450000,
+          "gap_cents": 50000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 6250,
+          "requested_cut_cents": 6250,
+          "monthly_available_cents": 61250,
+          "projected_cents": 500000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：8 个月后达到 ¥5,000.00，已有储蓄 ¥100.00；每月需存 ¥612.50。\n输入假设：每月收入 ¥3,000.00、未来预算 ¥2,450.00；未使用历史账单。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 ¥550.00，期末预计 ¥4,500.00，缺口 ¥500.00。\nB：缺少分类预算依据，不能推算分类节省金额。\nC（按达标所需金额压缩）：每月压缩 ¥62.50，每月结余 ¥612.50，期末预计 ¥5,000.00，缺口 ¥0.00。\n口径：input_assumption。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    },
+    {
+      "id": "H6",
+      "kind": "live",
+      "question": "按近三个月已导入记录做八个月储蓄规划。方案B只把餐饮压缩5%，不削减交通，比较A/B/C。",
+      "inputs": {
+        "target_cents": 800000,
+        "months": 8,
+        "saved_cents": 20000
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 6.752,
+      "http_attempts": 5,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "a025783745d8d65aa4edc69fdc0563a8ec030e436dc5f0033b58f130b0bcb998",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "data_coverage",
+          "claims_count": 0,
+          "seconds": 0.928
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "f64629cc5ce457cc23b5ff2a1cf20074add61806afd12446746ade03fda5d428",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "spending_overview",
+          "claims_count": 0,
+          "seconds": 0.859
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "55fd87f10a75a078441c1dff778e63c4219475507cee1e4c1e415a8f521d1001",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 1.348
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "09b70c18ba52fce74846c5dce28d77146a4d4711b3b49779b192a257f2027786",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 1.399
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "437bb45597a7363aa1b5377626a78daf5f4aa9fcad3d9efe22bbfa237fb29be8",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 6,
+          "seconds": 2.199
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "data_coverage",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        },
+        {
+          "action": "call_tool",
+          "tool": "spending_overview",
+          "step_id": "S2",
+          "cached": true,
+          "status": "ok"
+        },
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S3",
+          "cached": false,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 4,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 35000,
+          "projected_cents": 300000,
+          "gap_cents": 500000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "ok",
+          "spending_cut_cents": 5000,
+          "requested_cut_cents": 5000,
+          "monthly_available_cents": 40000,
+          "projected_cents": 340000,
+          "gap_cents": 460000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": true
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 62500,
+          "requested_cut_cents": 62500,
+          "monthly_available_cents": 97500,
+          "projected_cents": 800000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：8 个月后达到 ¥8,000.00，已有储蓄 ¥200.00；每月需存 ¥975.00。\n已导入记录的月均收入 ¥5,200.00、月均净支出 ¥4,850.00。\n已导入记录覆盖：2026-08、2026-09、2026-10；无法保证账单完整。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 ¥350.00，期末预计 ¥3,000.00，缺口 ¥5,000.00。\nB（假设餐饮各压缩 5%）：每月压缩 ¥50.00，每月结余 ¥400.00，期末预计 ¥3,400.00，缺口 ¥4,600.00。\nC（按达标所需金额压缩）：每月压缩 ¥625.00，每月结余 ¥975.00，期末预计 ¥8,000.00，缺口 ¥0.00。\n口径：cash。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    },
+    {
+      "id": "H7",
+      "kind": "local_gate",
+      "question": "我想开始为一笔未来开销存钱，尚未确认目标金额。",
+      "inputs": {
+        "months": 4,
+        "saved_cents": 0
+      },
+      "passed": true,
+      "status": "needs_input",
+      "model_status": "inputs_required",
+      "fallback": true,
+      "latency_seconds": 0.029,
+      "http_attempts": 0,
+      "calls": [],
+      "tool_trace": [],
+      "total_tool_computations": 2,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {},
+      "answer": "本地规则规划：需要补充或确认输入。\n请确认储蓄目标金额"
+    },
+    {
+      "id": "H8",
+      "kind": "local_gate",
+      "question": "希望这个学期存到四千，但还没确认到底几个月。",
+      "inputs": {
+        "target_cents": 400000,
+        "saved_cents": 1000
+      },
+      "passed": true,
+      "status": "needs_input",
+      "model_status": "inputs_required",
+      "fallback": true,
+      "latency_seconds": 0.019,
+      "http_attempts": 0,
+      "calls": [],
+      "tool_trace": [],
+      "total_tool_computations": 2,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {},
+      "answer": "本地规则规划：需要补充或确认输入。\n请确认规划期限（月）"
+    },
+    {
+      "id": "H9",
+      "kind": "local_gate",
+      "question": "只导入一个月，想做七个月储蓄规划。",
+      "inputs": {
+        "target_cents": 420000,
+        "months": 7,
+        "saved_cents": 2000
+      },
+      "passed": true,
+      "status": "needs_assumptions",
+      "model_status": "inputs_required",
+      "fallback": true,
+      "latency_seconds": 0.015,
+      "http_attempts": 0,
+      "calls": [],
+      "tool_trace": [],
+      "total_tool_computations": 1,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {},
+      "answer": "本地规则规划：需要补充或确认输入。\n请确认未来每月收入\n请确认未来每月预算\n改用输入假设继续"
+    }
+  ]
+}

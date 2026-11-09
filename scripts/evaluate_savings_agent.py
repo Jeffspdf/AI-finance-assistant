@@ -121,7 +121,7 @@ def run_case(case, client, directory):
     policy_ok = True
     if 'cut_pct' in case and plan['simulation']:
         policy = next(s for s in plan['simulation']['args']['scenarios'] if s['label'] == 'B')
-        policy_ok = policy['cut_pct'] == case['cut_pct'] and set(policy['categories']) == {'餐饮', '交通'}
+        policy_ok = policy['cut_pct'] == case['cut_pct'] and set(policy['categories']) == set(case.get('categories', ['餐饮', '交通']))
     unchanged = not store or Path(store.path).read_bytes() == before
     if case['kind'] == 'live':
         passed = plan['model_status'] == 'verified' and expected_ok and policy_ok and unchanged and not any(
@@ -140,11 +140,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true', help='Explicitly authorize sending ONLY authored synthetic summaries to the saved provider')
     parser.add_argument('--settings-dir', type=Path)
-    parser.add_argument('--cases', default=','.join(c['id'] for c in CASES))
+    parser.add_argument('--case-file', type=Path, help='Frozen synthetic holdout JSON with the required prompt hash')
+    parser.add_argument('--cases')
     parser.add_argument('--output', type=Path, default=ROOT / '.test_agent_evidence/agent-live-smoke.json')
     args = parser.parse_args()
-    selected = [c for c in CASES if c['id'] in args.cases.split(',')]
-    if not selected or set(args.cases.split(',')) != {c['id'] for c in selected}:
+    cases, case_hash = CASES, None
+    if args.case_file:
+        raw = args.case_file.read_bytes(); frozen = json.loads(raw)
+        if frozen['prompt_sha256'] != sha256((ROOT / 'finance/agent_protocol.py').read_bytes()).hexdigest():
+            parser.error('Frozen holdout prompt hash changed; do not tune against this set')
+        cases = frozen['cases']; case_hash = sha256(raw).hexdigest()
+        if not isinstance(cases, list) or not 1 <= len(cases) <= 10 or any(c['kind'] not in ('live', 'local_gate') for c in cases):
+            parser.error('Holdout must contain 1-10 synthetic live/local-gate cases')
+    requested = args.cases.split(',') if args.cases else [c['id'] for c in cases]
+    selected = [c for c in cases if c['id'] in requested]
+    if not selected or set(requested) != {c['id'] for c in selected} or len({c['id'] for c in selected}) != len(selected):
         parser.error('Unknown case IDs')
     sys.stdout.reconfigure(encoding='utf-8')
     if not args.live:
@@ -159,6 +169,7 @@ def main():
     report = dict(timestamp=datetime.now(timezone.utc).isoformat(), reference_date=TODAY.isoformat(),
                   provider_host=urlparse(config.base_url).hostname, model=config.model,
                   prompt_sha256=sha256((ROOT / 'finance/agent_protocol.py').read_bytes()).hexdigest(),
+                  case_file_sha256=case_hash,
                   data='authored synthetic records and confirmed synthetic inputs only', results=[])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix='savings-smoke-', dir=args.output.parent) as temporary:

@@ -1,0 +1,13 @@
+{
+  "live_cases": 6,
+  "live_passed": 6,
+  "http_attempts": 20,
+  "fallbacks": 0,
+  "mean_seconds": 4.702,
+  "local_gates": 3,
+  "local_gates_passed": 3,
+  "local_http_attempts": 0,
+  "prompt_unchanged": true,
+  "prompt_sha256": "102a35ff873df4282b42f1db880041933f99a71c331088389cfa344971bc2302",
+  "case_file_sha256": "2ee9578266df3077368b7a7f1e68c04d95ca68c66fd6c912a3366010917b4d0e"
+}

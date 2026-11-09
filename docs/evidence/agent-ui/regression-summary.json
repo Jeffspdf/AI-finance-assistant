@@ -1,0 +1,18 @@
+{
+  "tests": 756,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "seconds": 79.166,
+  "base_commit": "2e0f813",
+  "isolation": "owned test desktop; never activated",
+  "tested_files_sha256": {
+    "desktop.py": "8b4fb0a546af9498dc1df07540d8da99bf353860ba0f0e23cad4db372731153e",
+    "finance/desktop_agent.py": "aefb06aa5931feffa5c14676c7101459d416c713d231b4606a5b5eb02e15134a",
+    "scripts/evaluate_savings_agent.py": "96c0d4230b4b75ae97723805bd46dc4bb18ab0a6542ee4d31b3bb0ce65ec438b",
+    "scripts/verify_savings_planner_ui.py": "67859b002524288730e399ec3d267e8768148c0e1d9a21acf9683a478671977f",
+    "tests/test_desktop_agent.py": "ea78d1dcc64939440ce1093162b029e93473060423e237a300358ea569e5a4ac",
+    "tests/test_desktop_agent_smoke.py": "c878dca7be28c7575c59917375449fad6f26c0330d171eb160fd87772e0be4af",
+    "tests/test_savings_agent_evaluation.py": "0419631ed3045fe1b0d4dcd60c6a85cbe089c53ce23325635dd18478e8391a8e"
+  }
+}

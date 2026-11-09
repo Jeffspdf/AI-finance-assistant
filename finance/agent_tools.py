@@ -66,6 +66,7 @@ class AgentTools:
         self.inputs = MappingProxyType(self.inputs)
         self._results = {}
         self._cache = {}
+        self._computation_cache = {}
         self._trace = []
         self._frame = None
         if mode == 'historical':
@@ -85,6 +86,19 @@ class AgentTools:
     @property
     def facts(self):
         return deepcopy(self._results)
+
+    def fresh_session(self, *, share_cache=False):
+        """A new execution state on the SAME snapshot, used for local fallback."""
+        fresh = AgentTools(inputs=self.inputs.values(), today=self.today, mode='assumption')
+        fresh.mode, fresh.basis = self.mode, self.basis
+        fresh._frame = self._frame.copy(deep=True) if self._frame is not None else None
+        if share_cache:
+            fresh._computation_cache = self._computation_cache
+        return fresh
+
+    @property
+    def computation_count(self):
+        return len(self._computation_cache)
 
     def _resolve(self, value):
         if isinstance(value, dict):
@@ -133,6 +147,18 @@ class AgentTools:
             return result
         if len(self._results) >= self.MAX_CALLS:
             raise ToolValidationError('已达到六次工具调用上限')
+        if key in self._computation_cache:
+            # Replay preflight results only when the model actually requests them.
+            # References still cannot see facts from unexecuted logical steps.
+            result = deepcopy(self._computation_cache[key])
+            step = 'S' + str(len(self._results) + 1)
+            result.update(step_id=step, fact_id='F' + step[1:])
+            self._results[step] = deepcopy(result)
+            self._cache[key] = deepcopy(result)
+            self._trace.append(dict(tool=tool, step_id=step, cached=True))
+            return result
+        if self.computation_count >= self.MAX_CALLS:
+            raise ToolValidationError('预检与模型合计已达到六次实际计算上限')
         handler = getattr(self, '_' + tool)
         try:
             signature(handler).bind(**resolved)
@@ -153,6 +179,7 @@ class AgentTools:
         result['input_fact_ids'] = ['IN:' + name for name in self.inputs]
         self._results[step] = deepcopy(result)
         self._cache[key] = deepcopy(result)
+        self._computation_cache[key] = deepcopy(result)
         self._trace.append(dict(tool=tool, step_id=step, cached=False))
         return deepcopy(result)
 

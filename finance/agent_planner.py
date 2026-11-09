@@ -1,6 +1,28 @@
 """Deterministic savings workflow; no model calls, GUI changes or ledger writes."""
 from .agent_tools import AgentTools
 
+QUESTIONS = {'target_cents': '请确认储蓄目标金额', 'months': '请确认规划期限（月）',
+             'saved_cents': '请确认已有储蓄金额（没有则确认 0）',
+             'income_cents': '请确认未来每月收入', 'budget_cents': '请确认未来每月预算'}
+
+
+def planning_result(tools, status, needed=(), simulation=None):
+    mode = tools.mode
+    can_switch = status == 'needs_assumptions'
+    return dict(status=status, planner='local_rules', planner_label='本地规则规划', mode=mode,
+                basis=tools.basis, as_of=tools.today.isoformat(),
+                inputs=[dict(fact_id='IN:' + item.name, kind='input', name=item.name,
+                             value=item.value, unit='months' if item.name == 'months' else 'CNY_cents',
+                             confirmed_by_user=True) for item in tools.inputs.values()],
+                questions=[dict(input=name, question=QUESTIONS[name]) for name in needed],
+                facts=tools.facts, trace=tools.trace, simulation=simulation,
+                can_use_assumptions=can_switch,
+                assumption_inputs_ready=all(name in tools.inputs for name in ('income_cents', 'budget_cents')),
+                available_actions=[dict(action='use_assumptions', mode='assumption',
+                                        label='改用输入假设继续')] if can_switch else [],
+                assumptions=['仅依据已导入记录，完整性未知'] if mode == 'historical' else
+                            ['基于输入假设，未使用历史账单'], writes_ledger=False)
+
 
 def plan_savings_rules(store=None, *, inputs=(), mode='historical', today=None,
                        categories=('餐饮', '交通'), cut_pct=10):
@@ -10,30 +32,29 @@ def plan_savings_rules(store=None, *, inputs=(), mode='historical', today=None,
     never model guesses. The result is a local preview, not a saved goal/budget.
     """
     tools = AgentTools(store, inputs=inputs, mode=mode, today=today)
+    return plan_with_tools(tools, categories=categories, cut_pct=cut_pct)
+
+
+def plan_with_tools(tools, *, categories=('餐饮', '交通'), cut_pct=10):
+    """Shared deterministic fallback operating on an already-frozen snapshot."""
+    mode = tools.mode
     missing = [name for name in ('target_cents', 'months', 'saved_cents') if name not in tools.inputs]
-    questions = {'target_cents': '请确认储蓄目标金额', 'months': '请确认规划期限（月）',
-                 'saved_cents': '请确认已有储蓄金额（没有则确认 0）',
-                 'income_cents': '请确认未来每月收入', 'budget_cents': '请确认未来每月预算'}
 
     def result(status, needed=(), simulation=None):
-        return dict(status=status, planner='local_rules', planner_label='本地规则规划', mode=mode,
-                    basis=tools.basis, as_of=tools.today.isoformat(),
-                    inputs=[dict(fact_id='IN:' + item.name, kind='input', name=item.name,
-                                 value=item.value, unit='months' if item.name == 'months' else 'CNY_cents',
-                                 confirmed_by_user=True) for item in tools.inputs.values()],
-                    questions=[dict(input=name, question=questions[name]) for name in needed],
-                    facts=tools.facts, trace=tools.trace, simulation=simulation,
-                    assumptions=['仅依据已导入记录，完整性未知'] if mode == 'historical' else
-                                ['基于输入假设，未使用历史账单'], writes_ledger=False)
+        return planning_result(tools, status, needed, simulation)
+
+    def need_assumptions():
+        return result('needs_assumptions', missing + [name for name in ('income_cents', 'budget_cents')
+                                                     if name not in tools.inputs])
 
     args = {key: {'$input': key} for key in ('target_cents', 'months', 'saved_cents')}
     if mode == 'historical':
         coverage = tools.call('data_coverage', dict(months=3))
         if coverage['status'] != 'ok':
-            return result('needs_assumptions', list(dict.fromkeys(missing + ['income_cents', 'budget_cents'])))
+            return need_assumptions()
         overview = tools.call('spending_overview', dict(period='last_3_months'))
         if overview['facts']['requires_explicit_budget']:
-            return result('needs_assumptions', list(dict.fromkeys(missing + ['income_cents', 'budget_cents'])))
+            return need_assumptions()
         ref = overview['step_id'] + '.'
         args.update(base_income_cents={'$ref': ref + 'average_income_cents'},
                     base_spending_cents={'$ref': ref + 'average_expense_cents'},
@@ -54,7 +75,9 @@ def plan_savings_rules(store=None, *, inputs=(), mode='historical', today=None,
 def render_rules_plan(plan):
     """Small local preview renderer for service acceptance, not the future claims UI."""
     if plan['status'] != 'ok':
-        return '本地规则规划：需要补充或确认输入。\n' + '\n'.join(q['question'] for q in plan['questions'])
+        lines = ['本地规则规划：需要补充或确认输入。'] + [q['question'] for q in plan['questions']]
+        lines += [action['label'] for action in plan['available_actions']]
+        return '\n'.join(lines)
     def money(value):
         sign = '-' if value < 0 else ''
         return f'{sign}¥{abs(value) // 100:,}.{abs(value) % 100:02d}'
@@ -83,23 +106,24 @@ def main():
     parser.add_argument('--income-cents', type=int)
     parser.add_argument('--budget-cents', type=int)
     parser.add_argument('--confirm-inputs', action='store_true', help='确认本次输入的金额和期限')
+    parser.add_argument('--use-assumptions', action='store_true', help='明确改用输入假设，不读取历史账本')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
     if not args.confirm_inputs:
         parser.error('请核对输入后加 --confirm-inputs')
-    if args.ledger and (args.income_cents is not None or args.budget_cents is not None):
-        parser.error('历史模式与输入假设模式请分开运行')
+    if args.ledger and not args.use_assumptions and (args.income_cents is not None or args.budget_cents is not None):
+        parser.error('若要改用输入假设，请明确添加 --use-assumptions')
     values = dict(target_cents=args.target_cents, months=args.months, saved_cents=args.saved_cents)
     for key in ('income_cents', 'budget_cents'):
         if getattr(args, key) is not None:
             values[key] = getattr(args, key)
     try:
         store = None
-        if args.ledger:
+        if args.ledger and not args.use_assumptions:
             from .storage import Store
             store = Store(args.ledger, read_only=True)
         plan = plan_savings_rules(store, inputs=confirmed_inputs(**values),
-                                  mode='historical' if args.ledger else 'assumption')
+                                  mode='historical' if store is not None else 'assumption')
     except (ValueError, OSError, sqlite3.Error) as exc:
         parser.error(str(exc))
     sys.stdout.reconfigure(encoding='utf-8')

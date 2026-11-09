@@ -154,7 +154,7 @@ def test_failed_containment_keeps_gate_closed_and_cleans_only_own_waiting_proces
 @pytest.mark.skipif(os.name!='nt',reason='Windows native process-containment preflight')
 def test_real_powershell_append_pid_and_log_capture_with_synthetic_console_child(tmp_path):
     shell=shutil.which('pwsh') or shutil.which('powershell')
-    assert shell
+    if not shell:pytest.skip('PowerShell is required for the synthetic console preflight')
     source=tmp_path/'synthetic.py'
     source.write_text("import os,time\nfrom pathlib import Path\np=Path(os.environ['FINANCE_DESKTOP_DATA_DIR']);p.mkdir(exist_ok=True)\n"
                       "(p/'self-test.ok').write_text('Desktop smoke test passed')\n(p/'pid').write_text(str(os.getpid()))\n"
@@ -164,7 +164,7 @@ def test_real_powershell_append_pid_and_log_capture_with_synthetic_console_child
               log=str(tmp_path/'append.log'),gate=str(tmp_path/'go'),child_meta=str(tmp_path/'child-meta.json'),
               working_dir=str(tmp_path),wrapper_result=str(tmp_path/'wrapper-result.json'),wrapper_error=str(tmp_path/'wrapper-error.txt'))
     experiment.save(tmp_path/'spec.json',spec);(tmp_path/'append.log').write_text('EXISTING_PREFIX\n')
-    record=experiment.run_trial([shell,'-NoProfile','-File',str(script),'-Spec',str(tmp_path/'spec.json')],tmp_path,15,spec)
+    record=experiment.run_trial([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-Spec',str(tmp_path/'spec.json')],tmp_path,15,spec)
     assert record['exit_code']==0 and not record['timed_out']
     actual_pid=(tmp_path/'data/pid').read_text()
     assert actual_pid in record['processes'] and actual_pid!=str(record['wrapper_pid'])

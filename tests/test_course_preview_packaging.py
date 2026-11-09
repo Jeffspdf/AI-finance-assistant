@@ -42,6 +42,6 @@ def test_preview_warning_concession_preserves_all_eight_checks(tmp_path,monkeypa
 def test_stable_build_cannot_request_preview_concession(version):
     shell=shutil.which('pwsh') or shutil.which('powershell')
     if not shell:pytest.skip('PowerShell is required for Windows build entry point')
-    result=subprocess.run([shell,'-NoProfile','-File',str(ROOT/'packaging/build.ps1'),'-Version',version,'-CoursePreview','-Python','must-not-execute'],capture_output=True,text=True,errors='replace',timeout=20)
+    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'packaging/build.ps1'),'-Version',version,'-CoursePreview','-Python','must-not-execute'],capture_output=True,text=True,errors='replace',timeout=20)
     assert result.returncode!=0
     assert 'stable release gates cannot be bypassed' in result.stdout+result.stderr

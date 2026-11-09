@@ -21,6 +21,7 @@ ENGINEERING={
  ('finance/round5_acceptance.py','verify_round5'),('finance/round6_acceptance.py','verify_round6'),
  ('finance/round7_acceptance.py','verify_round7'),('finance/round8_acceptance.py','verify_round8')}
 NET_ENTRIES={
+ ('finance/agent_tools.py','AgentTools.__init__'),
  ('desktop.py','Desktop.show'),('desktop.py','Desktop.home'),('desktop.py','Desktop.refresh_records'),
  ('finance/desktop_review.py','ReviewFeatures.budget_page'),('finance/desktop_review.py','ReviewFeatures.budget_evidence'),
  ('finance/desktop_review.py','ReviewFeatures.home_budget_alerts'),('finance/desktop_review.py','ReviewFeatures.draw_trend'),

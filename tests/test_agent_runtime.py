@@ -229,6 +229,11 @@ def test_model_can_choose_different_cut_assumption_but_cannot_compute_money(tmp_
     assert row['spending_cut_cents'] == 34000 and row['projected_cents'] == 414000
     assert plan['total_tool_computations'] == 4
     assert '假设餐饮、交通各压缩 20%' in plan['answer']
+    final_payload = client.payloads[-2]
+    policy = final_payload['facts'][-1]['facts']['scenario_policy']
+    assert policy[1] == dict(label='B', strategy='cut_categories', categories=['餐饮', '交通'], cut_pct=20)
+    assert final_payload['last_tool_call']['tool'] == 'scenario_simulate_batch'
+    assert final_payload['remaining_rounds'] < 10
 
 
 def test_fallback_reuses_same_snapshot_when_ledger_changes_during_model_request(tmp_path):

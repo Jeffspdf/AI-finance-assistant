@@ -37,6 +37,11 @@ def aggregate_payload(tools):
                 raise ToolValidationError('分类待复核，不能发送未知分类标签')
         elif fact['tool'] == 'scenario_simulate_batch':
             clean = deepcopy(data)
+            # A stateless model must see WHICH policy produced the result, not
+            # just its amounts; otherwise it can endlessly request the same cut.
+            clean['scenario_policy'] = [
+                {key: deepcopy(s[key]) for key in ('label', 'strategy', 'categories', 'cut_pct') if key in s}
+                for s in fact['args']['scenarios']]
         else:
             raise ToolValidationError('未知事实类型')
         facts.append(dict(step_id=fact['step_id'], fact_id=fact['fact_id'], tool=fact['tool'],
@@ -140,7 +145,9 @@ def plan_savings_agent(store=None, *, question, inputs=(), mode='historical', to
             timeout = check()
             payload = aggregate_payload(tools)
             payload.update(question=question, tools=deepcopy(TOOL_CATALOG), first_turn=round_index == 0,
-                           remaining_tool_calls=6 - len(tools.facts))
+                           remaining_tool_calls=6 - len(tools.facts),
+                           remaining_rounds=max_rounds - round_index,
+                           last_tool_call=deepcopy(model_trace[-1]) if model_trace else None)
             model_calls += 1
             response = client.plan_savings_action(payload, timeout=timeout)
             check()  # Discard late responses and responses after revocation.

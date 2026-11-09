@@ -1,0 +1,15 @@
+{
+  "tests": 735,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "seconds": 95.903,
+  "base_commit": "2439093",
+  "tested_files_sha256": {
+    "finance/agent_protocol.py": "102a35ff873df4282b42f1db880041933f99a71c331088389cfa344971bc2302",
+    "finance/agent_runtime.py": "49c0a31e2912a4f42f594419e252a12d404db614add4c20cc902bbbd8a477559",
+    "tests/test_agent_runtime.py": "5fca58a048683ce8b0fdda3f1c9068ef1621c97072586d8ef69315e2f1967bb6",
+    "scripts/evaluate_savings_agent.py": "72ff80c18fd5305383e9645cd5e9bcd278fce5cb50018e50006941605a6f9fd3",
+    "tests/test_savings_agent_evaluation.py": "7159343238d9fa9a191004c3918c4f254109bc7123e84b25ad7fb7dfb689d4c8"
+  }
+}

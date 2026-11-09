@@ -1,0 +1,150 @@
+{
+  "timestamp": "2026-11-09T13:58:36.866934+00:00",
+  "reference_date": "2026-11-09",
+  "provider_host": "api.deepseek.com",
+  "model": "deepseek-flash",
+  "prompt_sha256": "102a35ff873df4282b42f1db880041933f99a71c331088389cfa344971bc2302",
+  "data": "authored synthetic records and confirmed synthetic inputs only",
+  "results": [
+    {
+      "id": "L4",
+      "kind": "live",
+      "question": "按确认的目标和已有储蓄做十二个月规划，方案B假设餐饮和交通各压缩20%。",
+      "inputs": {
+        "target_cents": 1200000,
+        "months": 12,
+        "saved_cents": 120000
+      },
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "latency_seconds": 5.808,
+      "http_attempts": 5,
+      "calls": [
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "6aa8764b105fe92b2615809036a598c57cf76c43aed2ad84fd1932da65ed9a93",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "data_coverage",
+          "claims_count": 0,
+          "seconds": 0.755
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "c49eea46a1d96546b5a8ae7a7f7b3a69252ea827fa0be6fd0e2e354717f4840a",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "spending_overview",
+          "claims_count": 0,
+          "seconds": 0.89
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "da9e793c8ec5452462fc1e209b46aed5b8a86c130367de47d097e68d9f8d508e",
+          "money_literal": false,
+          "free_text": false,
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "claims_count": 0,
+          "seconds": 1.453
+        },
+        {
+          "stage": "plan_savings_action",
+          "payload_sha256": "40ba768e76171b61a597f691a06b5f375722f216aabee5b23d0957ca720e19f8",
+          "money_literal": false,
+          "free_text": false,
+          "action": "finish",
+          "tool": null,
+          "claims_count": 0,
+          "seconds": 0.836
+        },
+        {
+          "stage": "explain_savings_claims",
+          "payload_sha256": "1486cde197cd5b127c72ff641ec2e60421f5b42650bbce55cbfe4788e22e422f",
+          "money_literal": false,
+          "free_text": false,
+          "action": "other",
+          "tool": null,
+          "claims_count": 6,
+          "seconds": 1.859
+        }
+      ],
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "data_coverage",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        },
+        {
+          "action": "call_tool",
+          "tool": "spending_overview",
+          "step_id": "S2",
+          "cached": true,
+          "status": "ok"
+        },
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S3",
+          "cached": false,
+          "status": "ok"
+        }
+      ],
+      "total_tool_computations": 4,
+      "expected_amounts_match": true,
+      "requested_policy_followed": true,
+      "source_ledger_unchanged": true,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 35000,
+          "projected_cents": 540000,
+          "gap_cents": 660000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "ok",
+          "spending_cut_cents": 34000,
+          "requested_cut_cents": 34000,
+          "monthly_available_cents": 69000,
+          "projected_cents": 948000,
+          "gap_cents": 252000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": true
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 55000,
+          "requested_cut_cents": 55000,
+          "monthly_available_cents": 90000,
+          "projected_cents": 1200000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "answer": "模型理解 + 代码计算\n目标：12 个月后达到 ¥12,000.00，已有储蓄 ¥1,200.00；每月需存 ¥900.00。\n已导入记录的月均收入 ¥5,200.00、月均净支出 ¥4,850.00。\n已导入记录覆盖：2026-08、2026-09、2026-10；无法保证账单完整。\nA（保持当前收支假设）：每月压缩 ¥0.00，每月结余 ¥350.00，期末预计 ¥5,400.00，缺口 ¥6,600.00。\nB（假设餐饮、交通各压缩 20%）：每月压缩 ¥340.00，每月结余 ¥690.00，期末预计 ¥9,480.00，缺口 ¥2,520.00。\nC（按达标所需金额压缩）：每月压缩 ¥550.00，每月结余 ¥900.00，期末预计 ¥12,000.00，缺口 ¥0.00。\n口径：cash。模拟依赖假设，不保证能执行或达成；未保存账本、预算或目标。\n可以调整假设后重新计算。"
+    }
+  ]
+}

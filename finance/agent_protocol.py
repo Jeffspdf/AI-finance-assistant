@@ -28,6 +28,9 @@ Preview items, if used, contain only tool and args, are informational and will N
 For subsequent turns return exactly ACTION. ACTION is either
 {"action":"call_tool","tool":NAME,"args":OBJECT} or {"action":"finish"}.
 Finish only after a successful batch with A/B/C. At most 6 executed calls and a bounded number of rounds.
+The returned scenario_policy tells you the exact categories and cut_pct already simulated.
+If it matches the requested policy and the batch status is ok, finish. A gap or an infeasible
+scenario is a valid result, not a tool failure. Do not repeat an identical cached tool call.
 Do not output explanations, money values, SQL, write operations, arbitrary fields or executable code.'''
 
 CLAIM_INSTRUCTION = '''Return exactly {"claims": [...], "suggestion": "adjust_assumptions"}.

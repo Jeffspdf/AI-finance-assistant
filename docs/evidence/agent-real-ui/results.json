@@ -1,0 +1,436 @@
+{
+  "validation": "actual Desktop controls + actual ModelClient/HTTP in one UI session; synthetic finance data only",
+  "provider_host": "api.deepseek.com",
+  "model": "deepseek-flash",
+  "reference_date": "2026-11-10",
+  "cases": [
+    {
+      "id": "L1_UI",
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "http_attempts": 5,
+      "seconds": 5.438,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 35000,
+          "projected_cents": 210000,
+          "gap_cents": 390000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "ok",
+          "spending_cut_cents": 17000,
+          "requested_cut_cents": 17000,
+          "monthly_available_cents": 52000,
+          "projected_cents": 312000,
+          "gap_cents": 288000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": true
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 65000,
+          "requested_cut_cents": 65000,
+          "monthly_available_cents": 100000,
+          "projected_cents": 600000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "cards": {
+        "A": "方案 A\n期末预计 ¥2,100.00\n目标缺口 ¥3,900.00\n每月结余 ¥350.00\n每月压缩 ¥0.00\n按此假设仍有缺口",
+        "B": "方案 B\n期末预计 ¥3,120.00\n目标缺口 ¥2,880.00\n每月结余 ¥520.00\n每月压缩 ¥170.00\n假设餐饮、交通各压缩 10%\n按此假设仍有缺口",
+        "C": "方案 C\n期末预计 ¥6,000.00\n目标缺口 ¥0.00\n每月结余 ¥1,000.00\n每月压缩 ¥650.00\n仅在假设成立时达到目标"
+      },
+      "claims": {
+        "claims": [
+          {
+            "claim_id": "C1",
+            "fact_id": "F3",
+            "statement": "savings_target",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 6
+              },
+              "basis": "cash"
+            }
+          },
+          {
+            "claim_id": "C2",
+            "fact_id": "F2",
+            "statement": "income_expense",
+            "scope": {
+              "period": [
+                "2026-08",
+                "2026-09",
+                "2026-10"
+              ],
+              "basis": "cash"
+            }
+          },
+          {
+            "claim_id": "C3",
+            "fact_id": "F1",
+            "statement": "data_coverage",
+            "scope": {
+              "period": [
+                "2026-08",
+                "2026-09",
+                "2026-10"
+              ],
+              "basis": "cash"
+            }
+          },
+          {
+            "claim_id": "C4",
+            "fact_id": "F3",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 6
+              },
+              "basis": "cash",
+              "scenario": "A"
+            }
+          },
+          {
+            "claim_id": "C5",
+            "fact_id": "F3",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 6
+              },
+              "basis": "cash",
+              "scenario": "B"
+            }
+          },
+          {
+            "claim_id": "C6",
+            "fact_id": "F3",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 6
+              },
+              "basis": "cash",
+              "scenario": "C"
+            }
+          }
+        ],
+        "suggestion": "adjust_assumptions"
+      },
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "data_coverage",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        },
+        {
+          "action": "call_tool",
+          "tool": "spending_overview",
+          "step_id": "S2",
+          "cached": true,
+          "status": "ok"
+        },
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S3",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "readonly_evidence_checked": true,
+      "source_ledger_unchanged": true,
+      "ui_status": "模型理解 + 代码计算"
+    },
+    {
+      "id": "H4_UI",
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "http_attempts": 3,
+      "seconds": 3.546,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 40000,
+          "projected_cents": 330000,
+          "gap_cents": 170000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 21250,
+          "requested_cut_cents": 21250,
+          "monthly_available_cents": 61250,
+          "projected_cents": 500000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "cards": {
+        "A": "方案 A\n期末预计 ¥3,300.00\n目标缺口 ¥1,700.00\n每月结余 ¥400.00\n每月压缩 ¥0.00\n按此假设仍有缺口",
+        "B": "方案 B\n缺少分类预算依据\n该方案暂不能计算",
+        "C": "方案 C\n期末预计 ¥5,000.00\n目标缺口 ¥0.00\n每月结余 ¥612.50\n每月压缩 ¥212.50\n仅在假设成立时达到目标"
+      },
+      "claims": {
+        "claims": [
+          {
+            "claim_id": "C1",
+            "fact_id": "F1",
+            "statement": "savings_target",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption"
+            }
+          },
+          {
+            "claim_id": "C2",
+            "fact_id": "F1",
+            "statement": "assumption_baseline",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption"
+            }
+          },
+          {
+            "claim_id": "C3",
+            "fact_id": "F1",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption",
+              "scenario": "A"
+            }
+          },
+          {
+            "claim_id": "C4",
+            "fact_id": "F1",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption",
+              "scenario": "B"
+            }
+          },
+          {
+            "claim_id": "C5",
+            "fact_id": "F1",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption",
+              "scenario": "C"
+            }
+          }
+        ],
+        "suggestion": "adjust_assumptions"
+      },
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "readonly_evidence_checked": true,
+      "source_ledger_unchanged": true,
+      "ui_status": "模型理解 + 代码计算"
+    },
+    {
+      "id": "H5_UI",
+      "passed": true,
+      "status": "ok",
+      "model_status": "verified",
+      "fallback": false,
+      "http_attempts": 3,
+      "seconds": 3.788,
+      "scenarios": {
+        "A": {
+          "label": "A",
+          "strategy": "current",
+          "status": "ok",
+          "spending_cut_cents": 0,
+          "requested_cut_cents": 0,
+          "monthly_available_cents": 55000,
+          "projected_cents": 450000,
+          "gap_cents": 50000,
+          "goal_met": false,
+          "feasible": false,
+          "negative_cashflow": false,
+          "conditional": false
+        },
+        "B": {
+          "label": "B",
+          "strategy": "cut_categories",
+          "status": "insufficient_data",
+          "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+        },
+        "C": {
+          "label": "C",
+          "strategy": "required_cut",
+          "status": "ok",
+          "spending_cut_cents": 6250,
+          "requested_cut_cents": 6250,
+          "monthly_available_cents": 61250,
+          "projected_cents": 500000,
+          "gap_cents": 0,
+          "goal_met": true,
+          "feasible": true,
+          "negative_cashflow": false,
+          "conditional": true
+        }
+      },
+      "cards": {
+        "A": "方案 A\n期末预计 ¥4,500.00\n目标缺口 ¥500.00\n每月结余 ¥550.00\n每月压缩 ¥0.00\n按此假设仍有缺口",
+        "B": "方案 B\n缺少分类预算依据\n该方案暂不能计算",
+        "C": "方案 C\n期末预计 ¥5,000.00\n目标缺口 ¥0.00\n每月结余 ¥612.50\n每月压缩 ¥62.50\n仅在假设成立时达到目标"
+      },
+      "claims": {
+        "claims": [
+          {
+            "claim_id": "C1",
+            "fact_id": "F1",
+            "statement": "savings_target",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption"
+            }
+          },
+          {
+            "claim_id": "C2",
+            "fact_id": "F1",
+            "statement": "assumption_baseline",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption"
+            }
+          },
+          {
+            "claim_id": "C3",
+            "fact_id": "F1",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption",
+              "scenario": "A"
+            }
+          },
+          {
+            "claim_id": "C4",
+            "fact_id": "F1",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption",
+              "scenario": "B"
+            }
+          },
+          {
+            "claim_id": "C5",
+            "fact_id": "F1",
+            "statement": "scenario_result",
+            "scope": {
+              "period": {
+                "start": "2026-11-10",
+                "months": 8
+              },
+              "basis": "input_assumption",
+              "scenario": "C"
+            }
+          }
+        ],
+        "suggestion": "adjust_assumptions"
+      },
+      "tool_trace": [
+        {
+          "action": "call_tool",
+          "tool": "scenario_simulate_batch",
+          "step_id": "S1",
+          "cached": true,
+          "status": "ok"
+        }
+      ],
+      "readonly_evidence_checked": true,
+      "source_ledger_unchanged": true,
+      "ui_status": "模型理解 + 代码计算"
+    }
+  ],
+  "callback_errors": [],
+  "isolation": "owned test desktop; never activated"
+}

@@ -1,4 +1,4 @@
-param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.9.1', [switch]$CoursePreview)
+param([string]$Python = 'python', [string]$Iscc = '', [string]$Version = '0.10.0', [switch]$CoursePreview)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 if ($CoursePreview -and $Version -notmatch '^\d+\.\d+\.\d+-rc\.\d+$') { throw 'CoursePreview requires an explicit x.y.z-rc.N version; stable release gates cannot be bypassed.' }

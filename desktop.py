@@ -993,6 +993,23 @@ if __name__ == '__main__':
             from finance.feedback_acceptance import verify_feedback_controls
             closure_report=verify_feedback_controls(app,DATA_DIR/'feedback-ui')
             (DATA_DIR/'feedback-self-test.json').write_text(json.dumps(closure_report,ensure_ascii=False,indent=2),encoding='utf-8')
+            # Exercise the new bundled entry without a provider or a saved goal.
+            agent_before=Path(app.store.path).read_bytes()
+            app.show('plan');agent=open_savings_planner(app)
+            agent.mode_var.set('输入假设')
+            for name,value in [('target_cents','6000'),('months','6'),('saved_cents','0'),('income_cents','5200'),('budget_cents','4850')]:
+                agent.values[name].set(value)
+            agent.confirm_var.set(True);agent.generate_button.invoke()
+            deadline=time.monotonic()+8
+            while agent.busy and time.monotonic()<deadline:app.update();time.sleep(.01)
+            assert not agent.busy and agent.last_result['status']=='ok'
+            assert agent.last_result['planner']=='local_rules' and agent.last_result['model_calls']==0
+            scenarios={r['label']:r for r in agent.last_result['simulation']['facts']['scenarios']}
+            assert scenarios['A']['projected_cents']==210000 and scenarios['C']['projected_cents']==600000
+            assert Path(app.store.path).read_bytes()==agent_before
+            (DATA_DIR/'agent-ui-self-test.json').write_text(json.dumps(dict(app_version=APP_VERSION,mode='assumption',
+                planner='local_rules',model_calls=0,source_ledger_unchanged=True,scenarios=scenarios),ensure_ascii=False,indent=2),encoding='utf-8')
+            agent.close()
             (DATA_DIR / 'self-test.ok').write_text('Desktop smoke test passed', encoding='utf-8')
             app.destroy()
         else:

@@ -1,0 +1,9 @@
+{
+  "cases": 3,
+  "passed": 3,
+  "http_attempts": 11,
+  "fallbacks": 0,
+  "mean_seconds": 4.257,
+  "source_unchanged": true,
+  "callback_errors": []
+}

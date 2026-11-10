@@ -93,6 +93,77 @@ def run(output):
     return report
 
 
+def run_live_ui(output, settings_directory):
+    """Three UI jobs, real provider, synthetic ledgers; no model/runner doubles."""
+    from datetime import date
+    from urllib.parse import urlparse
+    from finance.llm import ModelClient
+    from finance.model_settings import ModelSettings
+    from scripts.evaluate_savings_agent import synthetic_ledger
+    from finance.feedback_acceptance import button
+    output = Path(output).resolve(); output.mkdir(parents=True, exist_ok=True)
+    config = ModelSettings(settings_directory).load()
+    if not config.enabled: raise ValueError('Saved model configuration unavailable; settings were not changed')
+    client = ModelClient(config.base_url, config.model, config.api_key, enabled=True)
+    reference = date(2026, 11, 10)
+    report = dict(validation='actual Desktop controls + actual ModelClient/HTTP in one UI session; synthetic finance data only',
+                  provider_host=urlparse(config.base_url).hostname, model=config.model, reference_date=reference.isoformat(),
+                  cases=[], callback_errors=[], isolation='owned test desktop; never activated')
+    with TemporaryDirectory(prefix='.test_agent_live_ui_', dir=ROOT) as temporary:
+        os.environ['FINANCE_DESKTOP_DATA_DIR'] = temporary; os.environ['FINANCE_UI_SCALE'] = '1.5'
+        original_init = tk.Tk.__init__
+        def hidden_init(self, *args, **kwargs): original_init(self, *args, **kwargs); self.withdraw()
+        with patch('finance.ui_scale.work_area', return_value=(0, 0, 1920, 1020)), patch.object(tk.Tk, '__init__', hidden_init):
+            from desktop import Desktop
+            app = Desktop()
+            try:
+                app.report_callback_exception = lambda *args: report['callback_errors'].append(str(args))
+                app.store = synthetic_ledger(Path(temporary)); app.model_client = client
+                before = Path(app.store.path).read_bytes()
+                app.show('plan'); button(app.main, 'AI 储蓄规划 · A/B/C').invoke()
+                window = app._savings_agent_window; window.today = reference; reveal_test_window(window)
+                cases = [('L1_UI', None, dict(A=210000, B=312000, C=600000)),
+                         ('H4_UI', dict(target_cents='5000', months='8', saved_cents='100', income_cents='3000', budget_cents='2600'), dict(A=330000, C=500000)),
+                         ('H5_UI', dict(budget_cents='2450'), dict(A=450000, C=500000))]
+                for identifier, changes, expected in cases:
+                    if changes:
+                        if identifier == 'H4_UI': window.mode_var.set('输入假设')
+                        for name, value in changes.items(): window.values[name].set(value)
+                        assert window.last_result is None and not window.confirm_var.get()
+                    if window.allow_model.get():
+                        window.consent_widget.invoke()
+                    confirmation = next(w for w in window.body.winfo_children() if w.winfo_class() == 'Checkbutton' and '核对并确认' in w.cget('text'))
+                    if not window.confirm_var.get(): confirmation.invoke()
+                    window.consent_widget.invoke()
+                    assert window.confirm_var.get() and window.allow_model.get()
+                    started = time.perf_counter(); window.generate_button.invoke()
+                    wait(app, lambda: not window.busy, seconds=105)
+                    plan = window.last_result
+                    assert plan is not None, 'UI discarded its result'
+                    rows = {r['label']: r for r in plan['simulation']['facts']['scenarios']} if plan['simulation'] else {}
+                    details = window.details('evidence', hidden=True)
+                    text = next(w for w in details.winfo_children() if isinstance(w, tk.Text))
+                    evidence = text.get('1.0', 'end'); details.destroy()
+                    cards = {name: label.cget('text') for name, label in window.card_labels.items()}
+                    passed = plan['model_status'] == 'verified' and plan['planner'] == 'model_tools' and all(
+                        rows.get(name, {}).get('projected_cents') == value for name, value in expected.items())
+                    row = dict(id=identifier, passed=passed, status=plan['status'], model_status=plan['model_status'],
+                               fallback=plan['planner'] == 'local_rules', http_attempts=plan['model_calls'],
+                               seconds=round(time.perf_counter()-started, 3), scenarios=rows, cards=cards,
+                               claims=plan.get('claims'), tool_trace=plan['model_trace'],
+                               readonly_evidence_checked='evidence_ids' in evidence and 'savings_target' in evidence,
+                               source_ledger_unchanged=Path(app.store.path).read_bytes() == before,
+                               ui_status=window.status.cget('text'))
+                    report['cases'].append(row)
+                    (output/'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+                    assert passed and row['readonly_evidence_checked'] and row['source_ledger_unchanged'], identifier
+                    assert not report['callback_errors']
+                assert client.connection_verified
+            finally:
+                app.destroy()
+    return report
+
+
 def isolated_run(output):
     """Create an owned test desktop, never SwitchDesktop or activate it."""
     import ctypes
@@ -124,11 +195,15 @@ def isolated_run(output):
     startup, process = Startup(), Process(); startup.cb = ctypes.sizeof(Startup); startup.desktop = name
     arguments = [sys.executable, str(Path(__file__).resolve()), str(Path(output).resolve()), '--isolated-child']
     if '--regression' in sys.argv: arguments.append('--regression')
+    if '--build-candidate' in sys.argv: arguments.append('--build-candidate')
+    if '--live-model-ui' in sys.argv:
+        if '--settings-dir' not in sys.argv: raise ValueError('--live-model-ui requires --settings-dir')
+        arguments.extend(['--live-model-ui', '--settings-dir', sys.argv[sys.argv.index('--settings-dir')+1]])
     command = ctypes.create_unicode_buffer(subprocess.list2cmdline(arguments))
     try:
         if not kernel.CreateProcessW(sys.executable, command, None, None, False, 0x08000000, None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)):
             raise ctypes.WinError(ctypes.get_last_error())
-        budget = 240 if '--regression' in sys.argv else 90
+        budget = 900 if '--build-candidate' in sys.argv else 300 if '--live-model-ui' in sys.argv else 240 if '--regression' in sys.argv else 90
         end = time.monotonic() + budget
         while kernel.WaitForSingleObject(process.process, 500) == 258:
             if time.monotonic() >= end:
@@ -148,7 +223,23 @@ def isolated_run(output):
 if __name__ == '__main__':
     if '--isolated-child' in sys.argv:
         try:
-            if '--regression' in sys.argv:
+            if '--build-candidate' in sys.argv:
+                import subprocess
+                import shutil
+                output = Path(sys.argv[1]); output.mkdir(parents=True, exist_ok=True)
+                shell = shutil.which('pwsh') or shutil.which('powershell')
+                if not shell: raise RuntimeError('PowerShell required for the Windows candidate build')
+                command = [shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'packaging/build.ps1'),
+                           '-Python', sys.executable, '-Iscc', str(ROOT.parent/'finance_assistant/tools/inno/ISCC.exe'),
+                           '-Version', '0.10.0-rc.1', '-CoursePreview']
+                with (output/'build.log').open('w', encoding='utf-8') as log:
+                    process = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=840)
+                (output/'results.json').write_text(json.dumps(dict(exit_code=process.returncode, version='0.10.0-rc.1',
+                    isolation='owned test desktop; never activated')), encoding='utf-8')
+                raise SystemExit(process.returncode)
+            elif '--live-model-ui' in sys.argv:
+                run_live_ui(sys.argv[1], sys.argv[sys.argv.index('--settings-dir')+1])
+            elif '--regression' in sys.argv:
                 from contextlib import redirect_stdout, redirect_stderr
                 from xml.etree import ElementTree
                 import pytest

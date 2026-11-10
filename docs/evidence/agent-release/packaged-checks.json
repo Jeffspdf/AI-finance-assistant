@@ -1,0 +1,77 @@
+{
+  "version": "0.10.0-rc.1",
+  "schema": 6,
+  "built_source_commit": "f6cfa976d6bdfd5a147ade8fec737140e7e951e0",
+  "checks": [
+    "--self-test",
+    "--self-test-m1a",
+    "--self-test-round5",
+    "--self-test-round6",
+    "--self-test-round7",
+    "--self-test-round8",
+    "--self-test-m2",
+    "--self-test-m2-migration"
+  ],
+  "known_warning_seen_this_build": false,
+  "historical_warning_closed": false,
+  "agent_ui": {
+    "app_version": "0.10.0",
+    "mode": "assumption",
+    "planner": "local_rules",
+    "model_calls": 0,
+    "source_ledger_unchanged": true,
+    "scenarios": {
+      "A": {
+        "label": "A",
+        "strategy": "current",
+        "status": "ok",
+        "spending_cut_cents": 0,
+        "requested_cut_cents": 0,
+        "monthly_available_cents": 35000,
+        "projected_cents": 210000,
+        "gap_cents": 390000,
+        "goal_met": false,
+        "feasible": false,
+        "negative_cashflow": false,
+        "conditional": false
+      },
+      "B": {
+        "label": "B",
+        "strategy": "cut_categories",
+        "status": "insufficient_data",
+        "reason": "缺少所选分类的预算依据，不能推算分类节省金额"
+      },
+      "C": {
+        "label": "C",
+        "strategy": "required_cut",
+        "status": "ok",
+        "spending_cut_cents": 65000,
+        "requested_cut_cents": 65000,
+        "monthly_available_cents": 100000,
+        "projected_cents": 600000,
+        "gap_cents": 0,
+        "goal_met": true,
+        "feasible": true,
+        "negative_cashflow": false,
+        "conditional": true
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "name": "AIFinanceHelper.exe",
+      "size": 9987768,
+      "sha256": "4fe1caf9e4309a1b2924e36a1d9c3447eeb03753397a7cdf0e48ca9f03afa732"
+    },
+    {
+      "name": "AIFinanceHelper-0.10.0-rc.1-Setup-x64.exe",
+      "size": 38019294,
+      "sha256": "68d6d97f3be7e83419ad6f7203bfd991af9fa518a7db5be7d88f009d7bb59572"
+    },
+    {
+      "name": "AIFinanceHelper-0.10.0-rc.1-Windows-x64.zip",
+      "size": 51666621,
+      "sha256": "a8d652e4675cbc30a68a9f72f750f215ac0ea013bdec5a4adebfa698a9320d39"
+    }
+  ]
+}

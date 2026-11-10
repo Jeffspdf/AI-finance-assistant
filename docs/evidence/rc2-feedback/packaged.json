@@ -1,0 +1,44 @@
+{
+  "build_source_commit": "62a0602e005648b8ff51c3c3ff576efdb0fec793",
+  "version": "0.10.0-rc.2",
+  "exit_code": 0,
+  "packaged_checks": [
+    "--self-test",
+    "--self-test-m1a",
+    "--self-test-round5",
+    "--self-test-round6",
+    "--self-test-round7",
+    "--self-test-round8",
+    "--self-test-m2",
+    "--self-test-m2-migration"
+  ],
+  "rc2_controls": {
+    "help_chapters": 12,
+    "help_singleton": true,
+    "agent_help_checked": true,
+    "preview_readonly": true,
+    "default_deleted_kept": true,
+    "explicit_restore_same_id": true,
+    "restored_total_cents": 3000,
+    "callback_errors": [],
+    "original_ledger_unchanged": true
+  },
+  "artifacts": [
+    {
+      "name": "AIFinanceHelper-0.10.0-rc.2-Setup-x64.exe",
+      "size": 38033238,
+      "sha256": "8902d0d6844a35da07a8b59382b8dce6af91c0b6a477840e7eb2785da49389ab"
+    },
+    {
+      "name": "AIFinanceHelper-0.10.0-rc.2-Windows-x64.zip",
+      "size": 51677984,
+      "sha256": "7203d403d54dea535181a423860efa17dcce38506319a745d08f9b2327ec91b7"
+    },
+    {
+      "name": "AIFinanceHelper.exe",
+      "size": 9997857,
+      "sha256": "a7f2260a723ce7614e11b5a89e32ff365d0e7a1f6936281be476c6a5d836fc3c"
+    }
+  ],
+  "limits": "Synthetic local EXE checks; no install/VM/signing or live-model EXE evaluation. Historical warning remains unattributed."
+}

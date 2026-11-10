@@ -16,6 +16,10 @@ def test_actual_desktop_savings_entry_and_150_percent_layout(tmp_path):
     assert len(report['checks']) == 4 and report['source_ledger_unchanged']
     assert not report['callback_errors'] and not report['layouts']['planner']['horizontal_spill']
     assert report['scale'] == 1.5
+    fixes=report['rc2_controls']
+    assert fixes['help_singleton'] and fixes['agent_help_checked'] and fixes['help_chapters']==12
+    assert fixes['preview_readonly'] and fixes['default_deleted_kept'] and fixes['explicit_restore_same_id']
+    assert fixes['original_ledger_unchanged'] and not fixes['callback_errors']
     # Windows/Tk can constrain a requested client size on a hosted desktop.
     # Keep the minimum usable viewport and requested upper bounds; the smoke
     # already checks overflow, scrolling, footer reachability and real controls.

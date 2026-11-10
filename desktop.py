@@ -224,10 +224,14 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         window.bind('<Destroy>',cleanup)
 
     def show_help_window(self):
+        existing=getattr(self,'help_window',None)
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify();existing.lift();return existing
         try:chapters=load_help(ROOT/'assets/help.md')
         except (OSError,ValueError):
             messagebox.showerror('帮助不可用','帮助资源缺失或不完整，请重新安装完整程序。',parent=self);return
         window=tk.Toplevel(self);window.title('使用帮助 · 离线');set_window_geometry(window,900,600);window.configure(bg=BG)
+        self.help_window=window
         actions=tk.Frame(window,bg=BG);actions.pack(side='bottom',fill='x',padx=px(14))
         self.button(actions,'关闭帮助',window.destroy).pack_configure(side='right')
         body=tk.Frame(window,bg=BG,padx=px(12),pady=px(10));body.pack(fill='both',expand=True)
@@ -1010,6 +1014,9 @@ if __name__ == '__main__':
             (DATA_DIR/'agent-ui-self-test.json').write_text(json.dumps(dict(app_version=APP_VERSION,mode='assumption',
                 planner='local_rules',model_calls=0,source_ledger_unchanged=True,scenarios=scenarios),ensure_ascii=False,indent=2),encoding='utf-8')
             agent.close()
+            from finance.rc2_acceptance import verify_rc2_controls
+            rc2_report=verify_rc2_controls(app,DATA_DIR/'rc2-controls')
+            (DATA_DIR/'rc2-ui-self-test.json').write_text(json.dumps(rc2_report,ensure_ascii=False,indent=2),encoding='utf-8')
             (DATA_DIR / 'self-test.ok').write_text('Desktop smoke test passed', encoding='utf-8')
             app.destroy()
         else:

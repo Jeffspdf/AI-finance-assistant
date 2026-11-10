@@ -1,7 +1,7 @@
 """Strict local help resource loader. No network or Markdown rendering dependency."""
 import re
 
-HELP_TOPICS=('快速开始','账户与绑定','导入与分类','退款与口径','跨源对账','预算','储蓄','AI 助手','数据与隐私','备份恢复','常见问题')
+HELP_TOPICS=('快速开始','账户与绑定','导入与分类','退款与口径','跨源对账','预算','储蓄','AI 储蓄规划','AI 助手','数据与隐私','备份恢复','常见问题')
 
 
 def load_help(path):

@@ -1,0 +1,39 @@
+{
+  "scale": 1.5,
+  "work_area": [
+    0,
+    0,
+    1920,
+    1020
+  ],
+  "isolation": "owned test desktop; never activated",
+  "validation": "actual controls and mapped layout; not a screenshot/visual-paint acceptance",
+  "checks": [
+    "actual desktop entry; confirmation/consent defaults; local A/B/C and fixed footer",
+    "scroll reaches evidence/prefill actions; fixed footer stays visible",
+    "claims evidence is local; prefill reaches existing form without saving",
+    "missing history offers explicit switch; assumptions recalculate without history"
+  ],
+  "layouts": {
+    "planner": {
+      "size": [
+        1590,
+        948
+      ],
+      "horizontal_spill": []
+    }
+  },
+  "callback_errors": [],
+  "source_ledger_unchanged": true,
+  "rc2_controls": {
+    "help_chapters": 12,
+    "help_singleton": true,
+    "agent_help_checked": true,
+    "preview_readonly": true,
+    "default_deleted_kept": true,
+    "explicit_restore_same_id": true,
+    "restored_total_cents": 3000,
+    "callback_errors": [],
+    "original_ledger_unchanged": true
+  }
+}

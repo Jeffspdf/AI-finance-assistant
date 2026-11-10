@@ -86,6 +86,9 @@ def run(output):
                 reveal_test_window(window)
                 report['checks'].append('missing history offers explicit switch; assumptions recalculate without history')
                 report['source_ledger_unchanged'] = Path(store.path).read_bytes() == before
+                window.close()
+                from finance.rc2_acceptance import verify_rc2_controls
+                report['rc2_controls']=verify_rc2_controls(app,output/'rc2-controls')
                 assert not report['callback_errors']
             finally:
                 app.destroy()
@@ -231,10 +234,10 @@ if __name__ == '__main__':
                 if not shell: raise RuntimeError('PowerShell required for the Windows candidate build')
                 command = [shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'packaging/build.ps1'),
                            '-Python', sys.executable, '-Iscc', str(ROOT.parent/'finance_assistant/tools/inno/ISCC.exe'),
-                           '-Version', '0.10.0-rc.1', '-CoursePreview']
+                           '-Version', '0.10.0-rc.2', '-CoursePreview']
                 with (output/'build.log').open('w', encoding='utf-8') as log:
                     process = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=840)
-                (output/'results.json').write_text(json.dumps(dict(exit_code=process.returncode, version='0.10.0-rc.1',
+                (output/'results.json').write_text(json.dumps(dict(exit_code=process.returncode, version='0.10.0-rc.2',
                     isolation='owned test desktop; never activated')), encoding='utf-8')
                 raise SystemExit(process.returncode)
             elif '--live-model-ui' in sys.argv:

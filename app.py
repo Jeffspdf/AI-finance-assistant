@@ -133,9 +133,19 @@ elif page=='导入与分类':
                 preview=pd.DataFrame(parsed.rows)
                 st.dataframe(view_records(preview.drop(columns=['signature'])),hide_index=True,width='stretch')
                 st.caption('优先按平台与原始交易 ID 去重。同一 ID 内容冲突会标记，不覆盖原记录。没有 ID 时按组合字段识别重复，请核对。')
+                deleted_preview=store.preview_import(parsed)
+                restore_deleted=False
+                if deleted_preview['deleted_count']:
+                    st.info(f"匹配 {deleted_preview['deleted_count']} 行已删除来源；默认保持删除。")
+                    st.dataframe(pd.DataFrame(deleted_preview['deleted_rows']),hide_index=True,width='stretch')
+                    restore_key='restore_deleted_'+workspace+'_'+parsed.document['sha256']+'_'+str(parsed.document.get('account_id'))+'_'+str(
+                        sorted((r['id'],r['delete_event']) for r in deleted_preview['deleted_rows']))
+                    restore_deleted=st.checkbox('恢复本次预览中的已删除记录（默认不勾选）',value=False,key=restore_key)
                 if st.button('确认导入',type='primary'):
-                    added,duplicates,conflicts=store.import_statement(parsed)
-                    st.success(f'已保存 {added} 笔，跳过重复 {duplicates} 笔。')
+                    saved=store.import_statement(parsed,restore_deleted=restore_deleted,
+                        restore_ids=tuple(r['id'] for r in deleted_preview['deleted_rows']) if restore_deleted else None)
+                    added,duplicates,conflicts=saved
+                    st.success(f'新增 {added-saved.restored} 笔，显式恢复 {saved.restored} 笔，重复跳过 {duplicates} 行，已删除保持 {saved.deleted_skipped} 行。')
                     if conflicts: st.dataframe(pd.DataFrame(conflicts),hide_index=True)
                     tx=store.spending_view()
         except Exception as exc:

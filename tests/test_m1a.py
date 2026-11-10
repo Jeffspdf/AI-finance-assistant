@@ -85,7 +85,9 @@ def test_document_hash_reuse_batches_raw_privacy_and_delete(tmp_path):
     assert store.delete_import_batch(original['id'])==4
     assert expense(store)==6000 and len(store.source_transactions())==2
     assert all(g['status']=='needs_review' for g in store.reconciliation_groups())
-    assert store.import_statement(wx)==(4,0,[])
+    skipped=store.import_statement(wx)
+    assert skipped==(0,0,[]) and skipped.deleted_skipped==4
+    assert store.import_statement(wx,restore_deleted=True)==(4,0,[])
     assert expense(store)==12000  # no stale decision silently reapplied
     with store.connect() as db:
         assert db.execute("SELECT COUNT(*) FROM audit_events WHERE event='batch_deleted'").fetchone()[0]==1

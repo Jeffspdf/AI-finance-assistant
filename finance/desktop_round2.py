@@ -158,6 +158,7 @@ class RoundTwo:
         if not filename:return
         store=self.store;mode=self.mode
         window=tk.Toplevel(self);window.title('导入账单');set_window_geometry(window, 800, 630);window.configure(bg=BG)
+        self.import_dialog=window
         box=tk.Frame(window,bg=BG,padx=px(18),pady=px(14));box.pack(fill='both',expand=True)
         status=self.label(box,'正在解析文件…可取消，本阶段不会写入账单。',12,PRIMARY)
         content=tk.Frame(box,bg=BG);content.pack(fill='both',expand=True)
@@ -174,14 +175,14 @@ class RoundTwo:
                 path=Path(filename)
                 if path.stat().st_size>20*1024*1024:raise ValueError('文件超过 20 MB')
                 result=parse_statement(path.read_bytes(),path.name,retain_source=True,adapter=adapter,account_id=account_id)
-                mailbox.put(('parsed',result))
+                mailbox.put(('parsed',(result,store.preview_import(result))))
             except Exception as exc:mailbox.put(('error',str(exc)))
         def export_issues(result):
             destination=filedialog.asksaveasfilename(parent=window,defaultextension='.csv',filetypes=[('CSV','*.csv')],initialfile='import-issues.csv')
             if destination:
                 with open(destination,'w',encoding='utf-8-sig',newline='') as stream:
                     fields=list(result.issues[0]) if result.issues else ['行号','原因'];writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader();writer.writerows(result.issues)
-        def preview(result):
+        def preview(result,deleted_preview):
             format_name={'wechat_csv':'微信 CSV','bank_template_v1':'银行模板 v1 XLSX','generic':'通用 CSV/XLSX'}[result.adapter]
             status.config(text=f'已识别：{format_name} · 有效 {len(result.rows)} 行 · 异常 {len(result.issues)} 行 · 跳过 {result.skipped} 行。')
             if result.adapter=='wechat_csv' and not account_id:
@@ -189,20 +190,40 @@ class RoundTwo:
                 hint_actions=tk.Frame(content,bg=BG);hint_actions.pack(fill='x')
                 self.button(hint_actions,'管理账户与支付绑定',self.account_window)
             if result.warnings:self.label(content,'\n'.join(result.warnings),9,DANGER).configure(wraplength=px(730))
+            restore_choice=tk.BooleanVar(window,value=False)
+            deleted_count=deleted_preview['deleted_count']
+            deleted_note=self.label(content,f'匹配 {deleted_count} 行已删除来源；默认保持删除，不会恢复。',10,PRIMARY)
+            deleted_note.configure(wraplength=px(730))
+            if deleted_count:
+                def update_restore_note():
+                    deleted_note.configure(text=f'已选择显式恢复本次预览的 {deleted_count} 个匹配来源行；旧对账/退款关系仍需复核。' if restore_choice.get()
+                                           else f'匹配 {deleted_count} 行已删除来源；默认保持删除，不会恢复。')
+                tk.Checkbutton(content,text='恢复本次预览中的已删除记录（默认不勾选）',variable=restore_choice,command=update_restore_note,
+                               bg=BG,fg=INK,anchor='w',wraplength=px(730)).pack(fill='x')
             notebook=ttk.Notebook(content);notebook.pack(fill='both',expand=True)
             valid=tk.Frame(notebook,bg='white');issues=tk.Frame(notebook,bg='white');notebook.add(valid,text='有效记录预览（前200）');notebook.add(issues,text=f'全部异常（{len(result.issues)}）')
             self.table(valid,['日期','商户','类型','金额','分类'],[[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:.2f}",r['category']] for r in result.rows[:200]],8)
             self.table(issues,['行号','原因','日期','金额'],[[r.get(k,'') for k in ['行号','原因','日期','金额']] for r in result.issues],8)
+            if deleted_count:
+                deleted_tab=tk.Frame(notebook,bg='white');notebook.add(deleted_tab,text=f'已删除来源（{deleted_count}行）')
+                self.table(deleted_tab,['原始行','日期','商户','类型','金额','删除原因','原交易 ID'],
+                           [[r['source_row'],r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:.2f}",r['reason'],r['id']]
+                            for r in deleted_preview['deleted_rows'][:200]],8)
+                if deleted_count>200:self.label(deleted_tab,'预览前 200 行；勾选恢复授权覆盖本次匹配的全部来源行。',9,MUTED)
             if len(result.issues)>200:
                 self.label(issues,'预览前 200 条，全部异常可导出 CSV。',9,MUTED)
             if result.issues:self.button(actions,'导出全部异常 CSV',lambda:export_issues(result))
             def commit():
                 if state['writing']:return
+                if self.mode!=mode or Path(self.store.path).resolve()!=Path(store.path).resolve():
+                    status.config(text='空间已切换，请回到原空间或重新打开导入预览。',fg=DANGER);return
+                restore_deleted=restore_choice.get()
+                restore_ids=tuple(r['id'] for r in deleted_preview['deleted_rows']) if restore_deleted else None
                 state['writing']=True;commit_button.config(state='disabled');cancel_button.config(state='disabled')
                 status.config(text='正在保存有效记录…完成前请勿关闭。')
                 def writer():
                     try:
-                        saved=store.import_statement(result)
+                        saved=store.import_statement(result,restore_deleted=restore_deleted,restore_ids=restore_ids)
                         try:
                             store.generate_candidates()
                             candidates=store.candidate_summary()
@@ -210,20 +231,25 @@ class RoundTwo:
                         mailbox.put(('saved',(saved,result,candidates)))
                     except Exception as exc:mailbox.put(('error',str(exc)))
                 threading.Thread(target=writer,daemon=True).start()
-            if result.raw_rows:commit_button=self.button(actions,'确认导入并保存来源',commit)
+            if result.raw_rows:
+                commit_button=self.button(actions,'确认导入并保存来源',commit)
+                window.import_controls=dict(restore_deleted=restore_choice,deleted_preview=deleted_preview,commit=commit_button,status=status)
         def poll():
             if cancel.is_set() or not window.winfo_exists():return
             try:kind,value=mailbox.get_nowait()
             except queue.Empty:window.poll=window.after(80,poll);return
-            if kind=='parsed':preview(value)
+            if kind=='parsed':preview(*value)
             elif kind=='error':
                 state['writing']=False;status.config(text='未完成导入：'+value,fg=DANGER);cancel_button.config(state='normal')
             elif kind=='saved':
                 state['writing']=False;state['done']=True
-                ((added,duplicates,conflicts),result,candidates)=value
+                (saved,result,candidates)=value
+                added,duplicates,conflicts=saved
                 for child in content.winfo_children():child.destroy()
                 for child in actions.winfo_children():child.destroy()
-                status.config(text=f'已新增 {added} 笔，重复跳过 {duplicates} 笔，冲突 {len(conflicts)} 笔。')
+                status.config(text=f'已新增 {added-saved.restored} 笔，显式恢复 {saved.restored} 笔，重复跳过 {duplicates} 行，已删除保持 {saved.deleted_skipped} 行，冲突 {len(conflicts)} 行。')
+                status.configure(wraplength=px(730))
+                window.import_controls['outcome']=saved
                 self.label(content,f'异常 {len(result.issues)} 行未入库；原有冲突交易未被覆盖。',11,MUTED)
                 if candidates is not None:
                     self.label(content,f'当前空间发现 {sum(candidates.values())} 组待核对候选（A/B级 {candidates["A"]+candidates["B"]}，C级 {candidates["C"]}）。尚未自动排重。',11,PRIMARY).configure(wraplength=px(730))

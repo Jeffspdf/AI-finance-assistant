@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "isolation": "owned test desktop; never activated",
+  "name": "pytest",
+  "errors": "0",
+  "failures": "0",
+  "skipped": "0",
+  "tests": "771",
+  "time": "106.050",
+  "timestamp": "2026-11-10T23:29:11.966884+08:00"
+}

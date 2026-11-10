@@ -88,11 +88,11 @@ def verify_feedback_controls(app,folder):
             with patch('socket.socket',side_effect=AssertionError('Help must be offline')):help_window=app.show_help_window()
             app.update();controls=help_window.help_controls
             assert controls['topics'].size()==len(HELP_TOPICS) and controls['text'].cget('state')=='disabled'
-            controls['topics'].selection_clear(0,'end');controls['topics'].selection_set(10);controls['topics'].event_generate('<<ListboxSelect>>');app.update()
+            controls['topics'].selection_clear(0,'end');controls['topics'].selection_set(HELP_TOPICS.index('常见问题'));controls['topics'].event_generate('<<ListboxSelect>>');app.update()
             assert '常见问题' in controls['text'].get('1.0','end')
             close=button(help_window,'关闭帮助')
             assert close.winfo_rooty()+close.winfo_height()<=help_window.winfo_rooty()+help_window.winfo_height()+2
-            layout('offline_help',help_window);help_window.destroy();checks.append('11 offline chapters; readonly text; chapter switching; fixed close button')
+            layout('offline_help',help_window);help_window.destroy();checks.append(f'{len(HELP_TOPICS)} offline chapters; readonly text; chapter switching; fixed close button')
             app.selected_month='全部月份';app.show('budget_page');app.update()
             assert app.selected_month==date.today().strftime('%Y-%m')
             future=month_shift(date.today(),1)

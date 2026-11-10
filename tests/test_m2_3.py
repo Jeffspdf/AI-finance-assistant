@@ -191,7 +191,7 @@ def test_reimporting_deleted_source_cannot_reactivate_a_stale_confirmation(tmp_p
     store,link=confirmed(tmp_path);old=values(store,'R-W')
     with store.connect() as db:db.execute("UPDATE transactions SET status='deleted' WHERE id='R-W'")
     assert store.refund_links()[0]['repair_pending']
-    assert store.import_rows([old])[0]==1
+    assert store.import_rows([old],restore_deleted=True)[0]==1
     assert store.refund_links()[0]['stored_status']=='needs_review' and expense(store.spending_view())==10000
     assert store.refund_links()[0]['context_json']==link['context_json'];observe(store)
 
@@ -204,7 +204,7 @@ def test_real_import_after_batch_deletion_preserves_identity_without_reconfirmin
     when='2026-09-01' if endpoint=='P' else '2026-10-01'
     data=(header+f'{endpoint},{when},合成餐厅,合成来源,{amount},{kind},微信,CNY,{status}\n').encode()
     store.delete_import_batch(row['import_batch_id'])
-    result=store.import_statement(parse_statement(data,endpoint+'.csv',retain_source=True))
+    result=store.import_statement(parse_statement(data,endpoint+'.csv',retain_source=True),restore_deleted=True)
     assert result[0]==1 and store.transaction_source(row['id'])['sha256']==source['sha256']
     assert store.refund_links()[0]['stored_status']=='needs_review' and expense(store.spending_view())==10000
     assert store.refund_links()[0]['context_json']==link['context_json'];observe(store)

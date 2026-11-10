@@ -14,6 +14,18 @@ from .categories import validate_kind_category,category_options
 from .backup_management import BackupManagement
 from .refunds import Refunds
 
+
+class ImportOutcome(tuple):
+    """Keep the existing three-value API, with explicit deletion/restore counts.
+
+    added retains its historical meaning: newly written OR explicitly restored.
+    """
+    def __new__(cls, added, duplicates, conflicts, *, deleted_skipped=0, restored=0):
+        result = super().__new__(cls, (added, duplicates, conflicts))
+        result.deleted_skipped, result.restored = deleted_skipped, restored
+        return result
+
+
 class Store(Refunds,Reconciliation,BackupManagement):
     def __init__(self, path, *, read_only=False):
         self.path = str(path)
@@ -71,9 +83,9 @@ class Store(Refunds,Reconciliation,BackupManagement):
             frame.attrs['refund_pending']=self._pending_refund_summary(refund_inventory(db))
             return frame[frame.included_in_stats].copy()
 
-    def import_rows(self, rows):
+    def import_rows(self, rows, *, restore_deleted=False, restore_ids=None):
         with self.connect() as db:
-            db.execute('BEGIN IMMEDIATE');return self._insert_rows(db,rows)
+            db.execute('BEGIN IMMEDIATE');return self._insert_rows(db,rows,restore_deleted=restore_deleted,restore_ids=restore_ids)
 
     def validate_refund_link(self,refund_txn_id,original_txn_id,amount_cents=None):
         """M2-1 foundation: read-only validation, without confirming or deducting."""
@@ -90,17 +102,77 @@ class Store(Refunds,Reconciliation,BackupManagement):
             invalid|=(frame.kind==kind)&~frame.category.isin(category_options(kind))
         return frame.loc[invalid].copy()
 
-    def _insert_rows(self, db, rows):
-        added, duplicates, conflicts = 0, 0, []
+    @staticmethod
+    def _import_content_key(row):
+        return tuple(row.get(k) for k in ('external_id','date','amount_cents','kind','merchant','description','currency'))
+
+    def _import_lookup(self, db):
         existing={r['signature']:dict(r) for r in db.execute('SELECT * FROM transactions')}
-        origins=defaultdict(list);weak_identities=defaultdict(list)
-        def content_key(row):
-            return tuple(row.get(k) for k in ('external_id','date','amount_cents','kind','merchant','description','currency'))
+        origins=defaultdict(list);weak_identities=defaultdict(list);deleted_origins=defaultdict(list);by_id={}
         def index(row):
-            if row['status']=='deleted':return
+            by_id[row['id']]=row
+            if row['status']=='deleted':
+                if row.get('source_document_id'):deleted_origins[(row['source_document_id'],row['source_row'])].append(row)
+                return
             if row.get('source_document_id'):origins[(row['source_document_id'],row['source_row'])].append(row)
-            if row['external_id']:weak_identities[content_key(row)].append(row)
+            if row['external_id']:weak_identities[self._import_content_key(row)].append(row)
         for row in existing.values():index(row)
+        return existing,origins,weak_identities,deleted_origins,index,by_id
+
+    def _match_import(self, row, lookup):
+        existing,origins,weak_identities,deleted_origins,_,by_id=lookup
+        old=existing.get(row['signature'])
+        if not old and not row.get('source_document_id'):old=by_id.get(row['id'])
+        if row.get('source_document_id') and (not old or old['status']=='deleted'):
+            same_origin=origins.get((row['source_document_id'],row['source_row']),[])
+            ambiguous=[other for other in weak_identities.get(self._import_content_key(row),[])
+                       if (other['channel'] in ('未指定','通用') or row['channel'] in ('未指定','通用'))
+                       and (other['channel'],other['account_id'])!=(row['channel'],row['account_id'])]
+            if same_origin or ambiguous:
+                return None,'相同原始行或未明确来源的同交易ID已存在，账户/格式声明不同，未重复计入；请核对原批次'
+        if not old and row.get('source_document_id'):
+            identity=('external|'+row['channel']+'|'+row['external_id']) if row['external_id'] else 'fingerprint|'+'|'.join([row['date'],str(row['amount_cents']),row['kind'],row['merchant'],row['description'],row['channel']])
+            legacy=existing.get(sha256(identity.encode()).hexdigest())
+            if legacy and legacy['account_id'] is None:
+                if legacy['status']!='deleted' and row['account_id'] is not None:
+                    return None,'存在未指定账户的旧记录，未再次计入；请核对旧记录来源'
+                old=legacy
+            if not old:
+                matches=[r for r in deleted_origins.get((row['source_document_id'],row['source_row']),[]) if r['status']=='deleted']
+                if len(matches)>1:return None,'同一原始行有多条已删除来源，请先核对，未自动恢复'
+                if matches:old=matches[0]
+        if not old and row['id'] in by_id:return None,'原交易标识已被另一来源使用，请先核对，未覆盖'
+        if old and any(old[k]!=row[k] for k in ('date','amount_cents','kind','merchant','description','currency')):
+            return None,'同一交易 ID 的内容不同，未覆盖原记录（含原始行冲突）'
+        return old,None
+
+    def preview_import(self, result):
+        """Read-only tombstone preview, sharing the commit's identity matching."""
+        if not result.document:raise ValueError('此预览没有来源信息，请重新解析')
+        with self.connect(read_only=True) as db:
+            db.execute('BEGIN');lookup=self._import_lookup(db);rows=[]
+            deletes={}
+            for event in db.execute("SELECT id,event,entity_id FROM audit_events WHERE event IN ('transaction_soft_deleted','batch_deleted') ORDER BY id"):
+                deletes[(event['event'],event['entity_id'])]=(event['id'], '单笔删除' if event['event']=='transaction_soft_deleted' else '整批删除')
+            for value in result.rows:
+                row=dict(value,source_document_id='DOC-'+result.document['sha256'],account_id=result.document.get('account_id'))
+                old,conflict=self._match_import(row,lookup)
+                if conflict or not old or old['status']!='deleted':continue
+                events=[deletes[k] for k in [('transaction_soft_deleted',old['id']),('batch_deleted',old.get('import_batch_id'))] if k in deletes]
+                delete_event,reason=max(events) if events else (0,'历史删除（无逐笔原因）')
+                rows.append(dict(id=old['id'],source_row=row['source_row'],date=old['date'],merchant=old['merchant'],
+                                 kind=old['kind'],amount_cents=old['amount_cents'],reason=reason,delete_event=delete_event))
+            return dict(deleted_count=len(rows),deleted_rows=rows)
+
+    def _insert_rows(self, db, rows, *, restore_deleted=False, restore_ids=None):
+        if type(restore_deleted) is not bool:raise ValueError('恢复已删除记录必须明确选择')
+        if restore_ids is not None:
+            if isinstance(restore_ids,(str,bytes)):raise ValueError('恢复范围无效')
+            restore_ids=tuple(restore_ids)
+            if any(not isinstance(x,str) for x in restore_ids):raise ValueError('恢复范围无效')
+            restore_ids=set(restore_ids)
+        added,duplicates,conflicts,deleted_skipped,restored=0,0,[],0,0
+        lookup=self._import_lookup(db);existing,_,_,_,index,_=lookup
         learned={(r['merchant'],r['kind']):r['category'] for r in db.execute('SELECT * FROM merchant_rules')}
         keys=['id','external_id','date','merchant','description','amount_cents','kind','category','category_source','channel','source_file','source_row','signature',
               'currency','status','account_id','source_document_id','raw_row_id','import_batch_id']
@@ -110,32 +182,14 @@ class Store(Refunds,Reconciliation,BackupManagement):
             for key in ('account_id','source_document_id','raw_row_id','import_batch_id'):row.setdefault(key,None)
             if row['account_id'] and db.execute('SELECT 1 FROM accounts WHERE id=? AND archived_at IS NOT NULL',(row['account_id'],)).fetchone():raise ValueError('已归档账户不能导入新交易，请先恢复账户')
             validate_kind_category(row['kind'],row['category'])
-            old=existing.get(row['signature'])
-            if row.get('source_document_id') and (not old or old['status']=='deleted'):
-                same_origin=origins.get((row['source_document_id'],row['source_row']),[])
-                # An exact source row cannot become a second transaction by changing
-                # parser/account. Scoped IDs in genuinely different known accounts
-                # remain valid; a global external-ID uniqueness rule would lose data.
-                ambiguous=[other for other in weak_identities.get(content_key(row),[])
-                           if (other['channel'] in ('未指定','通用') or row['channel'] in ('未指定','通用'))
-                           and (other['channel'],other['account_id'])!=(row['channel'],row['account_id'])]
-                collision=(same_origin or ambiguous)
-                if collision:
-                    conflicts.append({'行号':row['source_row'],'原因':'相同原始行或未明确来源的同交易ID已存在，账户/格式声明不同，未重复计入；请核对原批次'})
-                    continue
-            if not old and row.get('source_document_id'):
-                identity=('external|'+row['channel']+'|'+row['external_id']) if row['external_id'] else 'fingerprint|'+'|'.join([row['date'],str(row['amount_cents']),row['kind'],row['merchant'],row['description'],row['channel']])
-                legacy=existing.get(sha256(identity.encode()).hexdigest())
-                if legacy and legacy['status']!='deleted' and legacy['account_id'] is None:
-                    if row['account_id'] is not None:
-                        conflicts.append({'行号':row['source_row'],'原因':'存在未指定账户的旧记录，未再次计入；请核对旧记录来源'})
-                        continue
-                    old=legacy
+            old,conflict=self._match_import(row,lookup)
+            if conflict:
+                conflicts.append({'行号':row['source_row'],'原因':conflict});continue
             if old and old['status']!='deleted':
-                if any(old[k] != row[k] for k in ['date','amount_cents','kind','merchant','description','currency']):
-                    conflicts.append({'行号':row['source_row'], '原因':'同一交易 ID 的内容不同，未覆盖原记录'})
-                else:duplicates+=1
+                duplicates+=1
                 continue
+            if old and (not restore_deleted or restore_ids is not None and old['id'] not in restore_ids):
+                deleted_skipped+=1;continue
             learned_category=learned.get((row['merchant'].strip(),row['kind']))
             if learned_category and row['category_source']!='用户修正':
                 try:validate_kind_category(row['kind'],learned_category)
@@ -143,22 +197,27 @@ class Store(Refunds,Reconciliation,BackupManagement):
                 else:row.update(category=learned_category,category_source='商户学习')
             validate_kind_category(row['kind'],row['category'])
             if old:
-                # Reimport after a soft deletion is explicit; preserve stable identity.
+                # Only the explicit restore option can revive a tombstone.
+                if row['status']=='deleted':raise ValueError('请使用原始账单内容恢复，不能导入删除状态')
                 row['id']=old['id']
-                self.invalidate_groups(db,row['id'],'软删除来源被明确重新导入，旧退款决定需重新确认')
+                self.invalidate_groups(db,row['id'],'用户明确选择恢复已删除来源，旧退款决定需重新确认')
                 db.execute('UPDATE transactions SET '+','.join(k+'=?' for k in keys if k!='id')+' WHERE id=?',
                            [row[k] for k in keys if k!='id']+[old['id']])
+                audit(db,'transaction_restored',old['id'],dict(explicit_restore=True,old_status=old['status'],new_status=row['status'],
+                      amount_cents=row['amount_cents'],old_batch=old.get('import_batch_id'),new_batch=row.get('import_batch_id'),
+                      old_account=old.get('account_id'),new_account=row.get('account_id')))
+                existing.pop(old['signature'],None);old.update(row);restored+=1
             else:
                 db.execute(f"INSERT INTO transactions ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})",[row[k] for k in keys])
             existing[row['signature']]=row;index(row);added+=1
-        return added, duplicates, conflicts
+        return ImportOutcome(added,duplicates,conflicts,deleted_skipped=deleted_skipped,restored=restored)
 
-    def import_statement(self,result):
+    def import_statement(self,result,*,restore_deleted=False,restore_ids=None):
         """Commit provenance, issues and transactions together, even an all-invalid file."""
         with self.connect() as db:
-            db.execute('BEGIN IMMEDIATE');return self._import_statement(db,result)
+            db.execute('BEGIN IMMEDIATE');return self._import_statement(db,result,restore_deleted=restore_deleted,restore_ids=restore_ids)
 
-    def _import_statement(self,db,result):
+    def _import_statement(self,db,result,*,restore_deleted=False,restore_ids=None):
         """Also used by the demo generator inside its replacement transaction."""
         if not result.document:raise ValueError('此预览没有来源信息，请重新使用导入入口解析')
         doc=result.document;document_id='DOC-'+doc['sha256'];batch_id='BATCH-'+uuid.uuid4().hex
@@ -180,10 +239,12 @@ class Store(Refunds,Reconciliation,BackupManagement):
             db.execute('INSERT OR IGNORE INTO raw_rows(id,document_id,row_no,raw_json,parse_status) VALUES (?,?,?,?,?)',
                        (raw_id,document_id,raw['row_no'],json.dumps(raw['fields'],ensure_ascii=False),raw['parse_status']))
         rows=[dict(r,source_document_id=document_id,raw_row_id=raw_ids[r['source_row']],import_batch_id=batch_id,account_id=account) for r in result.rows]
-        added,duplicates,conflicts=self._insert_rows(db,rows)
+        outcome=self._insert_rows(db,rows,restore_deleted=restore_deleted,restore_ids=restore_ids)
+        added,duplicates,conflicts=outcome
         db.execute("UPDATE import_batches SET status='committed',finished_at=CURRENT_TIMESTAMP,added=?,duplicates=?,conflicts=?,issues_json=? WHERE id=?",(added,duplicates,len(conflicts),json.dumps(result.issues+conflicts,ensure_ascii=False),batch_id))
-        audit(db,'batch_imported',batch_id,{'document':document_id,'added':added,'duplicates':duplicates,'conflicts':len(conflicts)})
-        return added,duplicates,conflicts
+        audit(db,'batch_imported',batch_id,{'document':document_id,'added':added,'duplicates':duplicates,'conflicts':len(conflicts),
+              'deleted_skipped':outcome.deleted_skipped,'restored':outcome.restored,'restore_requested':restore_deleted})
+        return outcome
 
     def import_batches(self):
         with self.connect(read_only=True) as db:

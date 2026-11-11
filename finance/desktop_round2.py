@@ -140,7 +140,7 @@ class RoundTwo:
         entry=ttk.Entry(window,width=45);entry.pack(fill='x',padx=px(18),pady=px(14))
         def run():
             value=entry.get().strip();window.destroy()
-            pages={'概览':'home','账本':'records','预算':'budget_page','规划':'plan','助手':'assistant','设置':'settings'}
+            pages={'概览':'home','账本':'records','预算':'budget_page','规划':'plan','助手':'chat_home','AI 对话':'chat_home','设置':'settings'}
             if value in pages:self.show(pages[value]);return
             self.selected_month='全部月份';self.search_text=value;self.category_filter='全部分类'
             if value in CATEGORIES:self.category_filter=value;self.search_text=''

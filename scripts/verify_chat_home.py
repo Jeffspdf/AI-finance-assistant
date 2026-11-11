@@ -11,7 +11,8 @@ import tkinter as tk
 from tkinter import ttk
 from unittest.mock import patch
 
-from finance.desktop_chat_home import DINING_QUESTION, _read_answer
+from finance.chat_widgets import RoundedButton
+from finance.desktop_chat_home import DINING_QUESTION, _guidance, _read_answer
 from finance.feedback_acceptance import descendants
 from finance.qa import month_shift
 from finance.storage import Store
@@ -34,18 +35,28 @@ def _labels(widget):
 
 
 def _button(widget, text):
-    return next(w for w in descendants(widget) if isinstance(w, (tk.Button, ttk.Button)) and w.cget('text') == text)
+    return next(w for w in descendants(widget)
+                if isinstance(w, (tk.Button, ttk.Button, RoundedButton)) and w.cget('text') == text)
 
 
 def _submit(view, question):
-    view.question.insert(0, question)
+    view.question.insert('1.0', question)
     view.send_button.invoke()
+
+
+def _click(widget):
+    x, y = widget.winfo_width() // 2, widget.winfo_height() // 2
+    widget.event_generate('<Enter>', x=x, y=y)
+    widget.event_generate('<ButtonPress-1>', x=x, y=y)
+    widget.event_generate('<ButtonRelease-1>', x=x, y=y)
 
 
 def verify_packaged_entry(app):
     """Quick entry check inside the existing packaged desktop self-test."""
     assert app.page == 'chat_home'
     view = app.chat_home_view
+    assert view.send_button.cget('style') == 'ChatSend.TButton'
+    assert view.send_button.winfo_width() == view.send_button.winfo_height() > 1
     ledger = Path(app.store.path)
     before = ledger.read_bytes()
     view.dining_button.invoke()
@@ -91,13 +102,22 @@ def run(output, wait):
         with patch('finance.ui_scale.work_area', return_value=(0, 0, 1920, 1020)):
             app = Desktop()
             try:
-                report = exercise(app, data, wait)
+                report = exercise(app, data, wait, output)
             finally:
                 app.destroy()
     (output / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
-def exercise(app, data, wait):
+def _capture(app, output, filename):
+    if os.environ.get('FINANCE_CHAT_CAPTURE') != '1':
+        return
+    import ctypes
+    from PIL import ImageGrab
+    app.update()
+    ImageGrab.grab(window=ctypes.windll.user32.GetParent(app.winfo_id())).save(output / filename)
+
+
+def exercise(app, data, wait, output):
     errors = []
     app.report_callback_exception = lambda *args: errors.append(str(args))
     app.update()
@@ -105,22 +125,46 @@ def exercise(app, data, wait):
     view = app.chat_home_view
     assert view.question.winfo_ismapped()
     assert '今天想看看哪笔账' in _labels(view.messages)
+    assert sum(isinstance(w, RoundedButton) for w in descendants(view.messages)) == 4
+    assert view.send_button.winfo_width() == view.send_button.winfo_height()
+    _capture(app, output, 'welcome.png')
     db_paths = [data / 'demo.sqlite3', data / 'personal.sqlite3']
     before = [path.read_bytes() for path in db_paths]
 
-    view.dining_button.invoke()
+    view.question.focus_force()
+    view.question.insert('1.0', '上个月')
+    view.question.mark_set('insert', 'end-1c')
+    view.question.event_generate('<Shift-Return>')
+    assert view.question.get('1.0', 'end-1c') == '上个月\n'
+    view.question.insert('insert', '餐饮花了多少？')
+    view.question.event_generate('<Return>')
     wait(app, lambda: view.cancelled is None)
-    assert '123.45 元，共 1 笔' in _labels(view.messages)
-    _button(view.messages, '查看依据').invoke()
+    assert {'123.45 元', '共 1 笔', '小财灵'} <= {w.cget('text') for w in descendants(view.messages) if isinstance(w, tk.Label)}
+    _capture(app, output, 'answer.png')
+    _click(_button(view.messages, '查看依据'))
     app.update()
     evidence = next(w for w in view.winfo_children() if isinstance(w, tk.Toplevel))
     source_table = next(w for w in descendants(evidence) if isinstance(w, ttk.Treeview))
     assert '合成食堂' in source_table.item(source_table.get_children()[0], 'values')
     details = next(w for w in descendants(evidence) if isinstance(w, tk.Text))
     assert details.cget('state') == 'disabled'
+    _button(view.messages, '查看依据').invoke()
+    assert [w for w in view.winfo_children() if isinstance(w, tk.Toplevel)] == [evidence]
+    view.question.insert('1.0', '上个月结余是多少？')
+    _click(view.send_button)
+    wait(app, lambda: view.cancelled is None)
+    evidence_buttons = [w for w in descendants(view.messages)
+                        if isinstance(w, RoundedButton) and w.text == '查看依据']
+    evidence_buttons[-1].invoke()
+    details = next(w for w in descendants(evidence) if isinstance(w, tk.Text))
+    assert '结余' in details.get('1.0', 'end')
     evidence.destroy()
+    evidence_buttons[-1].invoke()
+    assert view.evidence_window is not evidence
+    view.evidence_window.destroy()
 
-    view.planner_button.invoke()
+    _submit(view, '我想存6000元')
+    _button(view.messages, '打开 A/B/C 储蓄规划').invoke()
     planner = app._savings_agent_window
     assert planner.winfo_exists() and app.page == 'chat_home'
     planner.confirm_var.set(True)
@@ -133,13 +177,20 @@ def exercise(app, data, wait):
 
     with patch('finance.desktop_chat_home._read_answer', side_effect=AssertionError('Write requests must use guidance')) as query:
         _submit(view, '把餐饮预算设为 1200')
-        _submit(view, '删除那笔交易')
+        _submit(view, '能不能删除一笔交易')
         assert not query.called
+    for question in ('本月餐饮预算还剩多少？', '退款待处理多少笔？', '设置的预算是多少？', '删除了多少笔交易？'):
+        assert _guidance(question) is None, question
     _button(view.messages, '前往预算与提醒').invoke()
     assert app.page == 'budget_page'
-    app.nav['chat_home'].invoke()
+    app.command_palette()
+    palette = next(w for w in app.winfo_children() if isinstance(w, tk.Toplevel) and w.title() == '搜索与快捷操作')
+    entry = next(w for w in descendants(palette) if isinstance(w, ttk.Entry))
+    entry.insert(0, '助手')
+    _button(palette, '查找 / 前往').invoke()
+    assert app.page == 'chat_home'
     view = app.chat_home_view
-    assert '删除那笔交易' in _labels(view.messages)
+    assert '能不能删除一笔交易' in _labels(view.messages)
     assert _labels(view.messages).count('请到') == 2
 
     # Make the message area overflow, then verify scrolling leaves the input fixed.
@@ -157,6 +208,7 @@ def exercise(app, data, wait):
     assert not list(data.glob('**/assistant_sessions*.json'))
     assert not errors, errors
     return dict(default_home=True, amount_and_evidence=True, existing_abc=True, write_guidance=True,
+                evidence_singleton=True, multiline_shortcuts=True, read_only_palette=True,
                 fixed_composer=True, late_results_rejected=stopped, isolated_histories=True,
                 ledger_bytes_unchanged=True, callback_errors=errors)
 
@@ -185,7 +237,7 @@ def _check_late_responses(app, wait):
                 if action == 'stop':
                     view.stop_button.invoke()
                 elif action == 'clear':
-                    _button(view, '新对话').invoke()
+                    app.new_chat_button.invoke()
                 else:
                     app.space_picker.set('我的账本')
                     app.space_picker.event_generate('<<ComboboxSelected>>')
@@ -206,7 +258,7 @@ def _check_late_responses(app, wait):
     personal = app.chat_home_view
     personal.dining_button.invoke()
     wait(app, lambda: personal.cancelled is None)
-    assert '87.65 元，共 1 笔' in _labels(personal.messages)
+    assert '87.65 元' in _labels(personal.messages) and '共 1 笔' in _labels(personal.messages)
     assert '123.45 元' not in _labels(personal.messages)
     app.switch_space()
     assert app.mode == 'demo'

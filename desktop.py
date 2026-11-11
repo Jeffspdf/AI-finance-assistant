@@ -31,6 +31,7 @@ from finance.desktop_demo import DemoGeneratorFeatures
 from finance.desktop_refunds import RefundFeatures
 from finance.desktop_agent import open_savings_planner
 from finance.desktop_chat_home import ChatHome
+from finance.chat_widgets import RoundedButton, install_chat_styles
 from finance.spending_presenter import spending_totals,basis_label,refund_status_summary,refund_status_text
 from finance.evidence import count_records
 from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form,BG,INK,MUTED,PRIMARY
@@ -51,6 +52,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.configure(bg=BG)
         self.option_add('*Font', point_font())
         apply_theme(self)
+        install_chat_styles(self)
         self.round2_init()
         self.preferences={}
         try:self.preferences=json.loads((DATA_DIR/'preferences.json').read_text(encoding='utf-8'))
@@ -77,11 +79,19 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.review_initialize()
         side = tk.Frame(self, bg='white', width=px(220))
         side.pack(side='left', fill='y'); side.pack_propagate(False)
-        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 15, 'bold')).pack(anchor='w', padx=px(16), pady=px((18, 5)))
-        tk.Label(side, text='PERSONAL FINANCE', bg='white', fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', padx=px(18), pady=px((0, 12)))
+        tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=point_font(15, True)).pack(anchor='w', padx=px(18), pady=px((18, 12)))
+        self.new_chat_button = RoundedButton(side, text='＋  新对话', command=self.new_chat, look='new')
+        self.chat_navigation = tk.Frame(side, bg='white')
+        self.new_chat_button.pack(fill='x', padx=px(14), pady=px((0, 8)))
+        self.chat_navigation.pack(fill='x')
+        self.chat_section_heading = tk.Label(self.chat_navigation, text='当前会话', bg='white', fg=MUTED, font=point_font(9))
+        tools_navigation = tk.Frame(side, bg='white')
+        tools_navigation.pack(fill='x', pady=px((8, 0)))
+        self.tools_section_heading = tk.Label(tools_navigation, text='账本工具', bg='white', fg=MUTED, font=point_font(9))
         self.nav = {}
         for label, page in [('AI 对话', 'chat_home'), ('财务概览', 'home'), ('交易账本', 'records'), ('预算与提醒', 'budget_page'), ('储蓄规划', 'plan')]:
-            b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=px(0), padx=px(20), pady=px(4), cursor='hand2')
+            group = self.chat_navigation if page == 'chat_home' else tools_navigation
+            b = RoundedButton(group, text=label, command=lambda p=page: self.show(p), look='nav')
             b.pack(fill='x', padx=px(14), pady=px(1)); self.nav[page] = b
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=px(18), pady=px(6))
         self.space_label = tk.Label(spaces, text='演示空间 · 合成账单', bg='white', fg=MUTED, pady=px(3))
@@ -478,8 +488,11 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.ask_generation += 1
         self.page = page
         for key, button in self.nav.items():
-            button.config(bg='#e7f3ec' if key == page else 'white', fg=GREEN if key == page else MUTED)
-        tips = {'home': ('让我看看钱都去哪啦！先核对收支，再给小愿望留点预算。', '一起查查账 →', 'records'), 'records': ('分类不对？选中那一笔就能改。每个数字都有源记录哦。', '安排一个小目标 →', 'plan'), 'plan': ('灵机一动！换个月预算试试，看看离目标能近多少。', '问问消费情况 →', 'assistant'), 'assistant': ('我来指路，代码算钱。当前为本地规则模式，未连接大模型。', '返回财务概览 →', 'home')}
+            if key == 'settings':
+                button.config(bg='#e7f3ec' if key == page else 'white', fg=GREEN if key == page else MUTED)
+            else:
+                button.set_selected(key == page)
+        tips = {'home': ('让我看看钱都去哪啦！先核对收支，再给小愿望留点预算。', '一起查查账 →', 'records'), 'records': ('分类不对？选中那一笔就能改。每个数字都有源记录哦。', '安排一个小目标 →', 'plan'), 'plan': ('灵机一动！换个月预算试试，看看离目标能近多少。', '问问消费情况 →', 'chat_home'), 'assistant': ('我来指路，代码算钱。当前为本地规则模式，未连接大模型。', '返回财务概览 →', 'home')}
         tips['budget_page']=('先看预算，再核对对应的账单。','查看概览 →','home')
         tips['settings']=('在这里管理模型、版本和本机数据。','返回概览 →','home')
         tips['chat_home']=('问问最近的收支，或开始一个储蓄计划。','查看财务概览 →','home')
@@ -493,11 +506,21 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
             self.chat_home_view.destroy()
             self.chat_home_view = None
         if page == 'chat_home':
+            self.new_chat_button.pack(before=self.chat_navigation, fill='x', padx=px(14), pady=px((0, 8)))
+            self.chat_section_heading.pack(before=self.nav['chat_home'], anchor='w', padx=px(18))
+            self.tools_section_heading.pack(before=self.nav['home'], anchor='w', padx=px(18))
+            self.guide_action.pack_forget()
+            self.page_body.pack_configure(padx=px((1, 0)), pady=0)
             self.content_canvas.pack_forget()
             self.content_scroll.pack_forget()
             self.chat_home_view = ChatHome(self.page_body, self, self.chat_home_histories[self.mode], self.chat_home_slots)
             self.chat_home_view.pack(fill='both', expand=True)
             return
+        self.new_chat_button.pack_forget()
+        self.chat_section_heading.pack_forget()
+        self.tools_section_heading.pack_forget()
+        self.page_body.pack_configure(padx=px(24), pady=px(18))
+        self.guide_action.pack(fill='x', pady=px((6, 0)))
         if not self.content_canvas.winfo_manager():
             self.content_scroll.pack(side='right', fill='y')
             self.content_canvas.pack(side='left', fill='both', expand=True)
@@ -925,6 +948,11 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         for title,description,action,caption in items:
             card=tk.Frame(self.main,bg='white',padx=px(18),pady=px(8));card.pack(fill='x',pady=px(6))
             self.label(card,title,13,bold=True);self.label(card,description,10,MUTED);self.button(card,caption,action)
+
+    def new_chat(self):
+        if self.page != 'chat_home':
+            self.show('chat_home')
+        self.chat_home_view.clear()
 
     def assistant(self):
         self.conversation_page()

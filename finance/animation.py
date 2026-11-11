@@ -1,6 +1,5 @@
 """Four-state hand-drawn sprite player; all Tk work stays on the UI thread."""
-import tkinter as tk
-from PIL import Image, ImageTk
+from PIL import Image
 
 STATES = ('idle','wave','thinking','success')
 TIMELINES = {'idle': [(0,2100),(1,100),(2,120),(3,150)],
@@ -44,6 +43,8 @@ def opaque_frame(image,background):
 
 class SpritePlayer:
     def __init__(self,label,path,size):
+        from PIL import ImageTk
+
         self.label=label
         self.frames={k:[ImageTk.PhotoImage(opaque_frame(im,label.cget('bg')),master=label) for im in v] for k,v in load_frames(path,size).items()}
         self.state='idle';self.index=0;self.job=None;self.paused=False;self.closed=False

@@ -113,14 +113,14 @@ class Rows(QAbstractTableModel):
         return super().headerData(section, orientation, role)
 
 
-def table(columns, records=()):
+def table(columns, records=(), *, multiple=False):
     view = QTableView()
     model = Rows(columns, records, view)
     view.setModel(model)
     view.setAlternatingRowColors(True)
     view.setShowGrid(False)
     view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-    view.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+    view.setSelectionMode(QTableView.SelectionMode.ExtendedSelection if multiple else QTableView.SelectionMode.SingleSelection)
     view.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
     view.verticalHeader().hide()
     view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -129,11 +129,15 @@ def table(columns, records=()):
     return view, model
 
 
+def selected_rows(view, model):
+    return [model.records[index.row()] for index in view.selectionModel().selectedRows()]
+
+
 def selected(view, model):
-    indexes = view.selectionModel().selectedRows()
-    if not indexes:
-        raise ValueError('请先选择一行。')
-    return model.records[indexes[0].row()]
+    rows = selected_rows(view, model)
+    if len(rows) != 1:
+        raise ValueError('此操作需要选中一行。')
+    return rows[0]
 
 
 def readonly_text(value):

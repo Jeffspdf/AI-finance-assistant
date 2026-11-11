@@ -1,9 +1,31 @@
 """Deterministic savings workflow; no model calls, GUI changes or ledger writes."""
+from calendar import monthrange
+from datetime import date
+
 from .agent_tools import AgentTools
 
 QUESTIONS = {'target_cents': '请确认储蓄目标金额', 'months': '请确认规划期限（月）',
              'saved_cents': '请确认已有储蓄金额（没有则确认 0）',
              'income_cents': '请确认未来每月收入', 'budget_cents': '请确认未来每月预算'}
+
+
+def scenario_goal_values(plan, scenario):
+    """Return integer cents and dates for the selected scenario's form."""
+    if plan['status'] != 'ok':
+        raise ValueError('请先生成有效规划')
+    row = next((row for row in plan['simulation']['facts']['scenarios'] if row['label'] == scenario), None)
+    if row is None or row['status'] != 'ok':
+        raise ValueError('所选方案缺少计算依据')
+    if row['negative_cashflow']:
+        raise ValueError('该方案存在负现金流，请先调整假设，再填入规划表。')
+    args = plan['simulation']['args']
+    start = date.fromisoformat(plan['as_of'])
+    year, month = divmod(start.year * 12 + start.month - 1 + args['months'], 12)
+    deadline = date(year, month + 1, min(start.day, monthrange(year, month + 1)[1]))
+    return dict(target_cents=args['target_cents'], saved_cents=args['saved_cents'],
+                income_cents=args['base_income_cents'], baseline_budget_cents=args['base_spending_cents'],
+                budget_cents=args['base_spending_cents'] - row['spending_cut_cents'],
+                start_date=start.isoformat(), deadline=deadline.isoformat())
 
 
 def planning_result(tools, status, needed=(), simulation=None):

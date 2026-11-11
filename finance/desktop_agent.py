@@ -1,5 +1,4 @@
 """Savings-only desktop preview. Workers never call Tk; nothing saves a goal here."""
-from calendar import monthrange
 from datetime import date
 import json
 from pathlib import Path
@@ -10,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .agent_runtime import AggregateConsent, plan_savings_agent
+from .agent_planner import scenario_goal_values
 from .agent_tools import confirmed_inputs
 from .agent_verifier import default_claims
 from .importer import money_to_cents
@@ -35,21 +35,13 @@ def ledger_stamp(path):
 
 def prefill_values(plan, scenario):
     """Generate form strings, never a Store write or a saved goal."""
-    if plan['status'] != 'ok': raise ValueError('请先生成有效规划')
-    row = next((r for r in plan['simulation']['facts']['scenarios'] if r['label'] == scenario), None)
-    if row is None or row['status'] != 'ok': raise ValueError('所选方案缺少计算依据')
-    if row['negative_cashflow']:
-        raise ValueError('该方案存在负现金流，请先调整假设，再填入原规划表。')
-    args = plan['simulation']['args']
-    start = date.fromisoformat(plan['as_of'])
-    year, month = divmod(start.year * 12 + start.month - 1 + args['months'], 12)
-    deadline = date(year, month + 1, min(start.day, monthrange(year, month + 1)[1])).isoformat()
+    values = scenario_goal_values(plan, scenario)
     def amount(value): return f'{value // 100}.{value % 100:02d}'
-    return {'目标金额 / 元': amount(args['target_cents']), '已有储蓄 / 元': amount(args['saved_cents']),
-            '每月收入 / 元': amount(args['base_income_cents']),
-            '方案 A 月预算 / 元': amount(args['base_spending_cents']),
-            '方案 B 月预算 / 元': amount(args['base_spending_cents'] - row['spending_cut_cents']),
-            '截止日期 YYYY-MM-DD': deadline}
+    return {'目标金额 / 元': amount(values['target_cents']), '已有储蓄 / 元': amount(values['saved_cents']),
+            '每月收入 / 元': amount(values['income_cents']),
+            '方案 A 月预算 / 元': amount(values['baseline_budget_cents']),
+            '方案 B 月预算 / 元': amount(values['budget_cents']),
+            '截止日期 YYYY-MM-DD': values['deadline']}
 
 
 class SavingsPlannerWindow(tk.Toplevel):

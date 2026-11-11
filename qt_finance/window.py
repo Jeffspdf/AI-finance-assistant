@@ -1,17 +1,20 @@
 """Independent Qt application shell and workspace lifecycle."""
 
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QComboBox, QFrame, QHBoxLayout, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QComboBox, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from finance.llm import ModelClient
 from finance.model_settings import ModelSettings
+from finance.qa import month_shift
 from .chat import ChatPage
 from .pages import AccountsPage, BackupPage, BudgetPage, HelpPage, LedgerPage, OverviewPage, ReviewPage, SettingsPage
+from .pet import DesktopPet
 from .plan import PlanPage
 from .services import Workspace
 from .ui import Jobs, STYLES, button, label
@@ -39,6 +42,7 @@ class FinanceWindow(QMainWindow):
         self.model_settings = ModelSettings(directory)
         self.model_configuration = self.model_settings.load()
         self.client = self.make_client(self.model_configuration)
+        self.pet = None
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -94,6 +98,10 @@ class FinanceWindow(QMainWindow):
         self.space.currentIndexChanged.connect(self.change_space)
         self.help_shortcut = QShortcut(QKeySequence('F1'), self)
         self.help_shortcut.activated.connect(lambda: self.navigate('help'))
+        self.chat_shortcut = QShortcut(QKeySequence('Ctrl+K'), self)
+        self.chat_shortcut.activated.connect(self.command_palette)
+        self.add_shortcut = QShortcut(QKeySequence('Ctrl+N'), self)
+        self.add_shortcut.activated.connect(self.quick_entry)
         self.current = 'chat'
         self.plan.reset_workspace()
         self.navigate('chat')
@@ -140,16 +148,45 @@ class FinanceWindow(QMainWindow):
                                              Qt.TransformationMode.SmoothTransformation))
             mascot.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(mascot)
+        layout.addWidget(button('桌面小助手', lambda: self.perform(self.toggle_pet)))
         return side
+
+    def toggle_pet(self):
+        if self.pet is None:
+            self.pet = DesktopPet(self, ASSETS / 'campus_animation.png')
+        self.pet.setVisible(not self.pet.isVisible())
+
+    def quick_entry(self):
+        self.navigate('ledger')
+        self.perform(self.pages['ledger'].edit_new)
+
+    def command_palette(self):
+        query, accepted = QInputDialog.getText(self, '搜索与快捷操作', '页面名称、商户、分类、上个月或金额条件（例如 >100）')
+        if not accepted or not query.strip():
+            return
+        query = query.strip()
+        destinations = {title: page for page, title in self.page_labels.items()}
+        destinations.update(概览='overview', 账本='ledger', 预算='budget', 规划='plan', 助手='chat', 设置='settings')
+        if query in destinations:
+            self.navigate(destinations[query])
+            return
+        self.navigate('ledger')
+        ledger = self.pages['ledger']
+        ledger.month_filter.setCurrentIndex(0)
+        ledger.category_filter.setCurrentIndex(0)
+        if query in ('上个月', '上月'):
+            query = month_shift(date.today(), -1)
+        ledger.search.setText(query)
 
     @staticmethod
     def make_client(config):
         return ModelClient(config.base_url, config.model, config.api_key, enabled=True) if config.enabled else None
 
-    def configure_model(self, config):
+    def configure_model(self, config, verified_client=None):
         self.jobs.cancel('model-test')
+        self.jobs.cancel('category')
         self.model_configuration = config
-        self.client = self.make_client(config)
+        self.client = verified_client if config.enabled and verified_client else self.make_client(config)
         self.chat.stop(quiet=True)
         self.chat.use_model.setChecked(False)
         self.chat.sync_controls()
@@ -172,6 +209,7 @@ class FinanceWindow(QMainWindow):
             self.chat.evidence.close()
             if self.current == 'ledger':
                 self.jobs.cancel('import')
+                self.jobs.cancel('category')
         self.current = page
         self.nav[page].setChecked(True)
         self.title.setText(self.page_labels[page])
@@ -203,9 +241,14 @@ class FinanceWindow(QMainWindow):
             self.notice('无法打开所选账本。请检查数据目录或备份。')
             return
         self.jobs.cancel('import')
+        self.jobs.cancel('category')
         self.chat.reload()
         self.plan.reset_workspace()
-        self.pages['ledger'].search.clear()
+        ledger = self.pages['ledger']
+        ledger.last_batch = None
+        ledger.search.clear()
+        ledger.month_filter.setCurrentIndex(0)
+        ledger.category_filter.setCurrentIndex(0)
         self.pages['budget'].amount.clear()
         self.notice()
         self.refresh()
@@ -215,6 +258,8 @@ class FinanceWindow(QMainWindow):
         self.chat.new_chat()
 
     def closeEvent(self, event):
+        if self.pet is not None:
+            self.pet.close()
         self.plan.reset_workspace()
         for channel in list(self.jobs.pending):
             self.jobs.cancel(channel)

@@ -71,7 +71,8 @@ class GoalsDialog(QDialog):
         else:
             self.deposits.replace([])
 
-    def edit(self, original):
+    def edit(self, original, *, prefilled=None):
+        initial_values = prefilled or original
         dialog, layout, form = fields(self, '编辑目标' if original else '新建储蓄目标')
         inputs = {}
         for key, title, initial in (
@@ -80,8 +81,8 @@ class GoalsDialog(QDialog):
             ('budget_cents', '月预算 / 元', ''), ('start_date', '开始日', date.today().isoformat()),
             ('deadline', '截止日 / YYYY-MM-DD', ''),
         ):
-            value = original.get(key, initial)
-            field = inputs[key] = QLineEdit(yuan(value) if original and key.endswith('_cents') else str(value))
+            value = initial_values.get(key, initial)
+            field = inputs[key] = QLineEdit(yuan(value).replace(',', '') if key.endswith('_cents') and key in initial_values else str(value))
             form.addRow(title, field)
         form_buttons(dialog, layout, '保存目标')
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -97,6 +98,7 @@ class GoalsDialog(QDialog):
             self.store.save_goal(values)
         self.refresh()
         self.status.setText('目标已保存。')
+        return True
 
     def delete(self):
         row = self.goal()

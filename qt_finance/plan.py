@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
 
 from finance.agent_runtime import AggregateConsent
+from finance.agent_planner import scenario_goal_values
 from finance.analytics import yuan
 from finance.spending_presenter import BASIS_LABELS
 from .goals import GoalsDialog
@@ -71,6 +72,16 @@ class PlanPage(QWidget):
             self.cards[name] = (amount, breakdown)
             grid.addWidget(tile, 1)
         layout.addLayout(grid)
+        next_steps = QHBoxLayout()
+        self.switch_assumptions = button('改用输入假设继续', lambda: self.mode.setCurrentIndex(self.mode.findData('assumption')))
+        self.scenario = QComboBox()
+        self.scenario.addItems(('A', 'B', 'C'))
+        self.prefill = button('将所选方案填入储蓄目标', lambda: self.owner.perform(self.prefill_goal))
+        next_steps.addWidget(self.switch_assumptions)
+        next_steps.addStretch(1)
+        next_steps.addWidget(self.scenario)
+        next_steps.addWidget(self.prefill)
+        layout.addLayout(next_steps)
         layout.addStretch(1)
         self.mode.currentIndexChanged.connect(self.change_mode)
         self.authorized.toggled.connect(self.authorization_changed)
@@ -98,6 +109,9 @@ class PlanPage(QWidget):
         self.generate.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.evidence.setEnabled(False)
+        self.switch_assumptions.hide()
+        self.scenario.setEnabled(False)
+        self.prefill.setEnabled(False)
         self.status.setText('请核对本次输入后生成规划。')
         for amount, breakdown in self.cards.values():
             amount.setText('—')
@@ -127,6 +141,9 @@ class PlanPage(QWidget):
         self.generate.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.evidence.setEnabled(False)
+        self.switch_assumptions.hide()
+        self.scenario.setEnabled(False)
+        self.prefill.setEnabled(False)
         self.status.setText('正在生成本次规划…')
         self.owner.jobs.start('plan', lambda event: savings_plan(path, mode, inputs, client, consent, event), self.finish)
 
@@ -141,11 +158,14 @@ class PlanPage(QWidget):
             self.status.setText(error)
             return
         if result['status'] != 'ok':
+            self.switch_assumptions.setVisible(result['can_use_assumptions'])
             self.status.setText(result['answer'] + ('\n可明确切换为手动输入假设。' if result['can_use_assumptions'] else ''))
             return
         mode = '手动输入假设' if result['mode'] == 'assumption' else '历史账单'
         basis = BASIS_LABELS.get(result['basis'], '按输入金额')
         self.status.setText(f"{result['planner_label']} · {mode} · {basis} · 仅供模拟")
+        self.scenario.setEnabled(True)
+        self.prefill.setEnabled(True)
         for scenario in result['simulation']['facts']['scenarios']:
             amount, breakdown = self.cards[scenario['label']]
             if scenario['status'] != 'ok':
@@ -158,6 +178,14 @@ class PlanPage(QWidget):
                 if scenario['negative_cashflow']:
                     text += '\n存在负现金流，方案不可直接执行。'
                 breakdown.setText(text)
+
+    def prefill_goal(self):
+        if self.result is None:
+            return
+        values = scenario_goal_values(self.result, self.scenario.currentText())
+        dialog = GoalsDialog(self.owner)
+        if dialog.edit({}, prefilled=values):
+            self.owner.ledger_changed('储蓄目标已保存。')
 
     def trace(self):
         if self.result:

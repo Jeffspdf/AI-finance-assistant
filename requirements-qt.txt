@@ -1,0 +1,2 @@
+-r requirements-desktop.txt
+PySide6-Essentials==6.8.1

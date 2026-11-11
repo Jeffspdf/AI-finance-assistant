@@ -167,7 +167,7 @@ def run_live_ui(output, settings_directory):
     return report
 
 
-def isolated_run(output):
+def isolated_run(output, *, child_arguments=None):
     """Create an owned test desktop, never SwitchDesktop or activate it."""
     import ctypes
     from ctypes import wintypes
@@ -196,16 +196,19 @@ def isolated_run(output):
     desktop = user.CreateDesktopW(name, None, None, 0, 0x01FF, None)
     if not desktop: raise ctypes.WinError(ctypes.get_last_error())
     startup, process = Startup(), Process(); startup.cb = ctypes.sizeof(Startup); startup.desktop = name
-    arguments = [sys.executable, str(Path(__file__).resolve()), str(Path(output).resolve()), '--isolated-child']
-    if '--regression' in sys.argv: arguments.append('--regression')
-    if '--chat-home' in sys.argv: arguments.append('--chat-home')
-    if '--build-candidate' in sys.argv: arguments.append('--build-candidate')
-    if '--live-model-ui' in sys.argv:
-        if '--settings-dir' not in sys.argv: raise ValueError('--live-model-ui requires --settings-dir')
-        arguments.extend(['--live-model-ui', '--settings-dir', sys.argv[sys.argv.index('--settings-dir')+1]])
+    if child_arguments is None:
+        arguments = [sys.executable, str(Path(__file__).resolve()), str(Path(output).resolve()), '--isolated-child']
+        if '--regression' in sys.argv: arguments.append('--regression')
+        if '--chat-home' in sys.argv: arguments.append('--chat-home')
+        if '--build-candidate' in sys.argv: arguments.append('--build-candidate')
+        if '--live-model-ui' in sys.argv:
+            if '--settings-dir' not in sys.argv: raise ValueError('--live-model-ui requires --settings-dir')
+            arguments.extend(['--live-model-ui', '--settings-dir', sys.argv[sys.argv.index('--settings-dir')+1]])
+    else:
+        arguments = [str(item) for item in child_arguments]
     command = ctypes.create_unicode_buffer(subprocess.list2cmdline(arguments))
     try:
-        if not kernel.CreateProcessW(sys.executable, command, None, None, False, 0x08000000, None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)):
+        if not kernel.CreateProcessW(arguments[0], command, None, None, False, 0x08000000, None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)):
             raise ctypes.WinError(ctypes.get_last_error())
         budget = 900 if '--build-candidate' in sys.argv else 300 if '--live-model-ui' in sys.argv else 240 if '--regression' in sys.argv else 90
         end = time.monotonic() + budget

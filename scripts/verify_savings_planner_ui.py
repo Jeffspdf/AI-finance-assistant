@@ -198,6 +198,7 @@ def isolated_run(output):
     startup, process = Startup(), Process(); startup.cb = ctypes.sizeof(Startup); startup.desktop = name
     arguments = [sys.executable, str(Path(__file__).resolve()), str(Path(output).resolve()), '--isolated-child']
     if '--regression' in sys.argv: arguments.append('--regression')
+    if '--chat-home' in sys.argv: arguments.append('--chat-home')
     if '--build-candidate' in sys.argv: arguments.append('--build-candidate')
     if '--live-model-ui' in sys.argv:
         if '--settings-dir' not in sys.argv: raise ValueError('--live-model-ui requires --settings-dir')
@@ -232,16 +233,20 @@ if __name__ == '__main__':
                 output = Path(sys.argv[1]); output.mkdir(parents=True, exist_ok=True)
                 shell = shutil.which('pwsh') or shutil.which('powershell')
                 if not shell: raise RuntimeError('PowerShell required for the Windows candidate build')
+                version = '0.10.0-rc.3'
                 command = [shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'packaging/build.ps1'),
                            '-Python', sys.executable, '-Iscc', str(ROOT.parent/'finance_assistant/tools/inno/ISCC.exe'),
-                           '-Version', '0.10.0-rc.2', '-CoursePreview']
+                           '-Version', version, '-CoursePreview']
                 with (output/'build.log').open('w', encoding='utf-8') as log:
                     process = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=840)
-                (output/'results.json').write_text(json.dumps(dict(exit_code=process.returncode, version='0.10.0-rc.2',
+                (output/'results.json').write_text(json.dumps(dict(exit_code=process.returncode, version=version,
                     isolation='owned test desktop; never activated')), encoding='utf-8')
                 raise SystemExit(process.returncode)
             elif '--live-model-ui' in sys.argv:
                 run_live_ui(sys.argv[1], sys.argv[sys.argv.index('--settings-dir')+1])
+            elif '--chat-home' in sys.argv:
+                from scripts.verify_chat_home import run as run_chat_home
+                run_chat_home(sys.argv[1], wait)
             elif '--regression' in sys.argv:
                 from contextlib import redirect_stdout, redirect_stderr
                 from xml.etree import ElementTree

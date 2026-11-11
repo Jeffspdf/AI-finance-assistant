@@ -30,6 +30,7 @@ from finance.desktop_m1a import M1Features
 from finance.desktop_demo import DemoGeneratorFeatures
 from finance.desktop_refunds import RefundFeatures
 from finance.desktop_agent import open_savings_planner
+from finance.desktop_chat_home import ChatHome
 from finance.spending_presenter import spending_totals,basis_label,refund_status_summary,refund_status_text
 from finance.evidence import count_records
 from finance.ui_theme import apply_theme,enable_dpi_awareness,Meter,scrollable_form,BG,INK,MUTED,PRIMARY
@@ -66,6 +67,9 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.model_notice = loaded.notice
         self.model_client = ModelClient(loaded.base_url, loaded.model, loaded.api_key, enabled=True) if loaded.enabled else None
         self.ask_generation = 0
+        self.chat_home_histories = {'demo': [], 'personal': []}
+        self.chat_home_slots = threading.BoundedSemaphore(2)
+        self.chat_home_view = None
         self.animators=[]
         self.animation_paused=False
         self.store = Store(DATA_DIR / (self.mode+'.sqlite3'))
@@ -76,7 +80,7 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         tk.Label(side, text='AI理财小助手', bg='white', fg=INK, font=('Microsoft YaHei UI', 15, 'bold')).pack(anchor='w', padx=px(16), pady=px((18, 5)))
         tk.Label(side, text='PERSONAL FINANCE', bg='white', fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', padx=px(18), pady=px((0, 12)))
         self.nav = {}
-        for label, page in [('财务概览', 'home'), ('交易账本', 'records'), ('预算与提醒', 'budget_page'), ('储蓄规划', 'plan'), ('问问助手', 'assistant')]:
+        for label, page in [('AI 对话', 'chat_home'), ('财务概览', 'home'), ('交易账本', 'records'), ('预算与提醒', 'budget_page'), ('储蓄规划', 'plan')]:
             b = tk.Button(side, text=label, anchor='w', command=lambda p=page: self.show(p), bg='white', fg=MUTED, activebackground='#e6f4ec', activeforeground=GREEN, relief='flat', borderwidth=px(0), padx=px(20), pady=px(4), cursor='hand2')
             b.pack(fill='x', padx=px(14), pady=px(1)); self.nav[page] = b
         spaces = tk.Frame(side, bg='white'); spaces.pack(side='bottom', fill='x', padx=px(18), pady=px(6))
@@ -116,8 +120,10 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.motion_button.pack(fill='x')
         self.pet = None
         body=tk.Frame(self,bg=BG);body.pack(side='left',fill='both',expand=True,padx=px(24),pady=px(18))
+        self.page_body = body
         self.content_canvas=tk.Canvas(body,bg=BG,highlightthickness=px(0))
         content_scroll=ttk.Scrollbar(body,orient='vertical',command=self.content_canvas.yview)
+        self.content_scroll = content_scroll
         self.content_canvas.configure(yscrollcommand=content_scroll.set)
         content_scroll.pack(side='right',fill='y');self.content_canvas.pack(side='left',fill='both',expand=True)
         self.main=tk.Frame(self.content_canvas,bg=BG)
@@ -129,13 +135,14 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.main.bind('<Configure>',resize_content);self.content_canvas.bind('<Configure>',resize_content)
         def scroll_content(event):
             if event.widget.winfo_class() in ('Text','TCombobox'):return
+            if self.chat_home_view is not None:
+                return self.chat_home_view.scroll_messages(event)
             widget=event.widget
             while widget is not None:
                 if widget is self.main:self.content_canvas.yview_scroll(-int(event.delta/120),'units');return
                 widget=getattr(widget,'master',None)
         self.bind('<MouseWheel>',scroll_content,add='+')
-        self.page = 'home'
-        self.show('home')
+        self.show('chat_home')
 
     def animate_character(self,state):
         self.animators=[p for p in self.animators if not p.closed]
@@ -250,7 +257,9 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
 
     def refresh_model_state(self):
         state=model_status_text(self.model_client)
-        if self.page=='assistant':
+        if self.page=='chat_home':
+            self.chat_home_view.model_label.config(text=state)
+        elif self.page=='assistant':
             self.tip.config(text=state)
             self.model_status_label.config(text=state)
         elif self.page=='settings':
@@ -436,6 +445,13 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         self.save_preferences()
         self.show(self.page)
 
+    def pack_space_picker(self, parent):
+        self.space_picker = ttk.Combobox(parent, values=['演示空间', '我的账本'], state='readonly', width=12)
+        self.space_picker.set('演示空间' if self.mode == 'demo' else '我的账本')
+        self.space_picker.pack(side='left', padx=px((0, 12)))
+        self.space_picker.bind('<<ComboboxSelected>>', lambda _: self.switch_space()
+                               if (self.space_picker.get() == '我的账本') != (self.mode == 'personal') else None)
+
     def label(self, parent, text, size=10, color=INK, bold=False):
         w = tk.Label(parent, text=text, bg=parent['bg'], fg=color, font=point_font(size,bold), anchor='w', justify='left')
         w.pack(anchor='w', pady=px(4))
@@ -466,20 +482,32 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
         tips = {'home': ('让我看看钱都去哪啦！先核对收支，再给小愿望留点预算。', '一起查查账 →', 'records'), 'records': ('分类不对？选中那一笔就能改。每个数字都有源记录哦。', '安排一个小目标 →', 'plan'), 'plan': ('灵机一动！换个月预算试试，看看离目标能近多少。', '问问消费情况 →', 'assistant'), 'assistant': ('我来指路，代码算钱。当前为本地规则模式，未连接大模型。', '返回财务概览 →', 'home')}
         tips['budget_page']=('先看预算，再核对对应的账单。','查看概览 →','home')
         tips['settings']=('在这里管理模型、版本和本机数据。','返回概览 →','home')
+        tips['chat_home']=('问问最近的收支，或开始一个储蓄计划。','查看财务概览 →','home')
         tip, action, target = tips[page]
         if page=='assistant':tip=model_status_text(self.model_client)
         self.tip.config(text=tip)
         self.guide_action.config(text=action, command=lambda p=target: self.show(p))
+        self.space_label.config(text='我的账本 · 本机数据' if self.mode=='personal' else '演示空间 · 合成账单')
         for child in self.main.winfo_children(): child.destroy()
+        if self.chat_home_view is not None:
+            self.chat_home_view.destroy()
+            self.chat_home_view = None
+        if page == 'chat_home':
+            self.content_canvas.pack_forget()
+            self.content_scroll.pack_forget()
+            self.chat_home_view = ChatHome(self.page_body, self, self.chat_home_histories[self.mode], self.chat_home_slots)
+            self.chat_home_view.pack(fill='both', expand=True)
+            return
+        if not self.content_canvas.winfo_manager():
+            self.content_scroll.pack(side='right', fill='y')
+            self.content_canvas.pack(side='left', fill='both', expand=True)
         self.content_canvas.yview_moveto(0)
         self.frame = self.store.spending_view()
         titles = {'home': ('把生活记好，把小目标存好。', '财务概览  /  每一笔记录，都让计划更清楚一点。'), 'records': ('好好记账，心里有数。', '交易账本  /  导入、核对与修正，每笔都有来源。'), 'plan': ('给下一个愿望，留点预算。', '储蓄规划  /  试试不同的预算，找到舒服的节奏。'), 'assistant': ('关于钱的小疑问，一起理清。', '本地规则模式  /  回答来自已导入账单，不向外发送数据。')}
         titles['budget_page']=('预算有边界，花钱更安心。','设置分类预算，查看超支和目标缺口。')
         titles['settings']=('按你的习惯，设置小助手。','模型、更新、数据和角色，集中管理。')
         header=tk.Frame(self.main,bg=BG);header.pack(fill='x',pady=px((0,12)))
-        self.space_picker=ttk.Combobox(header,values=['演示空间','我的账本'],state='readonly',width=12)
-        self.space_picker.set('演示空间' if self.mode=='demo' else '我的账本');self.space_picker.pack(side='left',padx=px((0,12)))
-        self.space_picker.bind('<<ComboboxSelected>>',lambda _:self.switch_space() if (self.space_picker.get()=='我的账本')!=(self.mode=='personal') else None)
+        self.pack_space_picker(header)
         months=sorted(set(self.frame.attrs.get('source_months',[]))|set(self.frame.date.str[:7])|{date.today().strftime('%Y-%m')},reverse=True)
         if page=='budget_page':months=sorted(set(months)|{month_shift(date.today(),offset) for offset in range(-24,13)},reverse=True)
         if self.selected_month not in ['全部月份',*months]:self.selected_month=months[0]
@@ -491,7 +519,6 @@ class Desktop(RefundFeatures,DemoGeneratorFeatures,M1Features,RoundTwo,Conversat
                 self.selected_month=self.month_picker.get();self.save_preferences();self.show(self.page)
             self.month_picker.bind('<<ComboboxSelected>>',select_month)
             if self.selected_month!='全部月份':self.frame=self.frame[self.frame.date.str.startswith(self.selected_month)].copy()
-        self.space_label.config(text='我的账本 · 本机数据' if self.mode=='personal' else '演示空间 · 合成账单')
         tk.Button(header,text='搜索 Ctrl+K',command=self.command_palette,bg='white',fg=MUTED,relief='flat',padx=px(10),pady=px(8)).pack(side='right',padx=px(8))
         tk.Button(header,text='+ 记一笔',command=self.quick_entry,bg='white',fg=BLUE,relief='flat',padx=px(12),pady=px(8)).pack(side='right',padx=px(4))
         short_titles={'home':'财务概览','records':'交易账本','budget_page':'预算与提醒','plan':'储蓄规划','assistant':'小财灵助手','settings':'设置'}
@@ -968,6 +995,9 @@ if __name__ == '__main__':
         app = Desktop()
         if '--self-test' in sys.argv:
             app.update()
+            from scripts.verify_chat_home import verify_packaged_entry
+            chat_home_report = verify_packaged_entry(app)
+            (DATA_DIR/'chat-home-self-test.json').write_text(json.dumps(chat_home_report, ensure_ascii=False, indent=2), encoding='utf-8')
             import ssl
             tls_context=ssl.create_default_context()
             assert tls_context.check_hostname and tls_context.verify_mode==ssl.CERT_REQUIRED

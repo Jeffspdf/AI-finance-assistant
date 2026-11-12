@@ -4,12 +4,13 @@ import re
 
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QPlainTextEdit, QScrollArea,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QPlainTextEdit, QScrollArea,
     QTabWidget, QVBoxLayout, QWidget,
 )
 
 from finance.analytics import yuan
-from .services import guidance, query_ledger
+from finance.categories import category_options
+from .services import guidance, ledger_coverage, query_ledger
 from .ui import button, label, readonly_text, table
 
 
@@ -80,7 +81,8 @@ class ChatPage(QWidget):
     def __init__(self, owner):
         super().__init__()
         self.owner = owner
-        self.history = {'demo': [], 'personal': []}
+        self.sessions = {'demo': [[]], 'personal': [[]]}
+        self.active = {'demo': 0, 'personal': 0}
         self.evidence = Evidence(self)
         self.last_result = None
         self.scroll_epoch = 0
@@ -88,6 +90,8 @@ class ChatPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(26, 12, 26, 16)
         layout.setSpacing(8)
+        self.coverage = label('', 'muted')
+        layout.addWidget(self.coverage)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -132,6 +136,43 @@ class ChatPage(QWidget):
         layout.addWidget(self.status)
         self.reload()
 
+    def active_history(self, mode=None):
+        mode = mode or self.owner.workspace.mode
+        return self.sessions[mode][self.active[mode]]
+
+    def refresh(self):
+        coverage = ledger_coverage(self.owner.workspace.store)
+        months = coverage['months']
+        shown = '、'.join(months[-4:]) or '尚无账单'
+        if len(months) > 4:
+            shown = f'{len(months)} 个月 · 最近 {shown}'
+        latest = f" · 最近导入（UTC） {coverage['latest']}" if coverage['latest'] else ''
+        self.coverage.setText(f"账本覆盖 · {shown} · {coverage['count']} 条来源记录{latest}")
+        self.coverage.setToolTip('、'.join(months) + '\n有记录的月份仍可能存在未导入交易。')
+
+    def sync_sessions(self):
+        mode = self.owner.workspace.mode
+        selector = self.owner.chat_sessions
+        selector.blockSignals(True)
+        selector.clear()
+        for rows in self.sessions[mode]:
+            title = next((value for role, value in rows if role == 'user'), '新对话')
+            selector.addItem(title[:21] + ('…' if len(title) > 21 else ''))
+        selector.setCurrentIndex(self.active[mode])
+        selector.blockSignals(False)
+
+    def select_session(self, index):
+        mode = self.owner.workspace.mode
+        if 0 <= index < len(self.sessions[mode]) and index != self.active[mode]:
+            self.active[mode] = index
+            self.reload()
+
+    def reset_sessions(self):
+        mode = self.owner.workspace.mode
+        self.sessions[mode] = [[]]
+        self.active[mode] = 0
+        self.reload()
+
     def near_bottom(self):
         bar = self.scroll.verticalScrollBar()
         return bar.maximum() - bar.value() < 72
@@ -170,13 +211,15 @@ class ChatPage(QWidget):
             item = self.messages.takeAt(0)
             item.widget().hide()
             item.widget().deleteLater()
-        rows = self.history[self.owner.workspace.mode]
+        rows = self.active_history()
+        self.last_result = next((value for role, value in reversed(rows) if role == 'assistant'), None)
         if rows:
             for role, payload in rows:
                 self.add_bubble(role, payload)
         else:
             self.welcome()
         self.sync_controls()
+        self.sync_sessions()
         self.scroll_after_layout(True)
 
     def welcome(self):
@@ -229,6 +272,8 @@ class ChatPage(QWidget):
                 body.addWidget(label(headline))
             if explanation:
                 body.addWidget(label(explanation, 'muted'))
+            if payload.get('scope'):
+                body.addWidget(label('查询范围 · ' + payload['scope'], 'muted'))
             if payload.get('parser'):
                 body.addWidget(label(payload['parser'], 'muted'))
             actions = QHBoxLayout()
@@ -238,6 +283,16 @@ class ChatPage(QWidget):
                 route = payload['route']
                 actions.addWidget(button('打开' + self.owner.page_labels[route],
                                          lambda: self.owner.navigate(route, payload.get('target', ''))))
+            if payload.get('clarify'):
+                conditions = payload['clarify']
+                names = {'period': '日期', 'category': '分类', 'merchant': '商户', 'metric': '统计'}
+                shown = dict(conditions)
+                if shown['metric'] == 'expense':
+                    shown['metric'] = '净支出'
+                found = ' · '.join(f'{names[key]} {value}' for key, value in shown.items() if value)
+                if found:
+                    body.addWidget(label(f'已识别 {found}', 'muted'))
+                actions.addWidget(button('补充条件', lambda: self.clarify(conditions)))
             actions.addStretch(1)
             body.addLayout(actions)
         self.messages.insertWidget(self.messages.count() - 1, row)
@@ -245,11 +300,13 @@ class ChatPage(QWidget):
     def append(self, role, payload, *, force=False):
         follow = force or self.near_bottom()
         previous = self.scroll.verticalScrollBar().value()
-        history = self.history[self.owner.workspace.mode]
+        history = self.active_history()
         if not history:
             self.empty.hide()
             self.empty.deleteLater()
         history.append((role, payload))
+        if role == 'user':
+            self.sync_sessions()
         self.add_bubble(role, payload)
         if len(history) > 40:
             history.pop(0)
@@ -260,6 +317,37 @@ class ChatPage(QWidget):
 
     def submit_input(self):
         self.submit(self.input.toPlainText())
+
+    def clarify(self, conditions):
+        if self.busy:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle('补充净支出查询条件')
+        layout = QFormLayout(dialog)
+        period = QComboBox()
+        period.setEditable(True)
+        period.addItems(['本月', '上个月', *reversed(ledger_coverage(self.owner.workspace.store)['months'])])
+        period.setEditText(conditions['period'])
+        merchant = QLineEdit(conditions['merchant'])
+        category = QComboBox()
+        category.addItems(['全部分类', *category_options('支出')])
+        if category.findText(conditions['category']) > 0:
+            category.setCurrentText(conditions['category'])
+        layout.addRow('月份或起止日期', period)
+        layout.addRow('商户（可留空）', merchant)
+        layout.addRow('分类', category)
+        controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        controls.button(QDialogButtonBox.StandardButton.Ok).setText('查询净支出')
+        controls.accepted.connect(dialog.accept)
+        controls.rejected.connect(dialog.reject)
+        layout.addRow(controls)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            merchant_name = merchant.text().strip()
+            category_name = category.currentText() if category.currentIndex() else ''
+            filters = f'商户：{merchant_name} ' if merchant_name else ''
+            if category_name:
+                filters += f'分类：{category_name} ' if merchant_name else category_name
+            self.submit(f'{period.currentText().strip()} {filters}净支出多少？')
 
     def submit(self, question):
         text = ' '.join(question.split())
@@ -300,6 +388,12 @@ class ChatPage(QWidget):
         self.status.setText('Enter 发送 · Shift+Enter 换行 · 金额依据已导入记录' if quiet else '已停止等待。')
 
     def new_chat(self):
-        self.history[self.owner.workspace.mode].clear()
+        mode = self.owner.workspace.mode
+        if self.active_history():
+            rows = self.sessions[mode]
+            rows.append([])
+            if len(rows) > 15:
+                rows.pop(0)
+            self.active[mode] = len(rows) - 1
         self.reload()
         self.input.setFocus()

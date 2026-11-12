@@ -24,7 +24,7 @@ from finance.importer import parse_statement
 from finance.model_settings import ModelSettings
 from finance.qa import month_shift
 from finance.storage import Store
-from .services import guidance
+from .services import guidance, query_ledger
 from .plan import ManualPlan
 from . import updates
 from .window import FinanceWindow
@@ -128,9 +128,64 @@ def space_isolation(app, window):
             release.set()
         wait(app, lambda: window.jobs.pool.activeThreadCount() == 0, 'late result')
         app.processEvents()
-        assert not window.chat.history['personal']
+        assert not window.chat.active_history('personal')
         assert not any(role == 'assistant' and value['answer'] == '模拟迟到的演示数据'
-                       for role, value in window.chat.history['demo'])
+                       for role, value in window.chat.active_history('demo'))
+
+
+def query_feedback(app, window, directory):
+    window.navigate('chat')
+    chat = window.chat
+    assert '来源记录' in chat.coverage.text()
+    existing = chat.last_result
+    window.new_chat()
+    assert window.chat_sessions.count() == 2 and not chat.active_history()
+    window.chat_sessions.setCurrentIndex(0)
+    assert chat.last_result == existing and chat.active_history()
+    window.chat_sessions.setCurrentIndex(1)
+    assert not chat.active_history()
+
+    fixture = Store(directory / 'query-feedback.sqlite3')
+    fixture.add_manual_transaction('2026-10-26', '星巴克', 3200, '支出', '餐饮')
+    fixture.add_manual_transaction('2026-08-15', '食堂', 1000, '支出', '餐饮')
+    original = Path(fixture.path).read_bytes()
+    cancel = Event()
+    with patch.object(ModelClient, 'parse_question', side_effect=AssertionError('local intent must not call model')):
+        model = ModelClient('https://example.invalid', 'fake', 'fake', enabled=True)
+        october = query_ledger(fixture.path, '2026年10月星巴克花了多少？', model, cancel)
+        august = query_ledger(fixture.path, '2026-08-01到2026-08-31之间星巴克花了多少？', model, cancel)
+        missing = query_ledger(fixture.path, '2026-09星巴克花了多少？', model, cancel)
+    assert october['parser'] == '本地解析' and '32.00 元' in october['display_answer']
+    assert october['scope'] == '2026-10' and october['evidence'][0]['merchant'] == '星巴克'
+    assert august['status'] == 'no_match' and '没有符合条件' in august['answer']
+    assert missing['status'] == 'missing' and '没有已导入' in missing['answer']
+    qualified = query_ledger(fixture.path, '2026-10 商户：星巴克 分类：餐饮 净支出多少？', None, cancel)
+    assert qualified['status'] == 'ok' and '32.00 元' in qualified['display_answer']
+    with patch.object(ModelClient, 'parse_question', return_value={'metric': 'unknown'}):
+        failed = query_ledger(fixture.path, '2026-10 星巴克这笔开销怎么核对？', model, cancel)
+    assert failed['parser'] == '模型未完成条件解析'
+    assert failed['clarify']['period'] == '2026-10' and failed['clarify']['merchant'] == '星巴克'
+    assert Path(fixture.path).read_bytes() == original
+
+    window.navigate('ledger')
+    seen = []
+
+    def help_window():
+        help_dialog = app.activeModalWidget()
+        if help_dialog and help_dialog.windowTitle() == '使用帮助':
+            seen.append(True)
+            help_dialog.accept()
+
+    def press_help():
+        edit = app.activeModalWidget()
+        if edit and edit.windowTitle() == '手工记账':
+            QTimer.singleShot(40, help_window)
+            QTest.keyClick(edit.findChild(QLineEdit), Qt.Key.Key_F1)
+            edit.reject()
+
+    QTimer.singleShot(40, press_help)
+    click(window.pages['ledger'], '记一笔')
+    assert seen == [True]
 
 
 def import_budget_backup(app, window, directory):
@@ -241,8 +296,11 @@ def import_budget_backup(app, window, directory):
         click(ledger, '删除选中')
     assert window.workspace.store.transaction_source(imported['id'])['status'] == 'deleted'
     window.navigate('backup')
-    with patch('qt_finance.pages.confirm', return_value=True):
-        backup.restore(backup_path)
+    backup.history.selectRow(next(i for i, row in enumerate(backup.model.records) if row['path'] == backup_path))
+    with patch('qt_finance.pages.confirm', return_value=True) as restore_prompt, \
+         patch('qt_finance.pages.QFileDialog.getOpenFileName', side_effect=AssertionError('selected backup opened file picker')):
+        click(backup, '恢复选中备份')
+    assert Path(backup_path).name in restore_prompt.call_args.args[-1]
     assert window.workspace.store.transaction_source(imported['id'])['status'] != 'deleted'
 
 
@@ -378,8 +436,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.2'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.2-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.3'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.3-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -445,7 +503,7 @@ def restore_tk_backup(app, window, backup_path):
 
     with patch('qt_finance.pages.QFileDialog.getOpenFileName', return_value=(str(source), '')):
         QTimer.singleShot(50, confirm_restore)
-        click(window.pages['backup'], '从备份恢复')
+        click(window.pages['backup'], '从文件恢复')
 
     store = window.workspace.store
     assert len(prompts) == 1 and '交易 2 条' in prompts[0] and '我的账本' in prompts[0]
@@ -533,6 +591,7 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         try:
             assert window.current == 'chat'
             chat_and_plan(app, window, output)
+            query_feedback(app, window, root)
             space_isolation(app, window)
             import_budget_backup(app, window, root)
             reconciliation(window, root)
@@ -569,7 +628,8 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         'platform': app.platformName(), 'scale': app.primaryScreen().devicePixelRatio(),
         'pages': list(FinanceWindow.page_labels),
         'tk_migration': migration,
-        'checks': ['chat and sources', 'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
+        'checks': ['chat and sources', 'merchant dates, coverage and model fallback', 'session switch and dialog F1',
+                   'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
                    'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',
                    'import account selection, issues and scoped net CSV',
                    'batch category undo', 'soft delete and backup restore',

@@ -1,7 +1,7 @@
 """Qt views for the ledger, its budgets, accounts, reconciliation and backups."""
 
 import csv
-from datetime import date
+from datetime import date, datetime
 import json
 from operator import ge, gt, le, lt
 from pathlib import Path
@@ -518,6 +518,7 @@ class LedgerPage(Page):
         if original and (original.get('status') == 'refund_pending' or original['kind'] == '退款'):
             raise ValueError('请在退款与对账页核对独立退款流水。')
         dialog, layout, form = fields(self, '编辑交易' if original else '手工记账')
+        self.owner.install_dialog_help(dialog)
         inputs = {}
         for key, title, default in (
             ('date', '日期 / YYYY-MM-DD', date.today().isoformat()),
@@ -1065,7 +1066,10 @@ class BackupPage(Page):
         self.layout.addWidget(self.directory)
         row = toolbar(self.layout)
         self.action(row, '创建备份', self.create, primary=True)
-        self.action(row, '从备份恢复', self.choose_restore)
+        self.action(row, '恢复选中备份', self.restore_selected)
+        self.action(row, '从文件恢复', self.choose_restore)
+        row.addStretch(1)
+        row = toolbar(self.layout)
         self.action(row, '查看选中备份', self.inspect)
         self.action(row, '删除选中备份', self.delete)
         self.action(row, '语义修复历史', lambda: details(self, '语义修复历史', self.store.semantic_repair_history()))
@@ -1101,16 +1105,24 @@ class BackupPage(Page):
         if path:
             self.restore(path)
 
-    def restore(self, path):
-        info = inspect_database(path)
+    def restore_selected(self):
+        row = selected(self.history, self.model)
+        self.restore(row['path'], expected_identity=row['identity'])
+
+    def restore(self, path, expected_identity=None):
+        info = self.store.preview_managed_backup(path) if expected_identity is not None else inspect_database(path)
+        if expected_identity is not None and info['identity'] != expected_identity:
+            raise ValueError('备份已变化，请刷新后重新选择。')
         counts = info['counts']
-        message = (f"文件 {Path(path).name}\n数据库模式 {info['version']} · 交易 {counts.get('transactions', 0)} 条\n"
-                   f"替换 {self.owner.space.currentText()} 的数据？恢复前会创建备份。")
+        modified = datetime.fromtimestamp(Path(path).stat().st_mtime).strftime('%Y-%m-%d %H:%M')
+        message = (f"文件 {Path(path).name}\n文件时间 {modified}\n数据库模式 {info['version']} · 交易 {counts.get('transactions', 0)} 条\n"
+                   f"目标空间：{self.owner.space.currentText()}\n将替换该空间的交易、预算、目标和其他账本资料。恢复前会创建备份。")
         if confirm(self, '确认恢复', message):
+            if expected_identity is not None and self.store.preview_managed_backup(path)['identity'] != expected_identity:
+                raise ValueError('备份已变化，请刷新后重新选择。')
             self.store.restore(path, confirmed=True)
             self.owner.pages['ledger'].last_batch = None
-            self.owner.chat.history[self.owner.workspace.mode].clear()
-            self.owner.chat.reload()
+            self.owner.chat.reset_sessions()
             self.changed('账本已恢复，恢复前备份已保留。')
 
 

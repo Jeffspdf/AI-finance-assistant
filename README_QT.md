@@ -8,7 +8,7 @@
 
 ## 试用
 
-- AI 对话支持本地查询、计算依据、问题级模型授权和停止等待。演示与个人对话各自保留在运行期间。
+- AI 对话显示已导入月份、来源记录数和查询范围。明确月份或日期范围的常见商户支出问题在本地计算；失败时可按已识别条件继续补充。演示与个人空间各保留最多 15 个本次运行会话。
 - 财务概览、洞察、账本导入预览、交易增改删、批量分类、预算建议、账户绑定、跨源对账、退款去重与关联、定点修复和备份均调用共享服务。
 - 财务概览支持按月切换、净支出趋势与分类图，并显示超支和储蓄目标提醒。预算可打开对应净支出、公式和来源。导入时可新建并选中来源账户，预览和批次历史均可导出异常 CSV，账本净额导出使用选中的月份。
 - 储蓄规划支持历史账单或手动假设，调用原 A/B/C Agent 和本地计算，展示工具轨迹。可以把选中方案填入目标表单，确认保存后才会写入账本。
@@ -36,6 +36,8 @@ python scripts/verify_qt_native.py .test_qt/source150 --scale 1.5 --tk-migration
 python scripts/verify_qt_native.py .test_qt/source200 --scale 2 --tk-migration
 ./packaging/build_qt.ps1 -Python python
 ```
+
+直接运行打包自检时，`--self-test` 后需指定输出目录，例如 `AIFinanceHelperQt.exe --self-test C:\temp\qt-self-test`。
 
 打包脚本使用 PyInstaller 生成 Qt 独立目录。打包 EXE 在 150% 和 200% 下通过自检及 Tk → Qt → Tk 双向备份后，生成带版本号的便携 ZIP。传入 `-Iscc` 可同时生成独立的 Qt 用户级安装包。程序、账本和配置使用各自的目录。
 

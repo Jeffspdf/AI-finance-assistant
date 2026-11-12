@@ -6,9 +6,10 @@ import re
 
 from finance.agent_runtime import plan_savings_agent
 from finance.agent_tools import confirmed_inputs
+from finance.categories import category_in_question, category_options
 from finance.demo import initialize_demo
 from finance.importer import money_to_cents, parse_statement
-from finance.qa import answer_question, month_shift
+from finance.qa import answer_question, month_shift, parse_question
 from finance.storage import Store
 
 
@@ -37,7 +38,72 @@ def query_ledger(path, question, client, cancelled):
     budgets = {month: store.budgets(month) for month in months}
     if cancelled.is_set():
         return None
-    return answer_question(frame, question, today=today, budgets=budgets, model=client)
+    normalized = re.sub(r'(?<!\d)(20\d{2})\s*年\s*(0?[1-9]|1[0-2])\s*月(?!\s*\d)',
+                        lambda match: f'{match[1]}-{int(match[2]):02}', question)
+    intent = merchant_expense(normalized)
+    result = answer_question(frame, normalized, today=today, budgets=budgets, model=client, local_intent=intent)
+    executed = result.get('trace', {}).get('inputs', {})
+    if executed:
+        period = executed.get('period', '')
+        period = {'this_month': month_shift(today, 0), 'last_month': month_shift(today, -1),
+                  'all': '全部已导入记录', 'last_3_complete_months': '最近三个完整月份'}.get(period, period)
+        result['scope'] = (f"{executed['date_from']} 至 {executed['date_to']}"
+                           if executed.get('date_from') else period)
+    if result['status'] == 'unsupported':
+        if result['parser'] == '模型理解 + 代码计算':
+            result['parser'] = '模型未完成可计算的查询'
+        if not any(word in normalized for word in ('投资', '预测', '贷款', '退款', '下个月', '明年')):
+            known = sorted({name for name in frame.merchant if name and name.casefold() in normalized.casefold()},
+                           key=lambda name: (-len(name), name))
+            parsed = parse_question(normalized)
+            result['clarify'] = dict(
+                period=' 至 '.join(re.findall(r'(?<!\d)20\d{2}-\d{2}-\d{2}(?!\d)', normalized)) or
+                       next(iter(re.findall(r'20\d{2}-(?:0[1-9]|1[0-2])(?![-\d])|上个月|上月|本月|这个月', normalized)), ''),
+                category=category_in_question(normalized) or '', merchant=known[0] if known else '',
+                metric=parsed['metric'] if parsed else 'expense' if any(x in normalized for x in ('支出', '花了', '花费', '消费')) else '',
+            )
+    return result
+
+
+def merchant_expense(question):
+    """Bounded local form for an explicit period followed by a merchant expense."""
+    pattern = (r'(?:请问\s*)?(?:从|在)?\s*'
+               r'(?P<period>20\d{2}-\d{2}-\d{2}\s*(?:到|至|—|~)\s*20\d{2}-\d{2}-\d{2}(?:之间|期间)?'
+               r'|20\d{2}-(?:0[1-9]|1[0-2])|上个月|上月|本月|这个月)\s*'
+               r'(?:在|商户[:：]?\s*)?(?P<merchant>[\w &·.（）()\-]{1,50}?)\s*(?:的)?'
+               r'(?:分类[:：](?P<category>[^\s:：]{1,10})\s+)?'
+               r'(?:花了多少(?:钱|元)?|(?:净支出|消费总额|支出|花费|消费)(?:是多少|多少)(?:元)?)\s*[？?。]?')
+    match = re.fullmatch(pattern, question)
+    if not match or parse_question(question):
+        return None
+    merchant = match['merchant'].strip()
+    if not merchant or category_in_question(merchant) or any(word in merchant for word in (
+        '除了', '不含', '排除', '退款', '对比', '比较', '多少', '分别', '和', '或者', '以前', '之后', '之前', '以上', '以下',
+    )):
+        return None
+    period = match['period']
+    dates = re.findall(r'20\d{2}-\d{2}-\d{2}', period)
+    category = match['category']
+    if category and category not in category_options('支出'):
+        return None
+    intent = dict(metric='expense', category=category, merchant=merchant,
+                  period={'上月': 'last_month', '上个月': 'last_month', '本月': 'this_month', '这个月': 'this_month'}.get(period, period))
+    if dates:
+        try:
+            if date.fromisoformat(dates[0]) > date.fromisoformat(dates[1]):
+                return None
+        except ValueError:
+            return None
+        intent.update(period='all', date_from=dates[0], date_to=dates[1])
+    return intent
+
+
+def ledger_coverage(store):
+    frame = store.source_transactions()
+    months = sorted(set(frame.date.str[:7]))
+    latest = next((row.get('finished_at') for row in store.import_batches()
+                   if row['status'] == 'committed' and row.get('finished_at')), None)
+    return dict(months=months, count=len(frame), latest=latest)
 
 
 def savings_inputs(values):

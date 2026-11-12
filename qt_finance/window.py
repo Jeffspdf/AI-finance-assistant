@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QComboBox, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QComboBox, QDialog, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from finance.llm import ModelClient
@@ -77,6 +77,7 @@ class FinanceWindow(QMainWindow):
         root.addWidget(main, 1)
 
         self.chat = ChatPage(self)
+        self.chat_sessions.currentIndexChanged.connect(self.select_chat)
         self.plan = PlanPage(self)
         self.pages = {
             'chat': self.chat, 'overview': OverviewPage(self), 'ledger': LedgerPage(self),
@@ -117,6 +118,12 @@ class FinanceWindow(QMainWindow):
         layout.addWidget(label('PySide6 预览版', 'muted'))
         layout.addSpacing(10)
         layout.addWidget(button('＋  新对话', self.new_chat, primary=True))
+        layout.addWidget(label('历史会话 · 本次运行', 'muted'))
+        self.chat_sessions = QComboBox()
+        self.chat_sessions.setAccessibleName('当前空间的历史会话')
+        self.chat_sessions.setMinimumContentsLength(12)
+        self.chat_sessions.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        layout.addWidget(self.chat_sessions)
         layout.addSpacing(4)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -159,6 +166,19 @@ class FinanceWindow(QMainWindow):
     def quick_entry(self):
         self.navigate('ledger')
         self.perform(self.pages['ledger'].edit_new)
+
+    def install_dialog_help(self, parent):
+        shortcut = QShortcut(QKeySequence('F1'), parent)
+        shortcut.activated.connect(lambda: self.dialog_help(parent))
+
+    def dialog_help(self, parent):
+        dialog = QDialog(parent)
+        dialog.setWindowTitle('使用帮助')
+        dialog.resize(640, 430)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(HelpPage(self, ASSETS))
+        layout.addWidget(button('返回记账', dialog.accept))
+        dialog.exec()
 
     def command_palette(self):
         query, accepted = QInputDialog.getText(self, '搜索与快捷操作', '页面名称、商户、分类、上个月或金额条件（例如 >100）')
@@ -268,6 +288,10 @@ class FinanceWindow(QMainWindow):
     def new_chat(self):
         self.navigate('chat')
         self.chat.new_chat()
+
+    def select_chat(self, index):
+        self.chat.select_session(index)
+        self.navigate('chat')
 
     def closeEvent(self, event):
         if self.pet is not None:

@@ -134,7 +134,7 @@ def _refund_answer(frame,question,today):
                 trace=trace,status='ok',parser='本地退款查询')
 
 
-def answer_question(frame, question, today=None, budgets=None, model=None):
+def answer_question(frame, question, today=None, budgets=None, model=None, *, local_intent=None):
     frame=effective_frame(frame)
     refund_answer=_refund_answer(frame,question,today or date.today())
     if refund_answer is not None:return refund_answer
@@ -143,17 +143,18 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     if gross_requested and frame.attrs.get('projection')=='spending_view':
         frame=frame[frame.projection_kind!='refund_adjustment'].copy()
     today=today or date.today(); budgets=budgets or {};model_error=None
-    intent=parse_question(question)
+    intent=local_intent or parse_question(question)
     source='本地解析'
     if intent is None and model is not None:
         # Hard boundaries are shared by local and model paths.
         if any(w in question for w in ['预测','投资','股票','下个月','明年','退款']):
             return {'answer':'这个问题不能由已导入的交易记录可靠回答。请询问某月的支出、收入、分类占比或预算。','evidence':[],'status':'unsupported','parser':source}
         try:
-            intent=validate_model_intent(question,model.parse_question(question)); source='模型理解 + 代码计算'
+            intent=validate_model_intent(question,model.parse_question(question))
             if intent is not None:
                 mentioned=[m for m in frame.merchant.unique() if m and m in question]
                 if mentioned and not intent.get('merchant'):intent=None
+            source='模型理解 + 代码计算' if intent is not None else '模型未完成条件解析'
         except Exception as exc:
             from .llm import connection_error_message
             model_error=connection_error_message(exc)
@@ -171,18 +172,40 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     if intent.get('date_from'):
         tx=tx[(tx.date.str[:10]>=intent['date_from'])&(tx.date.str[:10]<=intent['date_to'])]
         label=intent['date_from']+' 至 '+intent['date_to']+' 已导入记录'
+    covered_months=set(frame.attrs.get('source_months', ())) | set(frame.date.str[:7])
+    requested_months=set()
+    if intent.get('date_from'):
+        start=date.fromisoformat(intent['date_from']);end=date.fromisoformat(intent['date_to'])
+        requested_months={month_shift(start,offset) for offset in range((end.year-start.year)*12+end.month-start.month+1)}
+    elif period=='last_3_complete_months':
+        requested_months=set(months)
+    elif month!='all':
+        requested_months={month}
+    scoped_coverage=bool(covered_months & requested_months) if requested_months else bool(covered_months)
+    if (intent.get('merchant') or intent.get('date_from')) and not scoped_coverage:
+        return dict(answer=f'{label}所在月份没有已导入记录，无法判断金额。', evidence=[], status='missing', parser=source)
     if intent.get('merchant'):
         tx=tx[tx.merchant.str.contains(intent['merchant'],regex=False,case=False)]
         label+='，商户包含“'+intent['merchant']+'”'
     full=tx.copy()
-    known_net_scope=(frame.attrs.get('projection')=='spending_view' and not intent.get('merchant') and
-        not intent.get('date_from') and (month in frame.attrs.get('source_months',[]) or month=='all' and bool(frame.attrs.get('source_months'))))
+    explicit_detail=bool(intent.get('merchant') or intent.get('date_from'))
+    known_net_scope=(frame.attrs.get('projection')=='spending_view' and
+        (scoped_coverage and metric in ('expense','income','count') if explicit_detail else
+         month in frame.attrs.get('source_months',[]) or month=='all' and bool(frame.attrs.get('source_months'))))
     if tx.empty and not known_net_scope:
         return {'answer':f'没有 {label}，无法给出金额。请先导入对应账单；没有记录不代表没有消费。','evidence':[],'status':'missing','parser':source}
     if metric in ['expense','share','top','budget','compare','average_expense']: tx=tx[tx.kind=='支出']
     elif metric in ['income','average_income']: tx=tx[tx.kind=='收入']
     elif metric=='balance': tx=tx[tx.kind!='转账']
     if category: tx=tx[tx.category==category]
+    if tx.empty and (intent.get('merchant') or intent.get('date_from')) and known_net_scope:
+        text=f'{label}中没有符合条件的记录。'
+        if requested_months - covered_months:
+            text+=' 部分月份尚无已导入记录。'
+        extra=[dict(type='SourceCoverage',id=label,snapshot=dict(source_months=sorted(covered_months),
+                   requested_months=sorted(requested_months)))]
+        return dict(answer=text,evidence=[],status='no_match',parser=source,
+                    trace=calculation('answer','query.no_match',tx,inputs=intent,extra=extra))
     if tx.empty and not known_net_scope:
         return {'answer':f'{label}中没有符合条件的{category or "相关"}记录，无法提供有源记录支持的金额。','evidence':[],'status':'missing','parser':source}
     total=int(tx.amount_cents.sum()); item=category or ''
@@ -253,6 +276,8 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
     # the direct answer and one deterministic insight before expanding the details.
     spend_title='消费总额' if gross_requested else '净支出' if frame.attrs.get('projection')=='spending_view' else '支出'
     headline=answer.split('计算方式：')[0].split('计算式：')[0].split(' 数据范围：')[0]
+    if intent.get('merchant'):
+        item=f"{intent['merchant']} · "+item
     if metric in ('expense','income'):
         headline=f'{item}{description}合计 {yuan(total)} 元，共 {count_records(tx)} 笔。'
     elif metric=='balance':headline=f'{item}结余为 {yuan(income-expense)} 元。'
@@ -273,4 +298,6 @@ def answer_question(frame, question, today=None, budgets=None, model=None):
         if not grouped.empty and int(grouped.max())>0:
             insight=f'本次范围内金额最高的商户：{grouped.idxmax()}，{yuan(int(grouped.max()))} 元。'
     if not insight:insight=f'本次交易计数 {count_records(tx)} 笔；退款调整不增加消费笔数。'
+    if requested_months - covered_months:
+        insight+=' 尚无已导入记录的月份：'+'、'.join(sorted(requested_months - covered_months))+'。'
     return {'answer':answer,'display_answer':headline.strip()+'\n'+insight,'details':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}

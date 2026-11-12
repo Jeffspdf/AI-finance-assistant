@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
 from finance.analytics import yuan
 from finance.categories import category_options
 from .services import guidance, ledger_coverage, query_ledger
-from .ui import button, label, readonly_text, table
+from .session_history import MAX_MESSAGES, MAX_SESSIONS, SessionHistory
+from .ui import button, confirm, label, readonly_text, table
 
 
 DINING = '上个月餐饮花了多少？'
@@ -83,6 +84,9 @@ class ChatPage(QWidget):
         self.owner = owner
         self.sessions = {'demo': [[]], 'personal': [[]]}
         self.active = {'demo': 0, 'personal': 0}
+        self.saved = {mode: SessionHistory(owner.workspace.directory, mode) for mode in self.sessions}
+        self.loaded = set()
+        self.history_errors = {}
         self.evidence = Evidence(self)
         self.last_result = None
         self.scroll_epoch = 0
@@ -92,6 +96,9 @@ class ChatPage(QWidget):
         layout.setSpacing(8)
         self.coverage = label('', 'muted')
         layout.addWidget(self.coverage)
+        self.history_warning = label('', 'muted')
+        self.history_warning.hide()
+        layout.addWidget(self.history_warning)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -161,17 +168,66 @@ class ChatPage(QWidget):
         selector.setCurrentIndex(self.active[mode])
         selector.blockSignals(False)
 
+    def load_sessions(self):
+        mode = self.owner.workspace.mode
+        if mode in self.loaded:
+            return
+        self.loaded.add(mode)
+        try:
+            self.sessions[mode], self.active[mode] = self.saved[mode].load()
+        except (OSError, ValueError) as exc:
+            self.history_errors[mode] = str(exc) if isinstance(exc, ValueError) else '无法读取本机对话历史。'
+
+    def sync_history_options(self):
+        mode = self.owner.workspace.mode
+        checkbox = self.owner.save_chat_history
+        checkbox.blockSignals(True)
+        checkbox.setChecked(self.saved[mode].previous is not None)
+        checkbox.blockSignals(False)
+        warning = self.history_errors.get(mode, '')
+        self.history_warning.setText(warning)
+        self.history_warning.setVisible(bool(warning))
+
+    def save_sessions(self):
+        mode = self.owner.workspace.mode
+        if self.saved[mode].previous is None or mode in self.history_errors:
+            return
+        try:
+            self.saved[mode].save(self.sessions[mode], self.active[mode])
+        except (OSError, ValueError) as exc:
+            self.history_errors[mode] = str(exc) if isinstance(exc, ValueError) else '本机对话历史写入失败。'
+            self.sync_history_options()
+
+    def toggle_history(self, enabled):
+        mode = self.owner.workspace.mode
+        title = '本机保存对话' if enabled else '停止本机保存'
+        message = ('为当前空间保存最近的对话文本？文本可能包含你问过的商户及回答金额。'
+                   '计算依据、源文件和账本快照仍只在内存中。'
+                   if enabled else '删除当前空间的本机历史文件？本次打开的对话仍可查看。')
+        if confirm(self, title, message):
+            try:
+                if enabled:
+                    self.saved[mode].save(self.sessions[mode], self.active[mode])
+                else:
+                    self.saved[mode].erase()
+                self.history_errors.pop(mode, None)
+            except (OSError, ValueError) as exc:
+                self.history_errors[mode] = str(exc) if isinstance(exc, ValueError) else '未能更新本机对话历史。'
+        self.sync_history_options()
+
     def select_session(self, index):
         mode = self.owner.workspace.mode
         if 0 <= index < len(self.sessions[mode]) and index != self.active[mode]:
             self.active[mode] = index
             self.reload()
+            self.save_sessions()
 
     def reset_sessions(self):
         mode = self.owner.workspace.mode
         self.sessions[mode] = [[]]
         self.active[mode] = 0
         self.reload()
+        self.save_sessions()
 
     def near_bottom(self):
         bar = self.scroll.verticalScrollBar()
@@ -203,6 +259,7 @@ class ChatPage(QWidget):
 
     def reload(self):
         self.stop(quiet=True)
+        self.load_sessions()
         self.last_result = None
         self.evidence.close()
         self.input.clear()
@@ -220,6 +277,7 @@ class ChatPage(QWidget):
             self.welcome()
         self.sync_controls()
         self.sync_sessions()
+        self.sync_history_options()
         self.scroll_after_layout(True)
 
     def welcome(self):
@@ -276,6 +334,8 @@ class ChatPage(QWidget):
                 body.addWidget(label('查询范围 · ' + payload['scope'], 'muted'))
             if payload.get('parser'):
                 body.addWidget(label(payload['parser'], 'muted'))
+            if payload.get('archived_text'):
+                body.addWidget(label('历史文本 · 重新提问可查看本次计算依据', 'muted'))
             actions = QHBoxLayout()
             if payload.get('evidence') or payload.get('trace'):
                 actions.addWidget(button('查看依据', lambda: self.evidence.present(payload)))
@@ -308,11 +368,12 @@ class ChatPage(QWidget):
         if role == 'user':
             self.sync_sessions()
         self.add_bubble(role, payload)
-        if len(history) > 40:
+        if len(history) > MAX_MESSAGES:
             history.pop(0)
             item = self.messages.takeAt(0)
             item.widget().hide()
             item.widget().deleteLater()
+        self.save_sessions()
         self.scroll_after_layout(follow, previous)
 
     def submit_input(self):
@@ -392,8 +453,9 @@ class ChatPage(QWidget):
         if self.active_history():
             rows = self.sessions[mode]
             rows.append([])
-            if len(rows) > 15:
+            if len(rows) > MAX_SESSIONS:
                 rows.pop(0)
             self.active[mode] = len(rows) - 1
         self.reload()
+        self.save_sessions()
         self.input.setFocus()

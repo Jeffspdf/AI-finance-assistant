@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QComboBox, QDialog, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from finance.llm import ModelClient
@@ -78,6 +78,7 @@ class FinanceWindow(QMainWindow):
 
         self.chat = ChatPage(self)
         self.chat_sessions.currentIndexChanged.connect(self.select_chat)
+        self.save_chat_history.toggled.connect(self.chat.toggle_history)
         self.plan = PlanPage(self)
         self.pages = {
             'chat': self.chat, 'overview': OverviewPage(self), 'ledger': LedgerPage(self),
@@ -118,12 +119,15 @@ class FinanceWindow(QMainWindow):
         layout.addWidget(label('PySide6 预览版', 'muted'))
         layout.addSpacing(10)
         layout.addWidget(button('＋  新对话', self.new_chat, primary=True))
-        layout.addWidget(label('历史会话 · 本次运行', 'muted'))
+        layout.addWidget(label('历史会话', 'muted'))
         self.chat_sessions = QComboBox()
         self.chat_sessions.setAccessibleName('当前空间的历史会话')
         self.chat_sessions.setMinimumContentsLength(12)
         self.chat_sessions.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         layout.addWidget(self.chat_sessions)
+        self.save_chat_history = QCheckBox('本机保存对话文本')
+        self.save_chat_history.setToolTip('每个账本空间可独立启用，默认关闭。')
+        layout.addWidget(self.save_chat_history)
         layout.addSpacing(4)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)

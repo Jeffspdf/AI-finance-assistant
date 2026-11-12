@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 import sys
+from tempfile import gettempdir
 
 from PySide6.QtWidgets import QApplication
 
@@ -13,11 +14,14 @@ from qt_finance.window import FinanceWindow
 def main(argv=None):
     parser = argparse.ArgumentParser(description='AI理财小助手 PySide6 预览')
     parser.add_argument('--data-dir', type=Path)
-    parser.add_argument('--self-test', type=Path, metavar='OUTPUT')
+    parser.add_argument('--self-test', nargs='?', type=Path, const=True,
+                        metavar='OUTPUT', help='运行合成账本自检，默认输出到系统临时目录的 AIFinanceHelperQt-self-test')
     parser.add_argument('--tk-backup-fixture', type=Path)
     parser.add_argument('--qt-return-fixture', type=Path)
     parser.add_argument('--live-model-settings', type=Path)
     args = parser.parse_args(argv)
+    if args.self_test is True:
+        args.self_test = Path(gettempdir()) / 'AIFinanceHelperQt-self-test'
     if (args.tk_backup_fixture or args.qt_return_fixture or args.live_model_settings) and not args.self_test:
         parser.error('测试选项仅可与 --self-test 一起使用。')
     if args.qt_return_fixture and (not args.tk_backup_fixture or args.live_model_settings):

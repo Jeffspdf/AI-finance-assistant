@@ -25,6 +25,7 @@ from finance.model_settings import ModelSettings
 from finance.qa import month_shift
 from finance.storage import Store
 from .services import guidance, query_ledger
+from .session_history import SessionHistory
 from .plan import ManualPlan
 from . import updates
 from .window import FinanceWindow
@@ -188,6 +189,73 @@ def query_feedback(app, window, directory):
     assert seen == [True]
 
 
+def session_persistence(app, directory):
+    root = directory / 'history-fixture'
+    window = FinanceWindow(root)
+    window.show()
+    try:
+        chat = window.chat
+        assert not window.save_chat_history.isChecked()
+        ledger = Path(window.workspace.store.path)
+        before = ledger.read_bytes()
+        chat.append('user', '合成演示提问')
+        chat.append('assistant', dict(answer='合成演示金额 32 元',
+                    evidence=[dict(merchant='仅证据商户', source_file='synthetic-private.csv')],
+                    trace={'source_row': 77}, details='仅完整依据'))
+        assert not list(root.glob('chat-history-*.json'))
+        with patch('qt_finance.chat.confirm', return_value=True):
+            window.save_chat_history.click()
+        window.new_chat()
+        chat.append('user', '合成演示第二会话')
+        raw = (root / 'chat-history-demo.json').read_text(encoding='utf-8')
+        assert '合成演示金额 32 元' in raw and '合成演示第二会话' in raw
+        assert all(term not in raw for term in ('仅证据商户', 'synthetic-private.csv', 'source_row', '仅完整依据'))
+        assert ledger.read_bytes() == before
+        window.space.setCurrentIndex(window.space.findData('personal'))
+        assert not window.save_chat_history.isChecked() and not chat.active_history()
+        with patch('qt_finance.chat.confirm', return_value=True):
+            window.save_chat_history.click()
+        chat.append('user', '合成个人提问')
+        assert '合成个人提问' not in (root / 'chat-history-demo.json').read_text(encoding='utf-8')
+    finally:
+        window.close()
+    first = SessionHistory(root, 'demo')
+    stale = SessionHistory(root, 'demo')
+    rows, active = first.load()
+    stale.load()
+    first.save(rows, 0)
+    try:
+        stale.save(rows, active)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('concurrent update was overwritten')
+
+    reopened = FinanceWindow(root)
+    reopened.show()
+    try:
+        assert reopened.save_chat_history.isChecked() and reopened.chat_sessions.count() == 2
+        restored = reopened.chat.active_history()[-1][1]
+        assert restored == {'answer': '合成演示金额 32 元', 'archived_text': True}
+        reopened.space.setCurrentIndex(reopened.space.findData('personal'))
+        assert reopened.chat.active_history() == [('user', '合成个人提问')]
+        with patch('qt_finance.chat.confirm', return_value=True):
+            reopened.save_chat_history.click()
+        assert not (root / 'chat-history-personal.json').exists()
+    finally:
+        reopened.close()
+
+    bad = root / 'chat-history-demo.json'
+    bad.write_text('{bad json', encoding='utf-8')
+    broken = FinanceWindow(root)
+    try:
+        assert not broken.chat.active_history() and broken.chat.history_warning.text()
+        broken.chat.append('user', '合成损坏后继续使用')
+        assert bad.read_text(encoding='utf-8') == '{bad json'
+    finally:
+        broken.close()
+
+
 def import_budget_backup(app, window, directory):
     ledger = window.pages['ledger']
     source = directory / 'synthetic.csv'
@@ -302,6 +370,31 @@ def import_budget_backup(app, window, directory):
         click(backup, '恢复选中备份')
     assert Path(backup_path).name in restore_prompt.call_args.args[-1]
     assert window.workspace.store.transaction_source(imported['id'])['status'] != 'deleted'
+
+    store = window.workspace.store
+    store.import_statement(parse_statement(source.read_bytes(), source.name, adapter='generic',
+                                           account_id=picked[0], retain_source=True))
+    duplicate = next(row for row in store.import_batches() if row['duplicates'] == 1)
+    assert store.preview_import_undo(duplicate['id']) == ()
+    store.delete_import_batch(duplicate['id'], expected_ids=())
+    assert store.transaction_source(imported['id'])['status'] != 'deleted'
+    assert store.preview_import_undo(batch['id']) == (imported['id'],)
+    window.navigate('ledger')
+
+    def undo_import():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '导入批次':
+            view = dialog.findChild(QTableView)
+            view.selectRow(next(i for i, row in enumerate(view.model().records) if row['id'] == batch['id']))
+            click(dialog, '撤销选中导入')
+            dialog.accept()
+
+    QTimer.singleShot(40, undo_import)
+    with patch('qt_finance.pages.confirm', return_value=True) as undo_prompt:
+        click(ledger, '导入批次')
+    assert '1 笔' in undo_prompt.call_args.args[-1] and batch['id'] in undo_prompt.call_args.args[-1]
+    assert store.transaction_source(imported['id'])['status'] == 'deleted'
+    assert any(row['id'] == batch['id'] and row['status'] == 'deleted' for row in store.import_batches())
 
 
 def reconciliation(window, directory):
@@ -436,8 +529,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.3'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.3-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.4'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.4-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -592,6 +685,7 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
             assert window.current == 'chat'
             chat_and_plan(app, window, output)
             query_feedback(app, window, root)
+            session_persistence(app, root)
             space_isolation(app, window)
             import_budget_backup(app, window, root)
             reconciliation(window, root)
@@ -629,9 +723,10 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         'pages': list(FinanceWindow.page_labels),
         'tk_migration': migration,
         'checks': ['chat and sources', 'merchant dates, coverage and model fallback', 'session switch and dialog F1',
+                   'opt-in text history, restart, workspace isolation, corruption and concurrent writes',
                    'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
                    'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',
-                   'import account selection, issues and scoped net CSV',
+                   'import account selection, issues, audited undo and scoped net CSV',
                    'batch category undo', 'soft delete and backup restore',
                    'cross-source reconciliation and refund 120 to 60 to 50', 'refund source grouping and link invalidation',
                    'read-only scenario prefill and manual A/B', 'amount search', 'synthetic model probe and Windows DPAPI reload',

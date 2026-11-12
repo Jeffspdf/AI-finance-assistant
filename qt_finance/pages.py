@@ -659,16 +659,19 @@ class LedgerPage(Page):
 
         def remove():
             row = selected(view, model)
-            if confirm(dialog, '删除导入批次', f"从账本移除「{row['filename']}」这一批的交易？"):
-                self.store.delete_import_batch(row['id'])
+            affected = self.store.preview_import_undo(row['id'])
+            message = (f"批次 {row['id']}\n文件 {row['filename']}\n将移除该批次新增或恢复的 {len(affected)} 笔当前交易。"
+                       "\n跳过的重复交易、导入历史和原始记录会保留。受影响的对账或退款关系会失效。")
+            if confirm(dialog, '撤销选中导入', message):
+                count = self.store.delete_import_batch(row['id'], expected_ids=affected)
                 model.replace(self.store.import_batches())
-                self.changed('导入批次已移除，审计与来源记录已保留。')
+                self.changed(f'已撤销选中导入，移除 {count} 笔交易。批次历史及审计已保留。')
 
         actions = toolbar(layout)
         self.action(actions, '查看批次', lambda: details(dialog, '批次资料', selected(view, model)))
         self.action(actions, '导出异常与冲突 CSV',
                     lambda: export_issues(dialog, json.loads(selected(view, model)['issues_json'])))
-        self.action(actions, '删除批次', remove)
+        self.action(actions, '撤销选中导入', remove)
         actions.addStretch(1)
         actions.addWidget(button('关闭', dialog.close))
         dialog.exec()

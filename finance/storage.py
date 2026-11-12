@@ -250,12 +250,26 @@ class Store(Refunds,Reconciliation,BackupManagement):
         with self.connect(read_only=True) as db:
             return [dict(r) for r in db.execute('SELECT b.*,d.filename,d.sha256,a.label AS account_label,a.archived_at AS account_archived_at FROM import_batches b JOIN source_documents d ON d.id=b.document_id LEFT JOIN accounts a ON a.id=b.account_id ORDER BY b.started_at DESC,b.id')]
 
-    def delete_import_batch(self,identifier):
+    @staticmethod
+    def _active_batch_transactions(db,identifier):
+        return tuple(row[0] for row in db.execute(
+            "SELECT id FROM transactions WHERE import_batch_id=? AND status<>'deleted' ORDER BY id", (identifier,)))
+
+    def preview_import_undo(self,identifier):
+        with self.connect(read_only=True) as db:
+            db.execute('BEGIN')
+            batch=db.execute('SELECT status FROM import_batches WHERE id=?',(identifier,)).fetchone()
+            if not batch or batch['status']!='committed':raise ValueError('只能撤销已完成且未撤销的导入批次')
+            return self._active_batch_transactions(db,identifier)
+
+    def delete_import_batch(self,identifier,*,expected_ids=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             batch=db.execute('SELECT * FROM import_batches WHERE id=?',(identifier,)).fetchone()
             if not batch or batch['status']=='deleted':raise ValueError('批次不存在或已经删除')
-            ids=[r[0] for r in db.execute("SELECT id FROM transactions WHERE import_batch_id=? AND status<>'deleted'",(identifier,))]
+            ids=self._active_batch_transactions(db,identifier)
+            if expected_ids is not None and (batch['status']!='committed' or tuple(expected_ids)!=ids):
+                raise ValueError('批次已变化，请重新预览后再撤销导入')
             for txid in ids:self.invalidate_groups(db,txid,'所属导入批次已删除')
             db.execute("UPDATE transactions SET status='deleted' WHERE import_batch_id=?",(identifier,))
             db.execute("UPDATE import_batches SET status='deleted' WHERE id=?",(identifier,))

@@ -13,10 +13,11 @@ from unittest.mock import patch
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialogButtonBox, QLineEdit, QPushButton, QTableView
+from PySide6.QtWidgets import QApplication, QCheckBox, QDialogButtonBox, QLineEdit, QMessageBox, QPushButton, QTableView
 import pandas as pd
 
 from finance.m1a_demo import seed_six
+from finance.analytics import yuan
 from finance.llm import ModelClient
 from finance.importer import parse_statement
 from finance.model_settings import ModelSettings
@@ -27,8 +28,8 @@ from . import updates
 from .window import FinanceWindow
 
 
-def wait(app, predicate, label):
-    until = monotonic() + 10
+def wait(app, predicate, label, seconds=10):
+    until = monotonic() + seconds
     while monotonic() < until:
         app.processEvents()
         if predicate():
@@ -316,9 +317,98 @@ def pet_animation(app, window):
     assert not window.pet.isVisible()
 
 
-def exercise(app, output):
+def restore_tk_backup(app, window, backup_path):
+    source = Path(backup_path)
+    before = source.read_bytes()
+    assert window.workspace.mode == 'demo'
+    demo = Path(window.workspace.store.path)
+    demo_before = demo.read_bytes()
+    window.space.setCurrentIndex(window.space.findData('personal'))
+    assert window.workspace.mode == 'personal'
+    window.navigate('backup')
+    prompts = []
+
+    def confirm_restore():
+        dialog = app.activeModalWidget()
+        if isinstance(dialog, QMessageBox) and dialog.windowTitle() == '确认恢复':
+            prompts.append(dialog.text())
+            dialog.button(QMessageBox.StandardButton.Yes).click()
+
+    with patch('qt_finance.pages.QFileDialog.getOpenFileName', return_value=(str(source), '')):
+        QTimer.singleShot(50, confirm_restore)
+        click(window.pages['backup'], '从备份恢复')
+
+    store = window.workspace.store
+    assert len(prompts) == 1 and '交易 2 条' in prompts[0] and '我的账本' in prompts[0]
+    assert sorted(store.source_transactions().amount_cents) == [4200, 520000]
+    assert store.budgets('2026-10') == {'餐饮': 20000}
+    goals = store.goals().to_dict('records')
+    assert len(goals) == 1 and goals[0]['target_cents'] == 600000 and goals[0]['saved_cents'] == 5000
+    contributions = store.contributions(goals[0]['id'])
+    assert contributions.amount_cents.tolist() == [10000]
+    assert store.managed_backups()
+    assert demo.read_bytes() == demo_before and source.read_bytes() == before
+    return dict(transactions=2, budget_cents=20000, goals=1, target_cents=600000,
+                contribution_cents=10000, source_unchanged=True, demo_unchanged=True, rollback_snapshot=True)
+
+
+def exercise_live_model(app, output, settings_directory):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    report = dict(platform=app.platformName(), scale=app.primaryScreen().devicePixelRatio(),
+                  case='L1', data='synthetic only')
+    config = ModelSettings(settings_directory).load()
+    if not config.enabled:
+        report.update(status='blocked', reason='未找到已启用且可读取的模型配置', model_calls=0)
+    else:
+        with TemporaryDirectory(prefix='qt-live-') as temporary:
+            root = Path(temporary)
+            demo = Store(root / 'demo.sqlite3')
+            for offset in (-3, -2, -1):
+                day = month_shift(date.today(), offset) + '-15'
+                for merchant, cents, kind, category in (
+                    ('合成公司', 520000, '收入', '工资'), ('合成餐厅', 100000, '支出', '餐饮'),
+                    ('合成地铁', 70000, '支出', '交通'), ('合成房东', 315000, '支出', '居住'),
+                ):
+                    demo.add_manual_transaction(day, merchant, cents, kind, category)
+            window = FinanceWindow(root)
+            try:
+                window.configure_model(config)
+                window.show()
+                window.navigate('plan')
+                plan = window.plan
+                app.processEvents()
+                before = Path(demo.path).read_bytes()
+                plan.confirmed.click()
+                plan.authorized.click()
+                assert plan.confirmed.isChecked() and plan.authorized.isChecked()
+                started = monotonic()
+                click(plan, '生成规划')
+                wait(app, plan.generate.isEnabled, 'real-model L1', seconds=68)
+                result = plan.result or {}
+                scenarios = result.get('simulation') or {}
+                cents = {row['label']: row.get('projected_cents') for row in scenarios.get('facts', {}).get('scenarios', ())}
+                expected = {'A': 210000, 'B': 312000, 'C': 600000}
+                cards = all(plan.cards[key][0].text() == '¥' + yuan(value) for key, value in expected.items())
+                claims = len(result.get('claims') or ())
+                trace = len(result.get('model_trace') or ())
+                read_only = Path(demo.path).read_bytes() == before
+                passed = (result.get('planner') == 'model_tools' and result.get('model_status') == 'verified'
+                          and cents == expected and cards and claims and trace and read_only)
+                report.update(status='passed' if passed else 'failed', model_status=result.get('model_status'),
+                              model_calls=result.get('model_calls', 0), fallback=result.get('planner') == 'local_rules',
+                              seconds=round(monotonic() - started, 3), scenarios_cents=cents, cards_match=cards,
+                              claims=claims, trace=trace, source_unchanged=read_only)
+            finally:
+                window.close()
+                window.jobs.pool.waitForDone()
+    (output / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def exercise(app, output, tk_backup=None):
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    migration = None
     with TemporaryDirectory(prefix='qt-ledgers-') as temporary:
         root = Path(temporary)
         demo = Store(root / 'demo.sqlite3')
@@ -343,6 +433,9 @@ def exercise(app, output):
                 navigation.click()
                 app.processEvents()
                 assert window.current == name and not window.message.text(), (name, window.message.text())
+            if tk_backup:
+                window.space.setCurrentIndex(window.space.findData('demo'))
+                migration = restore_tk_backup(app, window, tk_backup)
             window.navigate('chat')
             window.resize(760, 480)
             app.processEvents()
@@ -355,6 +448,7 @@ def exercise(app, output):
     (output / 'results.json').write_text(json.dumps({
         'platform': app.platformName(), 'scale': app.primaryScreen().devicePixelRatio(),
         'pages': list(FinanceWindow.page_labels),
+        'tk_migration': migration,
         'checks': ['chat and sources', 'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
                    'budget save', 'batch category undo', 'soft delete and backup restore',
                    'cross-source reconciliation and refund 120 to 60 to 50', 'refund source grouping and link invalidation',

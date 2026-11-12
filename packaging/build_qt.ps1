@@ -13,9 +13,9 @@ try {
     & $Python -m PyInstaller @packager @resources qt_desktop.py
     if ($LASTEXITCODE -ne 0) { throw 'Qt build failed.' }
     $exe = 'dist/AIFinanceHelperQt/AIFinanceHelperQt.exe'
-    & $Python scripts/verify_qt_native.py .test_qt/packaged150 --exe $exe --scale 1.5
+    & $Python scripts/verify_qt_native.py .test_qt/packaged150 --exe $exe --scale 1.5 --tk-migration
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Qt smoke test failed.' }
-    & $Python scripts/verify_qt_native.py .test_qt/packaged200 --exe $exe --scale 2
+    & $Python scripts/verify_qt_native.py .test_qt/packaged200 --exe $exe --scale 2 --tk-migration
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Qt smoke test failed at 200% DPI.' }
     New-Item -ItemType Directory -Force -Path release | Out-Null
     Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath release/AIFinanceHelperQt-preview-Windows-x64.zip -Force

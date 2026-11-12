@@ -1,6 +1,6 @@
 # AI理财小助手 · PySide6 预览
 
-独立客户端位于 `prototype/pyside6-finance`，从 rc.4 派生。Windows 便携包解压后，双击文件夹内的 `AIFinanceHelperQt.exe`。
+课程提交基线是 Tk `v0.10.0-rc.4`。独立 Qt 客户端位于 `prototype/pyside6-finance`。Windows 便携包解压后，双击文件夹内的 `AIFinanceHelperQt.exe`。
 
 首次启动打开演示空间。默认数据目录是 `%LOCALAPPDATA%\ShiguangLedger-QtPreview`。要核对 Tk 中已有的记录，先在 Tk 客户端创建备份，然后在 Qt 里切到目标空间，通过「备份与恢复」恢复那份备份。
 
@@ -15,7 +15,7 @@
 
 Qt 检查更新使用独立发布通道，读取 `qt-vX.Y.Z` 对应的 Qt 便携包并校验 SHA256。便携包下载完成后需手动解压启动。
 
-本版仍是迁移预览。Tk 的原版图表、完整助手的写入命令和原地安装式升级没有逐项复刻。Windows 原生测试使用合成账本、模拟模型及更新源。
+本版仍是迁移预览。Tk 的原版图表、完整助手的写入命令和原地安装式升级未迁移。Windows 原生测试和真实模型联调都使用合成账本。真实模型联调需另行提供已启用的本机配置目录，联调进程只读取其中的模型设置。
 
 ## 从源码运行
 
@@ -28,9 +28,15 @@ python qt_desktop.py
 测试与打包：
 
 ```powershell
-python scripts/verify_qt_native.py .test_qt/source150 --scale 1.5
-python scripts/verify_qt_native.py .test_qt/source200 --scale 2
+python scripts/verify_qt_native.py .test_qt/source150 --scale 1.5 --tk-migration
+python scripts/verify_qt_native.py .test_qt/source200 --scale 2 --tk-migration
 ./packaging/build_qt.ps1 -Python python
 ```
 
-打包脚本使用 PyInstaller 生成 Qt 独立目录，先运行打包 EXE 自检，再压缩到 `release/AIFinanceHelperQt-preview-Windows-x64.zip`。
+打包脚本使用 PyInstaller 生成 Qt 独立目录。打包 EXE 在 150% 和 200% 下通过自检及 Tk 备份恢复后，才压缩到 `release/AIFinanceHelperQt-preview-Windows-x64.zip`。
+
+可选的真实模型 L1 单独运行，使用独立输出目录。查看结果中的 `status`、`fallback` 和 `model_calls`。
+
+```powershell
+python scripts/verify_qt_native.py .test_qt/live-qt --scale 1.5 --exe dist/AIFinanceHelperQt/AIFinanceHelperQt.exe --live-model-settings "$env:LOCALAPPDATA\ShiguangLedger-QtPreview"
+```

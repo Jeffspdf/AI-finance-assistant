@@ -1,10 +1,13 @@
-"""An independent release channel for Qt's portable Windows builds."""
+"""Independent Qt release channel for portable and installed clients."""
 
+from configparser import ConfigParser, Error as ConfigError
 from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 from tempfile import NamedTemporaryFile
 
 from finance.updates import REPO, _fresh_request, _open_download
@@ -12,7 +15,8 @@ from finance.updates import REPO, _fresh_request, _open_download
 
 RELEASES = f'https://github.com/{REPO}/releases'
 FEED = f'https://api.github.com/repos/{REPO}/releases?per_page=30'
-CURRENT = (0, 10, 0)
+VERSION = '0.10.0-preview.1'
+VERSION_PATTERN = r'(\d+)\.(\d+)\.(\d+)(?:-preview\.(\d+))?'
 MAX_BYTES = 512 * 1024 * 1024
 
 
@@ -26,19 +30,30 @@ class Release:
     digest: str
 
 
-def select_release(records, current=CURRENT):
+def version_key(version):
+    match = re.fullmatch(VERSION_PATTERN, version)
+    if not match:
+        raise ValueError('无效的 Qt 版本号。')
+    preview = match[4]
+    return (*map(int, match.groups()[:3]), preview is None, int(preview or 0))
+
+
+def select_release(records, current=VERSION, *, installed=False):
     if not isinstance(records, list):
         raise ValueError('GitHub 更新列表格式不兼容。')
     candidates = []
     for record in records:
         tag = record.get('tag_name', '')
-        match = re.fullmatch(r'qt-v(\d+\.\d+\.\d+)', tag)
-        if not match or record.get('draft') or record.get('prerelease'):
+        match = re.fullmatch(r'qt-v(' + VERSION_PATTERN + ')', tag)
+        if not match or record.get('draft') or bool(record.get('prerelease')) != bool(match[5]):
             continue
-        version = tuple(map(int, match[1].split('.')))
-        if version <= current:
+        if match[5] and '-preview.' not in current:
             continue
-        name = f'AIFinanceHelperQt-{match[1]}-Windows-x64.zip'
+        version = version_key(match[1])
+        if version <= version_key(current):
+            continue
+        suffix = 'Setup-x64.exe' if installed else 'Windows-x64.zip'
+        name = f'AIFinanceHelperQt-{match[1]}-{suffix}'
         url = f'{RELEASES}/download/{tag}/{name}'
         for asset in record.get('assets', ()):
             digest, size = asset.get('digest') or '', asset.get('size')
@@ -50,13 +65,42 @@ def select_release(records, current=CURRENT):
     return max(candidates, default=None, key=lambda release: release.version)
 
 
-def check():
+def check(*, installed=False):
     limit = 4 * 1024 * 1024
     with _open_download(_fresh_request(FEED, {'Accept': 'application/vnd.github+json'}), 8, stage='qt-release') as stream:
         payload = stream.read(limit + 1)
     if len(payload) > limit:
         raise ValueError('GitHub 更新列表超过预期大小。')
-    return select_release(json.loads(payload))
+    return select_release(json.loads(payload), installed=installed)
+
+
+def installation(directory):
+    config = ConfigParser()
+    try:
+        config.read(Path(directory) / 'qt-install.ini', encoding='utf-8-sig')
+        mode = config.get('installation', 'registration', fallback='')
+    except (ConfigError, OSError, UnicodeError):
+        return ''
+    return mode if mode in ('standalone', 'windows') else ''
+
+
+def installation_directory():
+    return Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else None
+
+
+def launch_installer(release, target, directory, mode):
+    target = Path(target).resolve()
+    if not release.name.endswith('-Setup-x64.exe') or target.name != release.name:
+        raise ValueError('请选择已下载的原名 Qt 安装包。')
+    with target.open('rb') as stream:
+        size = target.stat().st_size
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest() if size == release.size else ''
+    if digest != release.digest:
+        raise ValueError('安装包已变化，请重新下载。')
+    command = [str(target), f'/DIR={directory}']
+    if mode == 'standalone':
+        command.append('/NOREGISTRATION=1')
+    subprocess.Popen(command)
 
 
 def download(release, target, stop):
@@ -74,13 +118,13 @@ def download(release, target, stop):
                         break
                     received += len(block)
                     if received > release.size:
-                        raise ValueError('压缩包超过预期大小。')
+                        raise ValueError('更新文件超过预期大小。')
                     digest.update(block)
                     output.write(block)
             if stop.is_set():
                 raise InterruptedError('下载已停止。')
             if received != release.size or digest.hexdigest() != release.digest:
-                raise ValueError('Qt 压缩包未通过大小或 SHA256 校验。')
+                raise ValueError('Qt 更新文件未通过大小或 SHA256 校验。')
         if stop.is_set():
             raise InterruptedError('下载已停止。')
         partial.replace(target)

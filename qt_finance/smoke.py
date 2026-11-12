@@ -260,6 +260,18 @@ def reconciliation(window, directory):
     assert summary.metrics['net_cents'].text() == '¥120.00'
     summary.month.setCurrentIndex(summary.month.findData('2026-09'))
     assert summary.metrics['net_cents'].text() == '¥120.00' and summary.monthly.rowCount() == 1
+    assert summary.trend_chart.points == [('2026-09', 120.0)] and summary.category_chart.points
+    store = window.workspace.store
+    store.save_budget('2026-09', '餐饮', 1000)
+    store.save_goal(dict(name='合成目标提醒', target_cents=600000, saved_cents=0,
+                         start_date='2026-01-01', deadline='2027-01-01', income_cents=10000, budget_cents=10000))
+    summary.refresh()
+    assert {row['type'] for row in summary.reminders.records} == {'预算超支', '储蓄目标'}
+    summary.tabs.setCurrentIndex(summary.reminder_tab)
+    summary.reminder_view.selectRow(0)
+    click(summary, '本次隐藏')
+    assert {row['type'] for row in summary.reminders.records} == {'储蓄目标'}
+    summary.tabs.setCurrentIndex(0)
     if date.today().strftime('%Y-%m') != '2026-09':
         summary.month.setCurrentIndex(summary.month.findData(date.today().strftime('%Y-%m')))
         assert '暂无已导入账单' in summary.basis.text() and summary.monthly.rowCount() == 0
@@ -360,13 +372,37 @@ def model_and_updates(app, window, directory):
     tag, name = 'qt-v0.10.1', 'AIFinanceHelperQt-0.10.1-Windows-x64.zip'
     asset = dict(name=name, state='uploaded', browser_download_url=f'{updates.RELEASES}/download/{tag}/{name}',
                  size=len(content), digest='sha256:' + sha256(content).hexdigest())
-    release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset])
+    stable_setup = 'AIFinanceHelperQt-0.10.1-Setup-x64.exe'
+    stable_setup_asset = dict(asset, name=stable_setup,
+                              browser_download_url=f'{updates.RELEASES}/download/{tag}/{stable_setup}')
+    release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
+    preview_tag = 'qt-v0.10.0-preview.2'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.2-Setup-x64.exe'
+    setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
+    preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
+    assert updates.select_release([preview]) is None
+    assert updates.select_release([preview], current='0.10.0', installed=True) is None
+    setup = updates.select_release([preview], installed=True)
+    assert setup.name == setup_name
+    installer = directory / setup.name
+    installer.write_bytes(content)
+    with patch('qt_finance.updates.subprocess.Popen') as launch:
+        updates.launch_installer(setup, installer, directory, 'standalone')
+        launch.assert_called_once_with([str(installer), f'/DIR={directory}', '/NOREGISTRATION=1'])
+        installer.write_bytes(b'modified')
+        try:
+            updates.launch_installer(setup, installer, directory, 'standalone')
+        except ValueError:
+            assert launch.call_count == 1
+        else:
+            raise AssertionError('modified installer accepted')
     with patch('qt_finance.updates._open_download', return_value=BytesIO(json.dumps([release]).encode())):
         click(settings, '检查 Qt 更新')
         wait(app, lambda: settings.download_button.isEnabled(), 'Qt release discovery')
-    target = directory / name
+    assert settings.release.name == (stable_setup if settings.install_mode else name)
+    target = directory / settings.release.name
     with patch('qt_finance.updates._open_download', return_value=BytesIO(content)):
         assert updates.download(settings.release, target, Event()).read_bytes() == content
     with patch('qt_finance.updates._open_download', return_value=BytesIO(b'tampered')):
@@ -534,10 +570,11 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         'pages': list(FinanceWindow.page_labels),
         'tk_migration': migration,
         'checks': ['chat and sources', 'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
-                   'budget save, evidence and ledger drill-down', 'overview month scope',
+                   'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',
                    'import account selection, issues and scoped net CSV',
                    'batch category undo', 'soft delete and backup restore',
                    'cross-source reconciliation and refund 120 to 60 to 50', 'refund source grouping and link invalidation',
                    'read-only scenario prefill and manual A/B', 'amount search', 'synthetic model probe and Windows DPAPI reload',
-                   'Qt-only release check and SHA256 rejection', 'floating sprite and pause', 'minimum-size send button'],
+                   'Qt-only release check, installed preview upgrade and SHA256 rejection', 'floating sprite and pause',
+                   'minimum-size send button'],
     }, ensure_ascii=False, indent=2), encoding='utf-8')

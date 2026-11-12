@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from finance.analytics import budget_report, month_records, overview, yuan
+from finance.analytics import budget_report, goal_progress, month_records, overview, yuan
 from finance.categories import category_options
 from finance.demo_generator import DemoOptions, generate_demo
 from finance.evidence import calculation
@@ -30,6 +30,7 @@ from finance.updates import update_error_message
 from finance.spending_presenter import basis_label, net_export_csv, spending_totals
 
 from .chat import EVIDENCE_COLUMNS, Evidence
+from .overview_chart import SpendingChart
 from .services import preview_statement
 from .ui import button, card, confirm, details, label, readonly_text, selected, selected_rows, table
 from . import updates
@@ -134,14 +135,35 @@ class OverviewPage(Page):
         self.six_demo_button = self.action(row, '加载六笔对账示例', self.six_demo)
         row.addStretch(1)
         tabs = QTabWidget()
+        self.tabs = tabs
         monthly, self.monthly = table([(name, name) for name in ('月份', '收入', '支出', '结余')])
         self.category_view, self.categories = table([(name, name) for name in ('分类', '支出', '占比')])
-        tabs.addTab(monthly, '月度收支 / 元')
-        tabs.addTab(self.category_view, '支出分类 / 元')
-        self.layout.addWidget(tabs, 1)
-        actions = toolbar(self.layout)
+        self.trend_chart = SpendingChart(trend=True)
+        self.category_chart = SpendingChart()
+        for title, chart, view in (('月度收支 / 元', self.trend_chart, monthly),
+                                   ('支出分类 / 元', self.category_chart, self.category_view)):
+            page = QWidget()
+            chart_layout = QVBoxLayout(page)
+            chart_layout.addWidget(chart)
+            chart_layout.addWidget(view, 1)
+            tabs.addTab(page, title)
+        actions = toolbar(chart_layout)
         self.action(actions, '查看选中分类的账单', self.open_category)
         actions.addStretch(1)
+        self.category_view.doubleClicked.connect(lambda _: self.owner.perform(self.open_category))
+        self.dismissed = set()
+        reminder_page = QWidget()
+        reminder_layout = QVBoxLayout(reminder_page)
+        self.reminder_caption = label('', 'muted')
+        reminder_layout.addWidget(self.reminder_caption)
+        self.reminder_view, self.reminders = table((('类型', 'type'), ('项目', 'title'), ('提醒', 'message')))
+        reminder_layout.addWidget(self.reminder_view, 1)
+        reminder_actions = toolbar(reminder_layout)
+        self.action(reminder_actions, '查看选中提醒', self.open_reminder)
+        self.action(reminder_actions, '本次隐藏', self.dismiss_reminder)
+        reminder_actions.addStretch(1)
+        self.reminder_tab = tabs.addTab(reminder_page, '提醒')
+        self.layout.addWidget(tabs, 1)
         self.month.currentIndexChanged.connect(lambda _: self.owner.perform(self.refresh))
 
     def refresh(self):
@@ -166,6 +188,11 @@ class OverviewPage(Page):
         monthly, categories = overview(scoped)
         self.monthly.replace(monthly.to_dict('records'))
         self.categories.replace(categories.to_dict('records'))
+        trend, _ = overview(frame.loc[frame.date.str[:7] <= period].copy() if period else frame)
+        self.trend_chart.show_values(zip(trend['月份'].tail(12), trend['支出'].tail(12)))
+        top = categories.head(5)
+        self.category_chart.show_values(zip(top.get('分类', ()), top.get('支出', ())))
+        self.refresh_reminders(frame, period or date.today().strftime('%Y-%m'))
         for control in (self.demo_button, self.six_demo_button):
             control.setVisible(self.owner.workspace.mode == 'demo')
 
@@ -189,6 +216,55 @@ class OverviewPage(Page):
     def open_category(self):
         category = selected(self.category_view, self.categories)['分类']
         self.owner.open_ledger(self.month.currentData(), category)
+
+    def refresh_reminders(self, frame, month):
+        rows = []
+        if month in periods_with_records(frame):
+            budgets = budget_report(frame, month, self.store.budgets(month))
+            for budget in budgets.to_dict('records'):
+                if budget['超支'] <= 0:
+                    continue
+                category = budget['分类']
+                rows.append(dict(type='预算超支', title=category, month=month,
+                                 message=f"净支出 ¥{budget['已支出']:,.2f}，超支 ¥{budget['超支']:,.2f}",
+                                 key=(str(self.store.path), month, category, budget['预算'], budget['已支出'])))
+        for goal in self.store.goals().to_dict('records'):
+            try:
+                progress = goal_progress(goal, self.store.contributions(goal['id']))
+            except ValueError:
+                continue
+            if not progress['remaining']:
+                continue
+            behind = progress['behind_cents']
+            deficit = progress['plan']['deficit']
+            if behind or deficit:
+                message = f'实际进度落后 ¥{yuan(behind)}' if behind else f'计划到期缺口 ¥{yuan(deficit)}'
+                rows.append(dict(type='储蓄目标', title=goal['name'], message=message,
+                                 key=(str(self.store.path), goal['id'], behind, deficit)))
+        visible = [row for row in rows if row['key'] not in self.dismissed]
+        self.reminders.replace(visible)
+        self.reminder_caption.setText(f'{month} 预算超支 · 储蓄目标按当前进度' if visible else f'{month} · 暂无需要查看的提醒')
+        self.tabs.setTabText(self.reminder_tab, f'提醒 ({len(visible)})' if visible else '提醒')
+
+    def dismiss_reminder(self):
+        row = selected(self.reminder_view, self.reminders)
+        self.dismissed.add(row['key'])
+        self.refresh()
+
+    def open_reminder(self):
+        row = selected(self.reminder_view, self.reminders)
+        if row['type'] == '预算超支':
+            self.owner.navigate('budget')
+            budget = self.owner.pages['budget']
+            if budget.month.findText(row['month']) < 0:
+                budget.month.addItem(row['month'])
+            budget.month.setCurrentText(row['month'])
+            index = next((i for i, value in enumerate(budget.model.records) if value['分类'] == row['title']), None)
+            if index is not None:
+                budget.view.selectRow(index)
+                budget.show_evidence()
+        else:
+            self.owner.navigate('plan')
 
     def demo(self):
         if self.owner.workspace.mode != 'demo':
@@ -1087,10 +1163,13 @@ class SettingsPage(Page):
         row.addStretch(1)
         self.layout.addWidget(spending)
         release_card, release_controls = card()
-        release_controls.addWidget(label('Qt 便携版更新'))
+        self.install_directory = updates.installation_directory()
+        self.install_mode = updates.installation(self.install_directory) if self.install_directory else ''
+        self.pending_install = None
+        release_controls.addWidget(label(f"Qt {updates.VERSION} · {'安装版' if self.install_mode else '便携版'}更新"))
         row = toolbar(release_controls)
         self.action(row, '检查 Qt 更新', self.check_updates)
-        self.download_button = self.action(row, '下载 Qt 压缩包', self.download_update)
+        self.download_button = self.action(row, '下载 Qt 安装包' if self.install_mode else '下载 Qt 压缩包', self.download_update)
         self.download_button.setEnabled(False)
         self.cancel_update = self.action(row, '停止等待', self.stop_update)
         self.cancel_update.setEnabled(False)
@@ -1098,6 +1177,8 @@ class SettingsPage(Page):
         row.addStretch(1)
         self.update_status = label('', 'muted')
         release_controls.addWidget(self.update_status)
+        self.install_update = self.action(toolbar(release_controls), '退出并启动升级', self.apply_update)
+        self.install_update.hide()
         self.layout.addWidget(release_card)
         self.release = None
         self.layout.addStretch(1)
@@ -1190,6 +1271,8 @@ class SettingsPage(Page):
 
     def check_updates(self):
         self.release = None
+        self.pending_install = None
+        self.install_update.hide()
         self.download_button.setEnabled(False)
         self.cancel_update.setEnabled(True)
         self.update_status.setText('正在检查 Qt 更新…')
@@ -1201,13 +1284,14 @@ class SettingsPage(Page):
             if error:
                 self.update_status.setText(error)
             elif result is not None:
-                self.update_status.setText(f'发现 {result.tag}。下载后可解压到单独文件夹。')
+                action = '下载后可退出应用并启动升级。' if self.install_mode else '下载后可解压到单独文件夹。'
+                self.update_status.setText(f'发现 {result.tag}。{action}')
             else:
-                self.update_status.setText('暂无可下载的较新 Qt 正式便携版。')
+                self.update_status.setText('暂无此通道可下载的较新 Qt 版本。')
 
         def probe(_):
             try:
-                return updates.check(), ''
+                return updates.check(installed=bool(self.install_mode)), ''
             except Exception as exc:
                 return None, update_error_message(exc, '检查更新')
 
@@ -1217,23 +1301,38 @@ class SettingsPage(Page):
         release = self.release
         if release is None:
             return
-        target, _ = QFileDialog.getSaveFileName(self, '保存 Qt 便携版', release.name, 'ZIP (*.zip)')
+        file_type = 'Windows 安装包 (*.exe)' if self.install_mode else 'ZIP (*.zip)'
+        target, _ = QFileDialog.getSaveFileName(self, '保存 Qt 更新', release.name, file_type)
         if not target:
             return
+        if self.install_mode and Path(target).name != release.name:
+            raise ValueError('请保留 Qt 安装包的原始文件名。')
+        self.pending_install = None
+        self.install_update.hide()
         self.download_button.setEnabled(False)
         self.cancel_update.setEnabled(True)
-        self.update_status.setText('正在下载并校验 Qt 压缩包…')
+        self.update_status.setText('正在下载并校验 Qt 更新…')
 
         def fetch(stop):
             try:
-                path = updates.download(release, target, stop)
-                return f'已通过 SHA256 校验并保存到 {path}。'
+                return updates.download(release, target, stop), ''
             except Exception as exc:
-                return update_error_message(exc)
+                return None, update_error_message(exc)
 
         def show(result, error):
             self.cancel_update.setEnabled(False)
             self.download_button.setEnabled(True)
-            self.update_status.setText(error or result)
+            path, failure = result or (None, error)
+            self.update_status.setText(f'已通过 SHA256 校验并保存到 {path}。' if path else failure)
+            if path and self.install_mode:
+                self.pending_install = (release, path)
+                self.install_update.show()
 
         self.owner.jobs.start('qt-update', fetch, show)
+
+    def apply_update(self):
+        if not self.pending_install or not self.install_mode:
+            return
+        if confirm(self, '退出并升级 Qt', '确认关闭 Qt 并启动已校验的安装包？升级会使用当前程序目录。'):
+            updates.launch_installer(*self.pending_install, self.install_directory, self.install_mode)
+            self.owner.close()

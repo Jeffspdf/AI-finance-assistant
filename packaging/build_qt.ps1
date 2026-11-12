@@ -3,6 +3,8 @@ param([string]$Python = 'python', [string]$Iscc = '')
 $ErrorActionPreference = 'Stop'
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
+    $version = & $Python -c 'from qt_finance.updates import VERSION; print(VERSION)'
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^\d+\.\d+\.\d+(?:-preview\.\d+)?$') { throw 'Invalid Qt version.' }
     $tls = & $Python packaging/runtime_tls_assets.py
     if ($LASTEXITCODE -ne 0) { throw 'Unable to collect TLS runtime resources.' }
     $resources = @()
@@ -19,12 +21,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Qt smoke test failed at 200% DPI.' }
     New-Item -ItemType Directory -Force -Path release | Out-Null
     if ($Iscc) {
-        & $Iscc packaging/installer_qt.iss
+        & $Iscc "/DAppVersion=$version" packaging/installer_qt.iss
         if ($LASTEXITCODE -ne 0) { throw 'Qt installer build failed.' }
-        Get-FileHash -Algorithm SHA256 -LiteralPath release/AIFinanceHelperQt-0.10.0-Setup-x64.exe
+        Get-FileHash -Algorithm SHA256 -LiteralPath "release/AIFinanceHelperQt-$version-Setup-x64.exe"
     }
-    Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath release/AIFinanceHelperQt-preview-Windows-x64.zip -Force
-    Get-FileHash -Algorithm SHA256 -LiteralPath release/AIFinanceHelperQt-preview-Windows-x64.zip
+    Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath "release/AIFinanceHelperQt-$version-Windows-x64.zip" -Force
+    Get-FileHash -Algorithm SHA256 -LiteralPath "release/AIFinanceHelperQt-$version-Windows-x64.zip"
 }
 finally {
     Pop-Location

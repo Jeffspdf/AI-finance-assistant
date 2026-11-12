@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
 
 from finance.agent_runtime import AggregateConsent
 from finance.agent_planner import scenario_goal_values
@@ -12,7 +12,7 @@ from finance.importer import money_to_cents
 from finance.spending_presenter import BASIS_LABELS
 from .goals import GoalsDialog
 from .services import savings_inputs, savings_plan
-from .ui import button, card, confirm, details, label
+from .ui import ComboBox, button, card, confirm, details, label
 
 
 class ManualPlan(QDialog):
@@ -37,7 +37,7 @@ class ManualPlan(QDialog):
         actions.addWidget(button('用近三个月估算', lambda: self.run(self.estimate)))
         actions.addWidget(button('比较 A/B', lambda: self.run(self.compare), primary=True))
         actions.addWidget(button('填写选中目标', lambda: self.run(self.prefill)))
-        self.scenario = QComboBox()
+        self.scenario = ComboBox()
         self.scenario.addItems(('A', 'B'))
         actions.addWidget(self.scenario)
         layout.addLayout(actions)
@@ -114,7 +114,7 @@ class PlanPage(QWidget):
         layout.addWidget(label('比较按现状、压缩部分开支和按目标反推三种情景。', 'muted'))
         frame, panel = card()
         fields = QFormLayout()
-        self.mode = QComboBox()
+        self.mode = ComboBox()
         self.mode.addItem('最近三个完整月', 'historical')
         self.mode.addItem('手动输入假设', 'assumption')
         fields.addRow('计算依据', self.mode)
@@ -164,7 +164,7 @@ class PlanPage(QWidget):
         layout.addLayout(grid)
         next_steps = QHBoxLayout()
         self.switch_assumptions = button('改用输入假设继续', lambda: self.mode.setCurrentIndex(self.mode.findData('assumption')))
-        self.scenario = QComboBox()
+        self.scenario = ComboBox()
         self.scenario.addItems(('A', 'B', 'C'))
         self.prefill = button('将所选方案填入储蓄目标', lambda: self.owner.perform(self.prefill_goal))
         next_steps.addWidget(self.switch_assumptions)

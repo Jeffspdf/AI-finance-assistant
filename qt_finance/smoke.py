@@ -71,6 +71,13 @@ def chat_and_plan(app, window, output):
     QTimer.singleShot(40, inspect_coverage)
     click(chat, '数据覆盖详情')
     assert shown and '当前空间  演示空间' in shown[0] and '首末月之间无记录' in shown[0]
+    window.space.showPopup()
+    app.processEvents()
+    popup = window.space.view()
+    assert popup.isVisible() and popup.model().rowCount() == 2
+    assert popup.window().grab().save(str(output / 'qt-dropdown.png'))
+    QTest.keyClick(popup, Qt.Key.Key_Escape)
+    assert not popup.isVisible() and window.workspace.mode == 'demo'
     assert window.grab().save(str(output / 'qt-welcome.png'))
     chat.input.setPlainText('上个月')
     chat.input.moveCursor(QTextCursor.MoveOperation.End)
@@ -145,7 +152,10 @@ def space_isolation(app, window):
         window.chat.submit('上个月结余是多少？')
         try:
             wait(app, started.is_set, 'query thread')
-            window.space.setCurrentIndex(window.space.findData('personal'))
+            window.space.showPopup()
+            app.processEvents()
+            QTest.keyClick(window.space.view(), Qt.Key.Key_End)
+            QTest.keyClick(window.space.view(), Qt.Key.Key_Return)
             assert window.workspace.mode == 'personal'
         finally:
             release.set()
@@ -211,7 +221,7 @@ def query_feedback(app, window, directory):
     assert seen == [True]
 
 
-def session_persistence(app, directory):
+def session_persistence(app, directory, output):
     root = directory / 'history-fixture'
     window = FinanceWindow(root)
     window.show()
@@ -225,8 +235,13 @@ def session_persistence(app, directory):
                     evidence=[dict(merchant='仅证据商户', source_file='synthetic-private.csv')],
                     trace={'source_row': 77}, details='仅完整依据'))
         assert not list(root.glob('chat-history-*.json'))
+        with patch('qt_finance.chat.confirm', return_value=False):
+            QTest.keyClick(window.save_chat_history, Qt.Key.Key_Space)
+        assert not window.save_chat_history.isChecked() and not list(root.glob('chat-history-*.json'))
         with patch('qt_finance.chat.confirm', return_value=True):
-            window.save_chat_history.click()
+            QTest.keyClick(window.save_chat_history, Qt.Key.Key_Space)
+        assert window.save_chat_history.isChecked()
+        assert window.save_chat_history.grab().save(str(output / 'qt-history-switch-on.png'))
         window.new_chat()
         chat.append('user', '合成演示第二会话')
         raw = (root / 'chat-history-demo.json').read_text(encoding='utf-8')
@@ -554,8 +569,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.5'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.5-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.6'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.6-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -714,7 +729,7 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
             assert window.current == 'chat'
             chat_and_plan(app, window, output)
             query_feedback(app, window, root)
-            session_persistence(app, root)
+            session_persistence(app, root, output)
             space_isolation(app, window)
             import_budget_backup(app, window, root)
             reconciliation(window, root)
@@ -753,7 +768,7 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         'tk_migration': migration,
         'checks': ['chat and sources, local snapshot, coverage disclosure', 'merchant dates, coverage and model fallback',
                    'session switch and dialog F1',
-                   'opt-in text history, restart, workspace isolation, corruption and concurrent writes',
+                   'dropdown keyboard navigation and opt-in switch, history restart, isolation and recovery',
                    'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
                    'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',
                    'import account selection, issues, audited undo and scoped net CSV',

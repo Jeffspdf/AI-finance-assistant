@@ -3,19 +3,22 @@
 import json
 from math import isfinite
 from numbers import Real
+from pathlib import Path
 from string import Template
 from threading import Event
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, QRectF, QRunnable, QSize, QThreadPool, Qt, Signal, Slot
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QFrame, QHeaderView, QLabel, QMessageBox, QPlainTextEdit,
-    QPushButton, QTableView, QVBoxLayout,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFrame, QHeaderView, QLabel, QMessageBox, QPlainTextEdit,
+    QPushButton, QStyledItemDelegate, QTableView, QVBoxLayout,
 )
 
 
 COLORS = dict(bg='#f6f7f4', surface='#ffffff', muted_surface='#eef2ef', selected='#e4ece7',
               ink='#18211d', muted='#5f6c65', border='#dde4df', rule='#ecefec', primary='#174e3f',
               hover='#103d32', accent='#2c7a61', warning='#7a4d0a', negative='#b4232a')
+CHEVRON = (Path(__file__).resolve().parents[1] / 'assets' / 'qt-chevron-down.png').as_posix()
 
 STYLES = Template("""
 QWidget { color: $ink; font-family: 'Microsoft YaHei UI', 'Segoe UI'; font-size: 13px; }
@@ -50,7 +53,20 @@ QPushButton[nav="true"]:checked, QPushButton[nav="true"]:hover { background: $se
 QPushButton[nav="true"]:focus { border-color: $accent; }
 QPushButton[suggestion="true"] { background: $surface; text-align: left; padding: 11px 14px; }
 QPushButton[suggestion="true"]:hover { background: $muted_surface; }
-QLineEdit, QComboBox, QSpinBox, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
+QLineEdit, QSpinBox, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
+QComboBox { background: $surface; border: 1px solid $border; border-radius: 10px;
+            min-height: 19px; padding: 6px 30px 6px 10px; }
+QComboBox:hover { border-color: $accent; }
+QComboBox:on { border-color: $accent; }
+QComboBox:disabled { color: $muted; background: $muted_surface; border-color: $border; }
+QComboBox:editable QLineEdit { background: transparent; border: none; padding: 0; }
+QComboBox::drop-down { subcontrol-origin: border; subcontrol-position: top right; width: 29px; border: none; }
+QComboBox::down-arrow { image: url("$chevron"); width: 13px; height: 13px; }
+QComboBox QAbstractItemView { background: $surface; border: 1px solid $border; border-radius: 9px;
+                            padding: 4px; outline: 0; selection-background-color: $selected; selection-color: $primary; }
+QComboBox QAbstractItemView::item { min-height: 25px; padding: 4px 8px; border-radius: 5px; }
+QComboBox QAbstractItemView::item:hover { background: $muted_surface; }
+QComboBox QAbstractItemView::item:selected { background: $selected; color: $primary; }
 QPlainTextEdit#prompt { background: transparent; border: none; }
 QScrollArea { background: transparent; border: none; }
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
@@ -63,7 +79,52 @@ QTableView { background: $surface; border: 1px solid $border; border-radius: 9px
              selection-background-color: $selected; selection-color: $ink; }
 QTableView::item { border-bottom: 1px solid $rule; padding: 3px 6px; }
 QHeaderView::section { background: $muted_surface; padding: 8px; border: none; }
-""").substitute(COLORS)
+""").substitute(COLORS, chevron=CHEVRON)
+
+
+class ComboBox(QComboBox):
+    def __init__(self):
+        super().__init__()
+        view = self.view()
+        self.setItemDelegate(QStyledItemDelegate(view))
+        popup = view.window()
+        if isinstance(popup, QFrame):
+            popup.setFrameShape(QFrame.Shape.NoFrame)
+
+
+class Switch(QCheckBox):
+    """Keep Qt's keyboard and checked-state behavior with a compact switch face."""
+
+    def __init__(self, text):
+        super().__init__(text)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def sizeHint(self):
+        return QSize(self.fontMetrics().horizontalAdvance(self.text()) + 64, 34)
+
+    def hitButton(self, point):
+        return self.rect().contains(point)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.underMouse() or self.hasFocus():
+            painter.setPen(QPen(QColor(COLORS['accent']), 1) if self.hasFocus() else Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(COLORS['muted_surface']))
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 9, 9)
+        track = QRectF(self.width() - 43, (self.height() - 20) / 2, 36, 20)
+        active = self.isChecked()
+        painter.setPen(Qt.PenStyle.NoPen if active else QPen(QColor('#819386'), 1))
+        painter.setBrush(QColor(COLORS['accent'] if active else '#cbd5ce'))
+        painter.drawRoundedRect(track, 10, 10)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(COLORS['surface']))
+        painter.drawEllipse(QRectF(track.right() - 17 if active else track.left() + 3,
+                                   track.top() + 3, 14, 14))
+        painter.setPen(QColor(COLORS['ink' if self.isEnabled() else 'muted']))
+        text_area = self.rect().adjusted(8, 0, -51, 0)
+        text = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, text_area.width())
+        painter.drawText(text_area, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
 
 
 def label(text, role=None):

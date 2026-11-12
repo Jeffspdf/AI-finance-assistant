@@ -5,7 +5,7 @@ import re
 
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QPlainTextEdit, QScrollArea,
+    QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QPlainTextEdit, QScrollArea,
     QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -15,7 +15,7 @@ from finance.spending_presenter import basis_label, spending_totals
 from finance.categories import category_options
 from .services import guidance, ledger_coverage, query_ledger
 from .session_history import MAX_MESSAGES, MAX_SESSIONS, SessionHistory
-from .ui import button, card, confirm, label, readonly_text, table
+from .ui import ComboBox, button, card, confirm, label, readonly_text, table
 
 
 DINING = '上个月餐饮花了多少？'
@@ -478,12 +478,12 @@ class ChatPage(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle('补充净支出查询条件')
         layout = QFormLayout(dialog)
-        period = QComboBox()
+        period = ComboBox()
         period.setEditable(True)
         period.addItems(['本月', '上个月', *reversed(ledger_coverage(self.owner.workspace.store)['months'])])
         period.setEditText(conditions['period'])
         merchant = QLineEdit(conditions['merchant'])
-        category = QComboBox()
+        category = ComboBox()
         category.addItems(['全部分类', *category_options('支出')])
         if category.findText(conditions['category']) > 0:
             category.setCurrentText(conditions['category'])

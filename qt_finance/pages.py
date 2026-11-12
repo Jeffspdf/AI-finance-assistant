@@ -10,7 +10,7 @@ import re
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMenu,
+    QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMenu,
     QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -32,7 +32,7 @@ from finance.spending_presenter import basis_label, net_export_csv, spending_tot
 from .chat import EVIDENCE_COLUMNS, Evidence
 from .overview_chart import SpendingChart
 from .services import preview_statement
-from .ui import button, card, confirm, details, label, readonly_text, selected, selected_rows, table
+from .ui import ComboBox, button, card, confirm, details, label, readonly_text, selected, selected_rows, table
 from . import updates
 
 
@@ -127,7 +127,7 @@ class OverviewPage(Page):
         self.basis = label('', 'muted')
         self.layout.addWidget(self.basis)
         row = toolbar(self.layout)
-        self.month = QComboBox()
+        self.month = ComboBox()
         self.month.setAccessibleName('统计月份')
         row.addWidget(self.month)
         self.action(row, '查看洞察', self.insights)
@@ -277,7 +277,7 @@ class OverviewPage(Page):
         count.setRange(1, 500)
         count.setValue(30)
         minimum, maximum, income = QLineEdit('10'), QLineEdit('200'), QLineEdit('3000')
-        income_kind = QComboBox()
+        income_kind = ComboBox()
         income_kind.addItems(('生活费', '工资'))
         transfers, refunds, replace = QCheckBox(), QCheckBox(), QCheckBox()
         transfers.setChecked(True)
@@ -337,7 +337,7 @@ class LedgerPage(Page):
         actions.addWidget(category_button)
         actions.addStretch(1)
         filters = toolbar(self.layout)
-        self.month_filter, self.category_filter = QComboBox(), QComboBox()
+        self.month_filter, self.category_filter = ComboBox(), ComboBox()
         for name, combo in (('月份', self.month_filter), ('分类', self.category_filter)):
             filters.addWidget(label(name))
             filters.addWidget(combo)
@@ -397,7 +397,7 @@ class LedgerPage(Page):
             rows = [row for row in self.records
                     if (row['merchant'], row['kind']) in pairs and row.get('status') != 'refund_pending']
         dialog, layout, form = fields(self, '批量改分类')
-        choice = QComboBox()
+        choice = ComboBox()
         choice.addItems(options)
         form.addRow(f'{len(rows)} 笔交易的新分类', choice)
         if same_merchant:
@@ -530,7 +530,7 @@ class LedgerPage(Page):
                 initial = yuan(initial)
             entry = inputs[key] = QLineEdit(str(initial))
             form.addRow(title, entry)
-        kind, category = QComboBox(), QComboBox()
+        kind, category = ComboBox(), ComboBox()
         kind.addItems(['支出', '收入', '转账'])
         kind.setCurrentText(original.get('kind', '支出'))
 
@@ -570,11 +570,11 @@ class LedgerPage(Page):
         if not source:
             return
         dialog, layout, form = fields(self, '导入选项')
-        adapter = QComboBox()
+        adapter = ComboBox()
         for title, key in (('自动识别', 'auto'), ('通用表格', 'generic'), ('微信 CSV', 'wechat_csv'),
                            ('银行模板 XLSX', 'bank_template_v1')):
             adapter.addItem(title, key)
-        account = QComboBox()
+        account = ComboBox()
 
         def refresh_accounts(preferred=None):
             account.clear()
@@ -692,10 +692,10 @@ class BudgetPage(Page):
     def __init__(self, owner):
         super().__init__(owner, '预算与提醒', '预算、支出和剩余均按所选月份显示。')
         row = toolbar(self.layout)
-        self.month = QComboBox()
+        self.month = ComboBox()
         self.month.addItems([month_shift(date.today(), i) for i in range(12, -25, -1)])
         self.month.setCurrentText(date.today().strftime('%Y-%m'))
-        self.category = QComboBox()
+        self.category = ComboBox()
         self.category.addItems(category_options('支出'))
         self.amount = QLineEdit()
         self.amount.setPlaceholderText('预算 / 元')
@@ -808,7 +808,7 @@ class AccountsPage(Page):
         channel = QLineEdit(original.get('channel', ''))
         last4 = QLineEdit(original.get('last4', ''))
         last4.setMaxLength(4)
-        kind = QComboBox()
+        kind = ComboBox()
         for key, title in ACCOUNT_TYPES.items():
             kind.addItem(title, key)
         if original:
@@ -838,7 +838,7 @@ class AccountsPage(Page):
 
     def bind_account(self):
         dialog, layout, form = fields(self, '声明支付绑定')
-        wallet, bank = QComboBox(), QComboBox()
+        wallet, bank = ComboBox(), ComboBox()
         for account in self.store.accounts(include_archived=False):
             combo = wallet if account['type'] == 'wallet' else bank
             combo.addItem(account['label'], account['id'])
@@ -1133,7 +1133,7 @@ class HelpPage(Page):
     def __init__(self, owner, asset_root):
         super().__init__(owner, '使用帮助', '本地帮助按主题查看。')
         topics = load_help(asset_root / 'help.md')
-        chapters = QComboBox()
+        chapters = ComboBox()
         chapters.addItems(topics)
         self.layout.addWidget(chapters)
         text = readonly_text('')
@@ -1170,7 +1170,7 @@ class SettingsPage(Page):
         spending, controls = card()
         controls.addWidget(label('退款抵扣口径'))
         row = toolbar(controls)
-        self.basis = QComboBox()
+        self.basis = ComboBox()
         self.basis.addItem('按退款发生月', 'cash')
         self.basis.addItem('回溯原消费月', 'original_purchase_month')
         row.addWidget(self.basis)

@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QDialog, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from finance.llm import ModelClient
@@ -17,7 +17,7 @@ from .pages import AccountsPage, BackupPage, BudgetPage, HelpPage, LedgerPage, O
 from .pet import DesktopPet
 from .plan import PlanPage
 from .services import Workspace
-from .ui import Jobs, STYLES, button, label
+from .ui import ComboBox, Jobs, STYLES, Switch, button, label
 
 
 ASSETS = Path(__file__).resolve().parents[1] / 'assets'
@@ -59,7 +59,7 @@ class FinanceWindow(QMainWindow):
         header.setContentsMargins(26, 13, 24, 10)
         self.title = label('', 'title')
         header.addWidget(self.title, 1)
-        self.space = QComboBox()
+        self.space = ComboBox()
         self.space.setAccessibleName('当前账本空间')
         self.space.addItem('演示空间', 'demo')
         self.space.addItem('我的账本', 'personal')
@@ -121,12 +121,12 @@ class FinanceWindow(QMainWindow):
         layout.addSpacing(10)
         layout.addWidget(button('＋  新对话', self.new_chat, primary=True))
         layout.addWidget(label('历史会话', 'muted'))
-        self.chat_sessions = QComboBox()
+        self.chat_sessions = ComboBox()
         self.chat_sessions.setAccessibleName('当前空间的历史会话')
         self.chat_sessions.setMinimumContentsLength(12)
-        self.chat_sessions.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.chat_sessions.setSizeAdjustPolicy(ComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         layout.addWidget(self.chat_sessions)
-        self.save_chat_history = QCheckBox('本机保存对话文本')
+        self.save_chat_history = Switch('本机保存对话文本')
         self.save_chat_history.setToolTip('每个账本空间可独立启用，默认关闭。')
         layout.addWidget(self.save_chat_history)
         layout.addSpacing(4)

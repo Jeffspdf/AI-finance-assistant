@@ -87,11 +87,11 @@ class Page(QWidget):
     def __init__(self, owner, title, caption):
         super().__init__()
         self.setObjectName('workArea')
+        self.setAccessibleName(title)
         self.owner = owner
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(28, 14, 28, 18)
         self.layout.setSpacing(10)
-        self.layout.addWidget(label(title, 'title'))
         self.layout.addWidget(label(caption, 'muted'))
 
     @property

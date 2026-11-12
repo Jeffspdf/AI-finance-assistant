@@ -60,13 +60,14 @@ class FinanceWindow(QMainWindow):
         self.title = label('', 'title')
         header.addWidget(self.title, 1)
         self.space = QComboBox()
+        self.space.setAccessibleName('当前账本空间')
         self.space.addItem('演示空间', 'demo')
         self.space.addItem('我的账本', 'personal')
         header.addWidget(self.space)
         layout.addLayout(header)
         separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setStyleSheet('color:#dce7e0')
+        separator.setObjectName('headerRule')
+        separator.setFixedHeight(1)
         layout.addWidget(separator)
         self.stack = QStackedWidget()
         layout.addWidget(self.stack, 1)
@@ -111,12 +112,12 @@ class FinanceWindow(QMainWindow):
     def sidebar(self):
         side = QFrame()
         side.setObjectName('sidebar')
-        side.setFixedWidth(216)
+        side.setFixedWidth(224)
         layout = QVBoxLayout(side)
         layout.setContentsMargins(13, 18, 13, 13)
         layout.setSpacing(5)
         layout.addWidget(label('AI理财小助手', 'title'))
-        layout.addWidget(label('PySide6 预览版', 'muted'))
+        layout.addWidget(label('校园理财助手', 'brandSubtitle'))
         layout.addSpacing(10)
         layout.addWidget(button('＋  新对话', self.new_chat, primary=True))
         layout.addWidget(label('历史会话', 'muted'))
@@ -137,30 +138,46 @@ class FinanceWindow(QMainWindow):
         nav = QVBoxLayout(content)
         nav.setContentsMargins(0, 0, 0, 0)
         nav.setSpacing(4)
+        app_tools = QHBoxLayout()
+        app_tools.setSpacing(4)
         self.nav_group = QButtonGroup(self)
         self.nav = {}
         for key, title in self.page_labels.items():
-            if key in ('overview', 'settings'):
+            if key == 'ledger':
                 nav.addSpacing(7)
-                nav.addWidget(label('账本工具' if key == 'overview' else '应用', 'muted'))
+                nav.addWidget(label('账本工具', 'muted'))
             item = button(title, lambda checked=False, target=key: self.navigate(target))
             item.setProperty('nav', True)
             item.setCheckable(True)
             self.nav_group.addButton(item)
             self.nav[key] = item
-            nav.addWidget(item)
+            if key in ('settings', 'help'):
+                app_tools.addWidget(item, 1)
+            elif key != 'backup':
+                nav.addWidget(item)
         nav.addStretch(1)
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
-        mascot = label('')
+        layout.addWidget(self.nav['backup'])
+        layout.addLayout(app_tools)
+        self.mascot = None
         portrait = QPixmap(str(ASSETS / 'campus_heroine.png'))
         if not portrait.isNull():
-            mascot.setPixmap(portrait.scaled(90, 94, Qt.AspectRatioMode.KeepAspectRatio,
+            self.mascot = label('')
+            self.mascot.setPixmap(portrait.scaled(72, 65, Qt.AspectRatioMode.KeepAspectRatio,
                                              Qt.TransformationMode.SmoothTransformation))
-            mascot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(mascot)
+            self.mascot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(self.mascot)
+        self.companion_status = label('', 'muted')
+        self.companion_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.companion_status)
         layout.addWidget(button('桌面小助手', lambda: self.perform(self.toggle_pet)))
         return side
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if getattr(self, 'mascot', None) is not None:
+            self.mascot.setVisible(event.size().height() >= 560)
 
     def toggle_pet(self):
         if self.pet is None:

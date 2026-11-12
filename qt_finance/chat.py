@@ -1,5 +1,6 @@
 """Read-only conversational view and reusable evidence dialog."""
 
+from datetime import date
 import re
 
 from PySide6.QtCore import QTimer, Qt, Signal
@@ -9,10 +10,12 @@ from PySide6.QtWidgets import (
 )
 
 from finance.analytics import yuan
+from finance.qa import month_shift
+from finance.spending_presenter import basis_label, spending_totals
 from finance.categories import category_options
 from .services import guidance, ledger_coverage, query_ledger
 from .session_history import MAX_MESSAGES, MAX_SESSIONS, SessionHistory
-from .ui import button, confirm, label, readonly_text, table
+from .ui import button, card, confirm, label, readonly_text, table
 
 
 DINING = '上个月餐饮花了多少？'
@@ -91,12 +94,42 @@ class ChatPage(QWidget):
         self.last_result = None
         self.scroll_epoch = 0
         self.busy = False
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(26, 12, 26, 16)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(20, 10, 20, 12)
+        column = QWidget()
+        column.setMaximumWidth(820)
+        outer.addStretch(1)
+        outer.addWidget(column, 100)
+        outer.addStretch(1)
+        layout = QVBoxLayout(column)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         self.coverage = label('', 'muted')
-        layout.addWidget(self.coverage)
-        self.history_warning = label('', 'muted')
+        coverage_row = QHBoxLayout()
+        coverage_row.addWidget(self.coverage, 1)
+        coverage_row.addWidget(button('数据覆盖详情', self.show_coverage))
+        layout.addLayout(coverage_row)
+        self.snapshot, summary = card()
+        summary.setContentsMargins(14, 7, 14, 8)
+        summary.setSpacing(4)
+        snapshot_header = QHBoxLayout()
+        self.snapshot_title = label('', 'muted')
+        snapshot_header.addWidget(self.snapshot_title, 1)
+        snapshot_header.addWidget(button('打开财务概览', self.open_snapshot))
+        summary.addLayout(snapshot_header)
+        metrics = QHBoxLayout()
+        self.snapshot_values = {}
+        for key, title in (('income_cents', '收入'), ('net_cents', '净支出'),
+                           ('balance_cents', '结余'), ('budget_cents', '预算剩余')):
+            cell = QVBoxLayout()
+            cell.setSpacing(2)
+            cell.addWidget(label(title, 'muted'))
+            value = self.snapshot_values[key] = label('—', 'snapshotAmount')
+            cell.addWidget(value)
+            metrics.addLayout(cell, 1)
+        summary.addLayout(metrics)
+        layout.addWidget(self.snapshot)
+        self.history_warning = label('', 'warning')
         self.history_warning.hide()
         layout.addWidget(self.history_warning)
 
@@ -126,7 +159,7 @@ class ChatPage(QWidget):
         form.addWidget(self.input)
         actions = QHBoxLayout()
         self.use_model = QCheckBox('允许模型理解本条问题')
-        self.use_model.setToolTip('模型只接收问题文本，账单与计算在本地处理。')
+        self.use_model.setToolTip('授权后，复杂问题的原文可能发送给所配置的模型，包括你在问题中输入的商户或金额。账单与计算留在本机。')
         actions.addWidget(self.use_model)
         actions.addStretch(1)
         self.send = button('↑', self.submit_input, primary=True)
@@ -148,14 +181,63 @@ class ChatPage(QWidget):
         return self.sessions[mode][self.active[mode]]
 
     def refresh(self):
-        coverage = ledger_coverage(self.owner.workspace.store)
+        store = self.owner.workspace.store
+        coverage = self.coverage_data = ledger_coverage(store)
         months = coverage['months']
         shown = '、'.join(months[-4:]) or '尚无账单'
         if len(months) > 4:
             shown = f'{len(months)} 个月 · 最近 {shown}'
-        latest = f" · 最近导入（UTC） {coverage['latest']}" if coverage['latest'] else ''
-        self.coverage.setText(f"账本覆盖 · {shown} · {coverage['count']} 条来源记录{latest}")
+        self.coverage.setText(f"账本覆盖 · {shown} · {coverage['count']} 条来源记录")
         self.coverage.setToolTip('、'.join(months) + '\n有记录的月份仍可能存在未导入交易。')
+        frame = store.spending_view()
+        month = self.snapshot_month = date.today().strftime('%Y-%m')
+        data = frame.loc[frame.date.str.startswith(month)].copy()
+        covered = month in frame.attrs.get('source_months', ()) or not data.empty
+        totals = spending_totals(data)
+        budgets = store.budgets(month) if covered else {}
+        expenses = data.loc[(data.kind == '支出') & data.category.isin(budgets), 'amount_cents']
+        totals['budget_cents'] = sum(budgets.values()) - int(expenses.sum()) if budgets else None
+        for key, value in self.snapshot_values.items():
+            cents = totals[key] if covered else None
+            value.setText('¥' + yuan(cents) if cents is not None else '—')
+            if key == 'budget_cents':
+                hint = '本月未设置预算' if cents is None else '只汇总已设预算分类的预算及净支出。'
+            else:
+                hint = ''
+            value.setToolTip(hint if covered else '本月尚无已导入记录')
+        coverage_label = '' if covered else ' · 本月暂无账单'
+        self.snapshot_title.setText(f'{month} · {basis_label(totals["basis"])}{coverage_label}')
+
+    def open_snapshot(self):
+        self.owner.navigate('overview')
+        picker = self.owner.pages['overview'].month
+        picker.setCurrentIndex(picker.findData(self.snapshot_month))
+
+    def show_coverage(self):
+        coverage = self.coverage_data
+        months = coverage['months']
+        missing = []
+        if months:
+            start = date.fromisoformat(months[0] + '-01')
+            end = date.fromisoformat(months[-1] + '-01')
+            observed = set(months)
+            intervals = (end.year - start.year) * 12 + end.month - start.month + 1
+            missing = [month_shift(start, offset) for offset in range(intervals)
+                       if month_shift(start, offset) not in observed]
+        dialog = QDialog(self)
+        dialog.setWindowTitle('账本覆盖详情')
+        dialog.resize(510, 340)
+        layout = QVBoxLayout(dialog)
+        text = (f"当前空间  {self.owner.space.currentText()}\n"
+                f"来源记录  {coverage['count']} 条\n"
+                f"最近导入（UTC）  {coverage['latest'] or '暂无批次'}\n\n"
+                f"有记录月份\n{'、'.join(months) or '尚无账单'}\n\n"
+                f"首末月之间无记录的月份\n{'、'.join(missing) or '—'}\n\n"
+                '有记录的月份仍可能存在未导入的交易。')
+        layout.addWidget(readonly_text(text))
+        layout.addWidget(button('打开交易账本', dialog.accept), alignment=Qt.AlignmentFlag.AlignRight)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.owner.navigate('ledger')
 
     def sync_sessions(self):
         mode = self.owner.workspace.mode
@@ -163,7 +245,7 @@ class ChatPage(QWidget):
         selector.blockSignals(True)
         selector.clear()
         for rows in self.sessions[mode]:
-            title = next((value for role, value in rows if role == 'user'), '新对话')
+            title = next((' '.join(value.split()) for role, value in rows if role == 'user'), '新对话')
             selector.addItem(title[:21] + ('…' if len(title) > 21 else ''))
         selector.setCurrentIndex(self.active[mode])
         selector.blockSignals(False)
@@ -256,6 +338,7 @@ class ChatPage(QWidget):
         self.send.setVisible(not self.busy)
         self.send.setEnabled(bool(self.input.toPlainText().strip()))
         self.stop_button.setVisible(self.busy)
+        self.owner.companion_status.setText('正在核对账本…' if self.busy else '小财灵')
 
     def reload(self):
         self.stop(quiet=True)
@@ -269,6 +352,7 @@ class ChatPage(QWidget):
             item.widget().hide()
             item.widget().deleteLater()
         rows = self.active_history()
+        self.snapshot.setVisible(not rows)
         self.last_result = next((value for role, value in reversed(rows) if role == 'assistant'), None)
         if rows:
             for role, payload in rows:
@@ -283,20 +367,20 @@ class ChatPage(QWidget):
     def welcome(self):
         self.empty = QWidget()
         layout = QVBoxLayout(self.empty)
-        layout.setContentsMargins(16, 36, 16, 12)
+        layout.setContentsMargins(10, 12, 10, 8)
         headline = label('今天想了解哪笔账？', 'hero')
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(headline)
         caption = label('查收支、核对来源，或给一个储蓄目标做 A/B/C 规划。', 'muted')
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(caption)
-        layout.addSpacing(18)
+        layout.addSpacing(9)
         grid = QGridLayout()
         grid.setSpacing(10)
         for i, (title, prompt) in enumerate(PROMPTS):
             item = button(f'{title}\n{prompt}', lambda checked=False, q=prompt: self.submit(q))
             item.setProperty('suggestion', True)
-            item.setMinimumHeight(70)
+            item.setMinimumHeight(56)
             grid.addWidget(item, i // 2, i % 2)
         layout.addLayout(grid)
         self.messages.insertWidget(0, self.empty)
@@ -317,13 +401,23 @@ class ChatPage(QWidget):
         else:
             line.addWidget(bubble, 1)
             line.addSpacing(30)
-            body.addWidget(label('小财灵', 'muted'))
+            metadata = QHBoxLayout()
+            metadata.addWidget(label('小财灵'))
+            metadata.addStretch(1)
+            if payload.get('parser'):
+                style = 'warning' if payload.get('status') == 'unsupported' else 'parser'
+                metadata.addWidget(label(payload['parser'], style))
+            body.addLayout(metadata)
             answer = payload.get('display_answer', payload['answer'])
             headline, _, explanation = answer.partition('\n')
             amount = re.fullmatch(r'(.+?)\s+(-?[\d,]+\.\d{2} 元)([。，].*)', headline)
             if amount:
                 body.addWidget(label(amount[1]))
-                body.addWidget(label(amount[2], 'amount'))
+                amount_line = QHBoxLayout()
+                amount_line.addWidget(label(amount[2].removesuffix(' 元'), 'amount'))
+                amount_line.addWidget(label('元', 'muted'))
+                amount_line.addStretch(1)
+                body.addLayout(amount_line)
                 if amount[3].strip('。， '):
                     body.addWidget(label(amount[3].strip('。， '), 'muted'))
             else:
@@ -332,8 +426,6 @@ class ChatPage(QWidget):
                 body.addWidget(label(explanation, 'muted'))
             if payload.get('scope'):
                 body.addWidget(label('查询范围 · ' + payload['scope'], 'muted'))
-            if payload.get('parser'):
-                body.addWidget(label(payload['parser'], 'muted'))
             if payload.get('archived_text'):
                 body.addWidget(label('历史文本 · 重新提问可查看本次计算依据', 'muted'))
             actions = QHBoxLayout()
@@ -364,6 +456,7 @@ class ChatPage(QWidget):
         if not history:
             self.empty.hide()
             self.empty.deleteLater()
+            self.snapshot.hide()
         history.append((role, payload))
         if role == 'user':
             self.sync_sessions()

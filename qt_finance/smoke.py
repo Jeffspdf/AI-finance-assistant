@@ -14,7 +14,9 @@ from unittest.mock import patch
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QPushButton, QTableView
+from PySide6.QtWidgets import (
+    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTableView,
+)
 import pandas as pd
 
 from finance.m1a_demo import seed_six
@@ -51,6 +53,24 @@ def chat_and_plan(app, window, output):
     chat, plan = window.chat, window.plan
     ledger = Path(window.workspace.store.path)
     before = ledger.read_bytes()
+    assert chat.snapshot.isVisible()
+    assert {value.text() for value in chat.snapshot_values.values()} == {'¥100.00', '¥25.00', '¥75.00', '¥15.00'}
+    click(chat, '打开财务概览')
+    assert window.current == 'overview' and window.pages['overview'].month.currentData() == date.today().strftime('%Y-%m')
+    assert window.pages['overview'].metrics['net_cents'].text() == chat.snapshot_values['net_cents'].text()
+    assert window.grab().save(str(output / 'qt-overview.png'))
+    window.navigate('chat')
+    shown = []
+
+    def inspect_coverage():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '账本覆盖详情':
+            shown.append(dialog.findChild(QPlainTextEdit).toPlainText())
+            dialog.reject()
+
+    QTimer.singleShot(40, inspect_coverage)
+    click(chat, '数据覆盖详情')
+    assert shown and '当前空间  演示空间' in shown[0] and '首末月之间无记录' in shown[0]
     assert window.grab().save(str(output / 'qt-welcome.png'))
     chat.input.setPlainText('上个月')
     chat.input.moveCursor(QTextCursor.MoveOperation.End)
@@ -59,6 +79,8 @@ def chat_and_plan(app, window, output):
     chat.input.insertPlainText('餐饮花了多少？')
     QTest.keyClick(chat.input, Qt.Key.Key_Return)
     wait(app, lambda: not chat.busy and chat.last_result is not None, 'ledger answer')
+    assert not chat.snapshot.isVisible()
+    assert '\n' not in window.chat_sessions.currentText()
     assert '123.45 元，共 1 笔' in chat.last_result['answer']
     assert chat.last_result['evidence'][0]['merchant'] == 'Qt 合成食堂'
     click(chat, '查看依据')
@@ -213,6 +235,8 @@ def session_persistence(app, directory):
         assert ledger.read_bytes() == before
         window.space.setCurrentIndex(window.space.findData('personal'))
         assert not window.save_chat_history.isChecked() and not chat.active_history()
+        assert all(value.text() == '—' for value in chat.snapshot_values.values())
+        assert '暂无账单' in chat.snapshot_title.text()
         with patch('qt_finance.chat.confirm', return_value=True):
             window.save_chat_history.click()
         chat.append('user', '合成个人提问')
@@ -408,6 +432,7 @@ def reconciliation(window, directory):
     assert accounts.model.rowCount() == 2 and accounts.links.records[0]['wallet_label'] == '示例微信'
     window.navigate('overview')
     summary = window.pages['overview']
+    summary.month.setCurrentIndex(0)
     assert summary.metrics['net_cents'].text() == '¥120.00'
     summary.month.setCurrentIndex(summary.month.findData('2026-09'))
     assert summary.metrics['net_cents'].text() == '¥120.00' and summary.monthly.rowCount() == 1
@@ -529,8 +554,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.4'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.4-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.5'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.5-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -677,6 +702,10 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
             demo.add_manual_transaction(when, 'Qt 合成食堂', 12345, '支出', '餐饮')
             demo.add_manual_transaction(when, 'Qt 合成地铁', 4500, '支出', '交通')
             demo.add_manual_transaction(when, 'Qt 合成工资', 520000, '收入', '工资')
+        current = date.today().replace(day=1).isoformat()
+        demo.add_manual_transaction(current, 'Qt 本月收入', 10000, '收入', '工资')
+        demo.add_manual_transaction(current, 'Qt 本月餐饮', 2500, '支出', '餐饮')
+        demo.save_budget(current[:7], '餐饮', 4000)
         window = FinanceWindow(root)
         window.resize(1020, 660)
         window.show()
@@ -722,7 +751,8 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         'platform': app.platformName(), 'scale': app.primaryScreen().devicePixelRatio(),
         'pages': list(FinanceWindow.page_labels),
         'tk_migration': migration,
-        'checks': ['chat and sources', 'merchant dates, coverage and model fallback', 'session switch and dialog F1',
+        'checks': ['chat and sources, local snapshot, coverage disclosure', 'merchant dates, coverage and model fallback',
+                   'session switch and dialog F1',
                    'opt-in text history, restart, workspace isolation, corruption and concurrent writes',
                    'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
                    'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',

@@ -1,6 +1,9 @@
 """Shared Qt widgets and asynchronous delivery to the main thread."""
 
 import json
+from math import isfinite
+from numbers import Real
+from string import Template
 from threading import Event
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
@@ -10,44 +13,57 @@ from PySide6.QtWidgets import (
 )
 
 
-STYLES = """
-QWidget { color: #21362f; font-family: 'Microsoft YaHei UI', 'Segoe UI'; font-size: 13px; }
-QMainWindow, QDialog { background: #f6f9f7; }
-QFrame#sidebar { background: #eef5f0; border-right: 1px solid #dfe9e2; }
-QFrame#card, QFrame#composer { background: #ffffff; border: 1px solid #dce7e0; border-radius: 15px; }
-QFrame#userBubble { background: #dceee3; border-radius: 16px; }
-QFrame#assistantBubble { background: white; border: 1px solid #dce7e0; border-radius: 16px; }
+COLORS = dict(bg='#f6f7f4', surface='#ffffff', muted_surface='#eef2ef', selected='#e4ece7',
+              ink='#18211d', muted='#5f6c65', border='#dde4df', rule='#ecefec', primary='#174e3f',
+              hover='#103d32', accent='#2c7a61', warning='#7a4d0a', negative='#b4232a')
+
+STYLES = Template("""
+QWidget { color: $ink; font-family: 'Microsoft YaHei UI', 'Segoe UI'; font-size: 13px; }
+QMainWindow, QDialog { background: $bg; }
+QFrame#sidebar { background: $surface; border-right: 1px solid $border; }
+QFrame#card, QFrame#composer { background: $surface; border: 1px solid $border; border-radius: 14px; }
+QFrame#userBubble { background: $muted_surface; border-radius: 15px; }
+QFrame#assistantBubble { background: $surface; border: 1px solid $border; border-radius: 15px; }
+QFrame#headerRule { background: $border; border: none; }
 QLabel#title { font-size: 24px; font-weight: 700; }
 QLabel#hero { font-size: 30px; font-weight: 700; }
-QLabel#muted { color: #536b60; }
-QLabel#amount { color: #106858; font-size: 24px; font-weight: 700; }
-QPushButton { background: #edf5ef; border: 1px solid #dce8df; padding: 7px 13px; border-radius: 9px; }
-QPushButton:hover { background: #e1efe5; }
-QPushButton:focus, QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus { border: 1px solid #428677; }
-QPushButton[primary="true"] { background: #126c5c; color: white; border-color: #126c5c; }
-QPushButton[primary="true"]:hover { background: #0b594c; }
+QLabel#muted, QLabel#parser, QLabel#brandSubtitle { color: $muted; }
+QLabel#amount { color: $primary; font-size: 27px; font-weight: 700; }
+QLabel#snapshotAmount { color: $primary; font-size: 19px; font-weight: 700; }
+QLabel#warning { color: $warning; }
+QLabel#error { color: $negative; }
+QTabWidget::pane { background: $surface; border: 1px solid $border; border-radius: 9px; }
+QTabBar::tab { background: $muted_surface; color: $muted; border: 1px solid $border;
+               border-top-left-radius: 7px; border-top-right-radius: 7px; padding: 6px 10px; }
+QTabBar::tab:selected { background: $surface; color: $primary; font-weight: 600; border-bottom-color: $surface; }
+QTabBar::tab:hover { color: $primary; }
+QPushButton { background: $muted_surface; border: 1px solid $border; padding: 7px 13px; border-radius: 9px; }
+QPushButton:hover { background: $selected; }
+QPushButton:focus, QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus { border: 1px solid $accent; }
+QPushButton[primary="true"] { background: $primary; color: white; border-color: $primary; }
+QPushButton[primary="true"]:hover { background: $hover; }
 QPushButton:disabled { background: #edf1ed; color: #7a8b82; border-color: #e4ebe6; }
 QPushButton[primary="true"]:disabled { background: #e3ebe5; color: #6c8275; border-color: #e3ebe5; }
 QPushButton#send { border-radius: 19px; padding: 0; font-size: 22px; }
 QPushButton[nav="true"] { background: transparent; border: 1px solid transparent; text-align: left; padding: 5px 12px; }
-QPushButton[nav="true"]:checked, QPushButton[nav="true"]:hover { background: #dcece1; color: #125a49; }
-QPushButton[nav="true"]:focus { border-color: #428677; }
-QPushButton[suggestion="true"] { background: white; text-align: left; padding: 14px; }
-QPushButton[suggestion="true"]:hover { background: #eaf4ed; }
-QLineEdit, QComboBox, QSpinBox, QPlainTextEdit { background: white; border: 1px solid #dce7e0; border-radius: 8px; padding: 6px; }
+QPushButton[nav="true"]:checked, QPushButton[nav="true"]:hover { background: $selected; color: $primary; }
+QPushButton[nav="true"]:focus { border-color: $accent; }
+QPushButton[suggestion="true"] { background: $surface; text-align: left; padding: 11px 14px; }
+QPushButton[suggestion="true"]:hover { background: $muted_surface; }
+QLineEdit, QComboBox, QSpinBox, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
 QPlainTextEdit#prompt { background: transparent; border: none; }
 QScrollArea { background: transparent; border: none; }
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
 QScrollBar::handle:vertical { background: #bfcec4; min-height: 28px; border-radius: 4px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QWidget#navContent { background: #eef5f0; }
-QWidget#messageContent { background: #f6f9f7; }
-QWidget#workArea { background: #f6f9f7; }
-QTableView { background: white; alternate-background-color: #f4f8f5; border: 1px solid #dce7e0; border-radius: 9px;
-             selection-background-color: #dceee3; selection-color: #21362f; gridline-color: #edf2ee; }
-QHeaderView::section { background: #edf5ef; padding: 8px; border: none; }
-"""
+QWidget#navContent { background: $surface; }
+QWidget#messageContent, QWidget#workArea { background: $bg; }
+QTableView { background: $surface; border: 1px solid $border; border-radius: 9px;
+             selection-background-color: $selected; selection-color: $ink; }
+QTableView::item { border-bottom: 1px solid $rule; padding: 3px 6px; }
+QHeaderView::section { background: $muted_surface; padding: 8px; border: none; }
+""").substitute(COLORS)
 
 
 def label(text, role=None):
@@ -100,11 +116,21 @@ class Rows(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.columns)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
+        if not index.isValid() or role not in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.TextAlignmentRole):
             return None
-        _, get = self.columns[index.column()]
+        heading, get = self.columns[index.column()]
         row = self.records[index.row()]
         value = get(row) if callable(get) else row.get(get)
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            if isinstance(value, Real) or '金额' in heading or heading.endswith('/ 元'):
+                return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            return None
+        if isinstance(value, Real) and not isfinite(value):
+            return '—'
+        if isinstance(value, Real) and heading in ('占比', '使用率'):
+            return f'{value:.2f}%'
+        if isinstance(value, Real) and heading in ('收入', '支出', '结余', '预算', '已支出', '剩余', '超支'):
+            return f'{value:,.2f}'
         return '—' if value is None else str(value)
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
@@ -117,7 +143,7 @@ def table(columns, records=(), *, multiple=False):
     view = QTableView()
     model = Rows(columns, records, view)
     view.setModel(model)
-    view.setAlternatingRowColors(True)
+    view.setAlternatingRowColors(False)
     view.setShowGrid(False)
     view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
     view.setSelectionMode(QTableView.SelectionMode.ExtendedSelection if multiple else QTableView.SelectionMode.SingleSelection)

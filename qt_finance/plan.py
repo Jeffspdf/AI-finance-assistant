@@ -110,7 +110,7 @@ class PlanPage(QWidget):
         self.consent = None
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
-        layout.addWidget(label('储蓄目标 · A/B/C', 'title'))
+        layout.addWidget(label('A/B/C 方案比较'))
         layout.addWidget(label('比较按现状、压缩部分开支和按目标反推三种情景。', 'muted'))
         frame, panel = card()
         fields = QFormLayout()

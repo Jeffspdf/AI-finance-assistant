@@ -31,7 +31,14 @@ if __name__ == '__main__':
             result = isolated_run(fixture, child_arguments=[
                 sys.executable, ROOT / 'scripts/create_tk_migration_fixture.py', fixture,
             ])
-            report = isolated_run(args.output, child_arguments=[*command, '--tk-backup-fixture', result['backup']])
+            returned = fixture / 'qt-return.sqlite3'
+            report = isolated_run(args.output, child_arguments=[
+                *command, '--tk-backup-fixture', result['backup'], '--qt-return-fixture', returned,
+            ])
+            report['tk_rollback'] = isolated_run(fixture, child_arguments=[
+                sys.executable, ROOT / 'scripts/create_tk_migration_fixture.py', fixture, returned,
+            ])
+            (args.output / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     else:
         if args.live_model_settings:
             command += ['--live-model-settings', args.live_model_settings.resolve()]

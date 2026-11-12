@@ -1,5 +1,6 @@
 """Exercise the native Qt screens with synthetic ledgers."""
 
+import csv
 from datetime import date
 from hashlib import sha256
 from io import BytesIO
@@ -13,7 +14,7 @@ from unittest.mock import patch
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialogButtonBox, QLineEdit, QMessageBox, QPushButton, QTableView
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QPushButton, QTableView
 import pandas as pd
 
 from finance.m1a_demo import seed_six
@@ -24,6 +25,7 @@ from finance.model_settings import ModelSettings
 from finance.qa import month_shift
 from finance.storage import Store
 from .services import guidance
+from .plan import ManualPlan
 from . import updates
 from .window import FinanceWindow
 
@@ -89,6 +91,18 @@ def chat_and_plan(app, window, output):
     QTimer.singleShot(50, inspect_prefill)
     click(plan, '将所选方案填入储蓄目标')
     assert '6800.00' in prefilled and ledger.read_bytes() == before
+    manual = ManualPlan(window)
+    manual.show()
+    try:
+        for key, value in {'start_date': '2026-01-31', 'deadline': '2026-07-31',
+                           'income_cents': '5000', 'A': '4650', 'B': '4480'}.items():
+            manual.inputs[key].setText(value)
+        click(manual, '比较 A/B')
+        assert '6 次存入' in manual.result.text()
+        assert '2,100.00' in manual.result.text() and '3,120.00' in manual.result.text()
+        assert ledger.read_bytes() == before
+    finally:
+        manual.close()
     assert guidance('怎么管理银行卡')[0] == 'accounts'
     assert guidance('如何恢复备份')[0] == 'backup'
     assert guidance('本月餐饮预算还剩多少') is None
@@ -124,7 +138,8 @@ def import_budget_backup(app, window, directory):
     source = directory / 'synthetic.csv'
     when = date.today().replace(day=1)
     source.write_text(f'交易ID,日期,商户,描述,金额,类型,平台,币种\n'
-                      f'QT-01,{when},Qt 导入商户,午餐,36.50,支出,样例,CNY\n', encoding='utf-8-sig')
+                      f'QT-01,{when},Qt 导入商户,午餐,36.50,支出,样例,CNY\n'
+                      f'QT-INVALID,错误日期,=公式文本,午餐,无效金额,支出,样例,CNY\n', encoding='utf-8-sig')
     window.navigate('ledger')
     path = Path(window.workspace.store.path)
     before = path.read_bytes()
@@ -138,16 +153,49 @@ def import_budget_backup(app, window, directory):
                 QTimer.singleShot(20, accept_preview)
             return
         preview.append(path.read_bytes() == before and not dialog.findChild(QCheckBox).isChecked())
+        with patch('qt_finance.pages.QFileDialog.getSaveFileName', return_value=(str(directory / 'issues.csv'), '')):
+            click(dialog, '导出解析异常 CSV')
         confirm = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok)
         QTest.mouseClick(confirm, Qt.MouseButton.LeftButton)
 
-    ledger.begin_import(str(source), 'generic', None)
+    picked = []
+
+    def add_account_in_import():
+        nonlocal before
+        options = app.activeModalWidget()
+        if options is None or options.windowTitle() != '导入选项':
+            return
+
+        def enter_account():
+            account = app.activeModalWidget()
+            assert account.windowTitle() == '添加账户'
+            name, channel, _ = account.findChildren(QLineEdit)
+            name.setText('合成来源账户')
+            channel.setText('测试渠道')
+            account.accept()
+
+        QTimer.singleShot(30, enter_account)
+        click(options, '新建来源账户')
+        before = path.read_bytes()
+        adapters, accounts = options.findChildren(QComboBox)
+        picked.append(accounts.currentData())
+        adapters.setCurrentIndex(adapters.findData('generic'))
+        options.accept()
+
+    QTimer.singleShot(30, add_account_in_import)
+    with patch('qt_finance.pages.QFileDialog.getOpenFileName', return_value=(str(source), '')):
+        ledger.choose_import()
     QTimer.singleShot(20, accept_preview)
     wait(app, lambda: bool(preview) and ledger.model.rowCount() == 1, 'preview and import')
     assert preview == [True]
+    with (directory / 'issues.csv').open(encoding='utf-8-sig', newline='') as exported:
+        issues = list(csv.DictReader(exported))
+    assert len(issues) == 1 and issues[0]['商户'] == "'=公式文本" and issues[0]['原因']
     imported = ledger.model.records[0]
     assert imported['merchant'] == 'Qt 导入商户' and imported['amount_cents'] == 3650
-    assert window.workspace.store.import_batches()[0]['added'] == 1
+    batch = window.workspace.store.import_batches()[0]
+    assert batch['added'] == 1 and batch['account_label'] == '合成来源账户'
+    assert picked and picked[0] and imported['account_id'] == picked[0]
     ledger.search.setText('>40')
     assert ledger.model.rowCount() == 0
     ledger.search.setText('>=36.50')
@@ -164,6 +212,25 @@ def import_budget_backup(app, window, directory):
     budget.amount.setText('200.00')
     click(budget, '保存预算')
     assert window.workspace.store.budgets(when.strftime('%Y-%m'))['餐饮'] == 20000
+    budget.view.selectRow(0)
+    click(budget, '查看选中预算的依据')
+    evidence = budget.evidence_dialog
+    assert evidence.isVisible() and evidence.tabs.count() == 3
+    assert '163.50' in evidence.tabs.widget(0).toPlainText()
+    assert 'budget.spent_minus_limit' in evidence.tabs.widget(2).toPlainText()
+    assert 'Qt 导入商户' in evidence.tabs.widget(2).toPlainText()
+    evidence.close()
+    click(budget, '查看对应账单')
+    assert window.current == 'ledger' and ledger.month_filter.currentText() == when.strftime('%Y-%m')
+    assert ledger.category_filter.currentText() == '餐饮' and ledger.model.rowCount() == 1
+    other_month = month_shift(when, -1)
+    window.workspace.store.add_manual_transaction(other_month + '-01', '合成上月流水', 1000, '支出', '餐饮')
+    window.refresh()
+    with patch('qt_finance.pages.QFileDialog.getSaveFileName', return_value=(str(directory / 'month-net.csv'), '')):
+        click(ledger, '导出净额')
+    with (directory / 'month-net.csv').open(encoding='utf-8-sig', newline='') as exported:
+        rows = list(csv.DictReader(exported))
+    assert rows and {row['date'][:7] for row in rows} == {when.strftime('%Y-%m')}
     window.navigate('backup')
     backup = window.pages['backup']
     click(backup, '创建备份')
@@ -191,6 +258,12 @@ def reconciliation(window, directory):
     window.navigate('overview')
     summary = window.pages['overview']
     assert summary.metrics['net_cents'].text() == '¥120.00'
+    summary.month.setCurrentIndex(summary.month.findData('2026-09'))
+    assert summary.metrics['net_cents'].text() == '¥120.00' and summary.monthly.rowCount() == 1
+    if date.today().strftime('%Y-%m') != '2026-09':
+        summary.month.setCurrentIndex(summary.month.findData(date.today().strftime('%Y-%m')))
+        assert '暂无已导入账单' in summary.basis.text() and summary.monthly.rowCount() == 0
+    summary.month.setCurrentIndex(0)
     window.navigate('review')
     review = window.pages['review']
     click(review, '生成候选')
@@ -405,7 +478,7 @@ def exercise_live_model(app, output, settings_directory):
     (output / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
-def exercise(app, output, tk_backup=None):
+def exercise(app, output, tk_backup=None, return_fixture=None):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     migration = None
@@ -436,6 +509,17 @@ def exercise(app, output, tk_backup=None):
             if tk_backup:
                 window.space.setCurrentIndex(window.space.findData('demo'))
                 migration = restore_tk_backup(app, window, tk_backup)
+                if return_fixture:
+                    window.navigate('budget')
+                    budget = window.pages['budget']
+                    if budget.month.findText('2026-10') < 0:
+                        budget.month.addItem('2026-10')
+                    budget.month.setCurrentText('2026-10')
+                    budget.category.setCurrentText('餐饮')
+                    budget.amount.setText('225')
+                    click(budget, '保存预算')
+                    assert window.workspace.store.budgets('2026-10') == {'餐饮': 22500}
+                    window.workspace.store.backup(return_fixture)
             window.navigate('chat')
             window.resize(760, 480)
             app.processEvents()
@@ -450,8 +534,10 @@ def exercise(app, output, tk_backup=None):
         'pages': list(FinanceWindow.page_labels),
         'tk_migration': migration,
         'checks': ['chat and sources', 'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
-                   'budget save', 'batch category undo', 'soft delete and backup restore',
+                   'budget save, evidence and ledger drill-down', 'overview month scope',
+                   'import account selection, issues and scoped net CSV',
+                   'batch category undo', 'soft delete and backup restore',
                    'cross-source reconciliation and refund 120 to 60 to 50', 'refund source grouping and link invalidation',
-                   'read-only scenario prefill', 'amount search', 'synthetic model probe and Windows DPAPI reload',
+                   'read-only scenario prefill and manual A/B', 'amount search', 'synthetic model probe and Windows DPAPI reload',
                    'Qt-only release check and SHA256 rejection', 'floating sprite and pause', 'minimum-size send button'],
     }, ensure_ascii=False, indent=2), encoding='utf-8')

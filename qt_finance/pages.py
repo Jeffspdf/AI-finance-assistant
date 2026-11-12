@@ -1,6 +1,8 @@
 """Qt views for the ledger, its budgets, accounts, reconciliation and backups."""
 
+import csv
 from datetime import date
+import json
 from operator import ge, gt, le, lt
 from pathlib import Path
 import re
@@ -12,9 +14,10 @@ from PySide6.QtWidgets import (
     QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from finance.analytics import budget_report, overview, yuan
+from finance.analytics import budget_report, month_records, overview, yuan
 from finance.categories import category_options
 from finance.demo_generator import DemoOptions, generate_demo
+from finance.evidence import calculation
 from finance.help_content import load_help
 from finance.insights import make_insights, suggested_budgets
 from finance.importer import money_to_cents
@@ -26,7 +29,7 @@ from finance.qa import month_shift
 from finance.updates import update_error_message
 from finance.spending_presenter import basis_label, net_export_csv, spending_totals
 
-from .chat import EVIDENCE_COLUMNS
+from .chat import EVIDENCE_COLUMNS, Evidence
 from .services import preview_statement
 from .ui import button, card, confirm, details, label, readonly_text, selected, selected_rows, table
 from . import updates
@@ -36,6 +39,28 @@ def toolbar(layout):
     row = QHBoxLayout()
     layout.addLayout(row)
     return row
+
+
+def select_month(frame, month):
+    return frame.loc[frame.date.str.startswith(month)].copy() if month else frame
+
+
+def periods_with_records(frame):
+    return set(frame.date.str[:7]) | set(frame.attrs.get('source_months', ()))
+
+
+def export_issues(parent, issues):
+    path, _ = QFileDialog.getSaveFileName(parent, '导出导入异常', 'import-issues.csv', 'CSV (*.csv)')
+    if not path:
+        return
+    columns = ('行号', '原因', '日期', '金额', '商户')
+    with Path(path).open('w', encoding='utf-8-sig', newline='') as output:
+        writer = csv.writer(output)
+        writer.writerow(columns)
+        for issue in issues:
+            values = [str(issue.get(column, '') or '') for column in columns]
+            writer.writerow("'" + value if value.lstrip().startswith(('=', '+', '-', '@')) else value
+                            for value in values)
 
 
 def fields(parent, title):
@@ -101,33 +126,46 @@ class OverviewPage(Page):
         self.basis = label('', 'muted')
         self.layout.addWidget(self.basis)
         row = toolbar(self.layout)
-        self.insight_month = QComboBox()
-        row.addWidget(self.insight_month)
+        self.month = QComboBox()
+        self.month.setAccessibleName('统计月份')
+        row.addWidget(self.month)
         self.action(row, '查看洞察', self.insights)
         self.demo_button = self.action(row, '生成演示账单', self.demo)
         self.six_demo_button = self.action(row, '加载六笔对账示例', self.six_demo)
         row.addStretch(1)
         tabs = QTabWidget()
         monthly, self.monthly = table([(name, name) for name in ('月份', '收入', '支出', '结余')])
-        categories, self.categories = table([(name, name) for name in ('分类', '支出', '占比')])
+        self.category_view, self.categories = table([(name, name) for name in ('分类', '支出', '占比')])
         tabs.addTab(monthly, '月度收支 / 元')
-        tabs.addTab(categories, '支出分类 / 元')
+        tabs.addTab(self.category_view, '支出分类 / 元')
         self.layout.addWidget(tabs, 1)
+        actions = toolbar(self.layout)
+        self.action(actions, '查看选中分类的账单', self.open_category)
+        actions.addStretch(1)
+        self.month.currentIndexChanged.connect(lambda _: self.owner.perform(self.refresh))
 
     def refresh(self):
         frame = self.store.spending_view()
-        totals = spending_totals(frame)
+        previous = self.month.currentData()
+        recorded = periods_with_records(frame)
+        periods = sorted(recorded | {date.today().strftime('%Y-%m')}, reverse=True)
+        self.month.blockSignals(True)
+        self.month.clear()
+        self.month.addItem('全部月份', '')
+        for period in periods:
+            self.month.addItem(period, period)
+        self.month.setCurrentIndex(max(0, self.month.findData(previous)))
+        self.month.blockSignals(False)
+        period = self.month.currentData()
+        scoped = select_month(frame, period)
+        totals = spending_totals(scoped)
         for name, label_widget in self.metrics.items():
             label_widget.setText('¥' + yuan(totals[name]))
-        self.basis.setText(basis_label(totals['basis']) + ' · 全部已导入记录')
-        monthly, categories = overview(frame)
+        coverage = ' · 本期暂无已导入账单' if period and period not in recorded else ''
+        self.basis.setText(f"{basis_label(totals['basis'])} · {self.month.currentText()}{coverage}")
+        monthly, categories = overview(scoped)
         self.monthly.replace(monthly.to_dict('records'))
         self.categories.replace(categories.to_dict('records'))
-        previous = self.insight_month.currentText()
-        self.insight_month.clear()
-        self.insight_month.addItems(sorted({date.today().strftime('%Y-%m'), *frame.date.str[:7]}, reverse=True))
-        if self.insight_month.findText(previous) >= 0:
-            self.insight_month.setCurrentText(previous)
         for control in (self.demo_button, self.six_demo_button):
             control.setVisible(self.owner.workspace.mode == 'demo')
 
@@ -139,7 +177,7 @@ class OverviewPage(Page):
             self.changed('示例已加载。前往退款与对账生成候选。')
 
     def insights(self):
-        month = self.insight_month.currentText()
+        month = self.month.currentData() or date.today().strftime('%Y-%m')
         goals = self.store.goals().to_dict('records')
         contributions = {goal['id']: self.store.contributions(goal['id']) for goal in goals}
         observations = make_insights(self.store.spending_view(), month, goals, contributions)
@@ -147,6 +185,10 @@ class OverviewPage(Page):
             self.owner.notice(f'{month} 的已导入数据暂未生成洞察。')
             return
         details(self, f'{month} 财务洞察', observations)
+
+    def open_category(self):
+        category = selected(self.category_view, self.categories)['分类']
+        self.owner.open_ledger(self.month.currentData(), category)
 
     def demo(self):
         if self.owner.workspace.mode != 'demo':
@@ -232,8 +274,8 @@ class LedgerPage(Page):
     def refresh(self):
         frame = self.store.source_transactions().sort_values('date', ascending=False)
         self.records = frame.to_dict('records')
-        options = ((self.month_filter, '全部月份', sorted(set(frame.date.str[:7]), reverse=True)),
-                   (self.category_filter, '全部分类', sorted(set(frame.category))))
+        options = ((self.month_filter, '全部月份', sorted(periods_with_records(frame), reverse=True)),
+                   (self.category_filter, '全部分类', sorted(set(frame.category) | set(category_options('支出')))))
         for control, first, values in options:
             current = control.currentText()
             control.blockSignals(True)
@@ -456,11 +498,25 @@ class LedgerPage(Page):
                            ('银行模板 XLSX', 'bank_template_v1')):
             adapter.addItem(title, key)
         account = QComboBox()
-        account.addItem('未声明账户', None)
-        for item in self.store.accounts(include_archived=False):
-            account.addItem(item['label'], item['id'])
+
+        def refresh_accounts(preferred=None):
+            account.clear()
+            account.addItem('未声明账户', None)
+            for item in self.store.accounts(include_archived=False):
+                account.addItem(item['label'], item['id'])
+            account.setCurrentIndex(max(0, account.findData(preferred)))
+
+        def add_account():
+            identifier = self.owner.pages['accounts'].edit({}, parent=dialog)
+            if identifier:
+                refresh_accounts(identifier)
+
+        refresh_accounts()
         form.addRow('格式', adapter)
         form.addRow('来源账户', account)
+        row = toolbar(layout)
+        self.action(row, '新建来源账户', add_account)
+        row.addStretch(1)
         form_buttons(dialog, layout, '生成预览')
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -501,6 +557,10 @@ class LedgerPage(Page):
         restore = QCheckBox('恢复预览中列出的已删除记录')
         restore.setEnabled(bool(preview['deleted_rows']))
         layout.addWidget(restore)
+        if parsed.issues:
+            actions = toolbar(layout)
+            self.action(actions, '导出解析异常 CSV', lambda: export_issues(dialog, parsed.issues))
+            actions.addStretch(1)
         form_buttons(dialog, layout, '确认导入')
         if dialog.exec() != QDialog.DialogCode.Accepted or path != self.store.path:
             return
@@ -529,19 +589,23 @@ class LedgerPage(Page):
 
         actions = toolbar(layout)
         self.action(actions, '查看批次', lambda: details(dialog, '批次资料', selected(view, model)))
+        self.action(actions, '导出异常与冲突 CSV',
+                    lambda: export_issues(dialog, json.loads(selected(view, model)['issues_json'])))
         self.action(actions, '删除批次', remove)
         actions.addStretch(1)
         actions.addWidget(button('关闭', dialog.close))
         dialog.exec()
 
     def export(self):
-        filename, _ = QFileDialog.getSaveFileName(self, '导出净额', '净额投影.csv', 'CSV (*.csv)')
+        period = self.month_filter.currentText() if self.month_filter.currentIndex() > 0 else ''
+        filename, _ = QFileDialog.getSaveFileName(
+            self, '导出净额 · ' + (period or '全部月份'), f'净额投影-{period or "全部月份"}.csv', 'CSV (*.csv)')
         if filename:
             destination = Path(filename).resolve()
             if destination.suffix.lower() != '.csv':
                 raise ValueError('请将净额导出保存为 .csv 文件。')
-            destination.write_bytes(net_export_csv(self.store.spending_view()))
-            self.owner.notice('净额投影已导出。')
+            destination.write_bytes(net_export_csv(select_month(self.store.spending_view(), period)))
+            self.owner.notice(f'已导出{period or "全部月份"}的净额投影。')
 
 
 class BudgetPage(Page):
@@ -564,18 +628,44 @@ class BudgetPage(Page):
         self.coverage = label('', 'muted')
         self.layout.addWidget(self.coverage)
         self.view, self.model = self.add_table([(name, name) for name in ('分类', '预算', '已支出', '剩余', '使用率', '超支')])
+        actions = toolbar(self.layout)
+        self.action(actions, '查看选中预算的依据', self.show_evidence)
+        self.action(actions, '查看对应账单', self.open_ledger)
+        actions.addStretch(1)
+        self.evidence_dialog = Evidence(self)
         self.month.currentTextChanged.connect(lambda _: self.owner.perform(self.refresh))
 
     def refresh(self):
         month = self.month.currentText()
         frame = self.store.spending_view()
-        present = month in frame.attrs.get('source_months', ()) or frame.date.str.startswith(month).any()
+        present = month in periods_with_records(frame)
         report = budget_report(frame, month, self.store.budgets(month))
         if not present:
             for field in ('已支出', '剩余', '使用率', '超支'):
                 report[field] = None
         self.coverage.setText('金额单位：元' if present else '该月暂无账单资料，仍可提前设置预算。')
         self.model.replace(report.to_dict('records'))
+
+    def show_evidence(self):
+        month = self.month.currentText()
+        category = selected(self.view, self.model)['分类']
+        limit = self.store.budgets(month)[category]
+        period = month_records(self.store.spending_view(), month)
+        rows = period.loc[(period.kind == '支出') & (period.category == category)]
+        trace = calculation('budget', 'budget.spent_minus_limit', rows, inputs={'month': month, 'category': category},
+                            extra=[dict(type='Budget', id=f'{month}/{category}', snapshot={'amount_cents': limit})])
+        if month in periods_with_records(period):
+            net = int(rows.amount_cents.sum())
+            explanation = f'预算 ¥{yuan(limit)} − 净支出 ¥{yuan(net)} = 剩余 ¥{yuan(limit - net)}。'
+        else:
+            explanation = f'已设置预算 ¥{yuan(limit)}。本月尚无已导入记录，暂无支出依据。'
+        self.evidence_dialog.setWindowTitle(f'{month} · {category}预算依据')
+        self.evidence_dialog.present({'answer': explanation, 'details': explanation, 'trace': trace,
+                                      'evidence': rows.to_dict('records')})
+
+    def open_ledger(self):
+        category = selected(self.view, self.model)['分类']
+        self.owner.open_ledger(self.month.currentText(), category)
 
     def save(self):
         self.store.save_budget(self.month.currentText(), self.category.currentText(),
@@ -632,8 +722,8 @@ class AccountsPage(Page):
         self.links.replace(dict(row, wallet_label=names.get(row['wallet_account_id']),
                                 bank_label=names.get(row['bank_account_id'])) for row in self.store.funding_links())
 
-    def edit(self, original):
-        dialog, layout, form = fields(self, '编辑账户' if original else '添加账户')
+    def edit(self, original, *, parent=None):
+        dialog, layout, form = fields(parent or self, '编辑账户' if original else '添加账户')
         name = QLineEdit(original.get('label', ''))
         channel = QLineEdit(original.get('channel', ''))
         last4 = QLineEdit(original.get('last4', ''))
@@ -651,9 +741,11 @@ class AccountsPage(Page):
             if original:
                 self.store.update_account(original['id'], label=name.text(), channel=channel.text(),
                                           last4=last4.text(), confirmed=True)
+                identifier = original['id']
             else:
-                self.store.add_account(channel.text(), kind.currentData(), name.text(), last4.text())
+                identifier = self.store.add_account(channel.text(), kind.currentData(), name.text(), last4.text())
             self.changed('账户已保存。')
+            return identifier
 
     def archive(self):
         row = selected(self.view, self.model)

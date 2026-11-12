@@ -1,4 +1,4 @@
-param([string]$Python = 'python')
+param([string]$Python = 'python', [string]$Iscc = '')
 
 $ErrorActionPreference = 'Stop'
 Push-Location (Split-Path $PSScriptRoot -Parent)
@@ -18,6 +18,11 @@ try {
     & $Python scripts/verify_qt_native.py .test_qt/packaged200 --exe $exe --scale 2 --tk-migration
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Qt smoke test failed at 200% DPI.' }
     New-Item -ItemType Directory -Force -Path release | Out-Null
+    if ($Iscc) {
+        & $Iscc packaging/installer_qt.iss
+        if ($LASTEXITCODE -ne 0) { throw 'Qt installer build failed.' }
+        Get-FileHash -Algorithm SHA256 -LiteralPath release/AIFinanceHelperQt-0.10.0-Setup-x64.exe
+    }
     Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath release/AIFinanceHelperQt-preview-Windows-x64.zip -Force
     Get-FileHash -Algorithm SHA256 -LiteralPath release/AIFinanceHelperQt-preview-Windows-x64.zip
 }

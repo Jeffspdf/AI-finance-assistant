@@ -1,14 +1,104 @@
-"""Qt form for the shared, read-only savings Agent."""
+"""Qt forms for the savings Agent and manual savings comparisons."""
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
+from datetime import date, timedelta
+from decimal import Decimal
+
+from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
 
 from finance.agent_runtime import AggregateConsent
 from finance.agent_planner import scenario_goal_values
-from finance.analytics import yuan
+from finance.analytics import estimate_from_records, plan_savings, yuan
+from finance.importer import money_to_cents
 from finance.spending_presenter import BASIS_LABELS
 from .goals import GoalsDialog
 from .services import savings_inputs, savings_plan
-from .ui import button, card, details, label
+from .ui import button, card, confirm, details, label
+
+
+class ManualPlan(QDialog):
+    def __init__(self, owner):
+        super().__init__(owner)
+        self.owner = owner
+        self.setWindowTitle('手动比较储蓄方案')
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.inputs = {}
+        today = date.today()
+        for key, title, initial in (
+            ('target_cents', '目标金额 / 元', '6000'), ('saved_cents', '已有储蓄 / 元', '0'),
+            ('income_cents', '月收入 / 元', ''), ('A', '方案 A 月预算 / 元', ''),
+            ('B', '方案 B 月预算 / 元', ''), ('start_date', '开始日 / YYYY-MM-DD', today.isoformat()),
+            ('deadline', '截止日 / YYYY-MM-DD', (today + timedelta(days=183)).isoformat()),
+        ):
+            field = self.inputs[key] = QLineEdit(initial)
+            form.addRow(title, field)
+        layout.addLayout(form)
+        actions = QHBoxLayout()
+        actions.addWidget(button('用近三个月估算', lambda: self.run(self.estimate)))
+        actions.addWidget(button('比较 A/B', lambda: self.run(self.compare), primary=True))
+        actions.addWidget(button('填写选中目标', lambda: self.run(self.prefill)))
+        self.scenario = QComboBox()
+        self.scenario.addItems(('A', 'B'))
+        actions.addWidget(self.scenario)
+        layout.addLayout(actions)
+        self.result = label('', 'muted')
+        layout.addWidget(self.result)
+        layout.addWidget(button('关闭', self.close))
+        for field in self.inputs.values():
+            field.textChanged.connect(lambda _: self.result.clear())
+
+    def run(self, action):
+        try:
+            action()
+        except ValueError as exc:
+            self.result.setText(str(exc))
+
+    def values(self):
+        return {key: field.text().strip() if key in ('start_date', 'deadline')
+                else money_to_cents(field.text(), allow_zero=key != 'target_cents')
+                for key, field in self.inputs.items()}
+
+    @staticmethod
+    def calculate(values, scenario):
+        return plan_savings(*(values[key] for key in ('target_cents', 'saved_cents', 'start_date', 'deadline',
+                                                     'income_cents', scenario)))
+
+    def compare(self):
+        values = self.values()
+        lines = []
+        for scenario in ('A', 'B'):
+            result = self.calculate(values, scenario)
+            cashflow = ' · 月收入低于预算' if result['negative_cashflow'] else ''
+            lines.append(f"方案 {scenario} · {result['months']} 次存入 · 预计 ¥{yuan(result['projected'])} · "
+                         f"缺口 ¥{yuan(result['deficit'])}{cashflow}")
+        self.result.setText('\n'.join(lines))
+
+    def estimate(self):
+        estimate = estimate_from_records(self.owner.workspace.store.spending_view())
+        keys = ('income_cents', 'A', 'B')
+        if any(self.inputs[key].text().strip() for key in keys) and not confirm(
+            self, '覆盖手动输入', '用最近三个完整月的估算替换收入和两套预算？'
+        ):
+            return
+        expense = estimate['average_expense_cents']
+        use_budget = not estimate['requires_explicit_budget']
+        values = (estimate['average_income_cents'], expense if use_budget else None,
+                  int((Decimal(expense) * Decimal('0.9')).quantize(Decimal('1'))) if use_budget else None)
+        for key, value in zip(keys, values):
+            self.inputs[key].setText('' if value is None else yuan(value).replace(',', ''))
+        message = '估算依据月份 ' + '、'.join(estimate['months'])
+        if not use_budget:
+            message += '\n历史净支出为负，请手动填写未来预算。'
+        self.result.setText(message)
+
+    def prefill(self):
+        values = self.values()
+        scenario = self.scenario.currentText()
+        self.calculate(values, scenario)
+        values['budget_cents'] = values[scenario]
+        if GoalsDialog(self.owner).edit({}, prefilled=values):
+            self.owner.ledger_changed('储蓄目标已保存。')
+            self.accept()
 
 
 class PlanPage(QWidget):
@@ -78,6 +168,7 @@ class PlanPage(QWidget):
         self.scenario.addItems(('A', 'B', 'C'))
         self.prefill = button('将所选方案填入储蓄目标', lambda: self.owner.perform(self.prefill_goal))
         next_steps.addWidget(self.switch_assumptions)
+        next_steps.addWidget(button('手动比较 A/B', lambda: ManualPlan(self.owner).exec()))
         next_steps.addStretch(1)
         next_steps.addWidget(self.scenario)
         next_steps.addWidget(self.prefill)

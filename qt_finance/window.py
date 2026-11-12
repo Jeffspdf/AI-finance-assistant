@@ -207,6 +207,7 @@ class FinanceWindow(QMainWindow):
     def navigate(self, page, target=''):
         if page != self.current:
             self.chat.evidence.close()
+            self.pages['budget'].evidence_dialog.close()
             if self.current == 'ledger':
                 self.jobs.cancel('import')
                 self.jobs.cancel('category')
@@ -219,6 +220,15 @@ class FinanceWindow(QMainWindow):
             self.plan.inputs['target_cents'].setText(target)
         self.refresh()
 
+    def open_ledger(self, month, category):
+        self.navigate('ledger')
+        ledger = self.pages['ledger']
+        ledger.search.clear()
+        if month and ledger.month_filter.findText(month) < 0:
+            ledger.month_filter.addItem(month)
+        ledger.month_filter.setCurrentIndex(max(0, ledger.month_filter.findText(month or '全部月份')))
+        ledger.category_filter.setCurrentIndex(max(0, ledger.category_filter.findText(category)))
+
     def refresh(self):
         page = self.pages[self.current]
         if hasattr(page, 'refresh'):
@@ -226,6 +236,7 @@ class FinanceWindow(QMainWindow):
 
     def ledger_changed(self, message):
         self.chat.stop(quiet=True)
+        self.pages['budget'].evidence_dialog.close()
         self.plan.invalidate()
         self.refresh()
         self.notice(message)
@@ -242,6 +253,7 @@ class FinanceWindow(QMainWindow):
             return
         self.jobs.cancel('import')
         self.jobs.cancel('category')
+        self.pages['budget'].evidence_dialog.close()
         self.chat.reload()
         self.plan.reset_workspace()
         ledger = self.pages['ledger']

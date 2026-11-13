@@ -803,7 +803,8 @@ class BudgetMonthPicker(QPushButton):
         return self.month
 
     def setCurrentText(self, month):
-        date.fromisoformat(month + '-01')
+        if not re.fullmatch(r'20[0-9]{2}-(?:0[1-9]|1[0-2])', month):
+            raise ValueError('预算月份须在 2000–2099 年之间。')
         if month != getattr(self, 'month', None):
             self.month = month
             self.setText(f'{month}  ▾')
@@ -836,8 +837,8 @@ class BudgetMonthPicker(QPushButton):
 
         def update_year():
             year_label.setText(f'{year} 年')
-            previous.setEnabled(year > 1)
-            following.setEnabled(year < 9999)
+            previous.setEnabled(year > 2000)
+            following.setEnabled(year < 2099)
             for number, choice in enumerate(months, 1):
                 choice.setProperty('monthSelected', f'{year:04d}-{number:02d}' == self.month)
                 choice.style().unpolish(choice)
@@ -945,6 +946,9 @@ class BudgetPage(Page):
 
     def copy_previous(self):
         month = self.month.currentText()
+        if month == '2000-01':
+            self.owner.notice('2000 年 1 月之前没有可复制的预算月份。')
+            return
         previous = month_shift(date.fromisoformat(month + '-01'), -1)
         if confirm(self, '复制预算', f'将 {previous} 的预算复制到 {month}，保留目标月已设置的分类？'):
             count = self.store.copy_budgets(previous, month, overwrite=False)

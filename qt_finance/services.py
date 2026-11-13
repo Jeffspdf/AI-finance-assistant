@@ -23,6 +23,12 @@ DINING_TOTAL = re.compile(
     r'(?:的)?\s*(?:(?:我)?花在吃饭上的钱累计是多少|吃饭一共花掉多少钱|吃饭相关的小票加在一起[，, ]*总共花了多少钱)'
     r'[，,。？? ]*(?:(?:只告诉我金额|只要数字)[。？? ]*)?'
 )
+DINING_COLLOQUIAL = re.compile(
+    r'(?:请问|帮我算算|帮我算一下|我想知道)?\s*'
+    r'(?P<period>20[0-9]{2}-(?:0[1-9]|1[0-2]))\s*(?:里|份|的)?[，,\s]*'
+    r'我?\s*(?:为了|在)?\s*(?:吃吃喝喝|吃饭喝饮料|吃喝|吃饭|餐饮)(?:上|这方面)?\s*'
+    r'(?:一共|总共|总计|累计)?\s*(?:掏了|花了|花掉|花去|支出)\s*多少(?:钱|元)?[。？?！!\s]*'
+)
 
 
 def month_number(token):
@@ -59,7 +65,7 @@ def query_ledger(path, question, client, cancelled):
     if len(set(periods)) >= 2 and re.search(r'比较|对比|相差|差额|哪个月', normalized):
         return dict(answer='目前支持单月或一个连续日期区间的汇总。比较两个月时，请分别查询两个单月，例如“2026-08 餐饮净支出多少？”。',
                     evidence=[], status='unsupported', parser='本地解析')
-    dining = DINING_TOTAL.fullmatch(normalized)
+    dining = DINING_COLLOQUIAL.fullmatch(normalized) or DINING_TOTAL.fullmatch(normalized)
     combined = re.fullmatch(r'(?:请问\s*)?(20[0-9]{2}-(?:0[1-9]|1[0-2]))\s*的?\s*收入(?:和|与|、)净支出分别(?:是)?多少(?:元)?[。？?]?', normalized)
     if dining:
         period = dining['period']

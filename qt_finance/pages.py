@@ -726,12 +726,17 @@ class LedgerPage(Page):
         dialog.resize(920, 620)
         layout = QVBoxLayout(dialog)
         layout.addWidget(label(f"识别 {len(parsed.rows)} 行 · 问题 {len(parsed.issues)} 项 · 已删除 {preview['deleted_count']} 行"))
+        pending_refunds = sum(row['status'] == 'refund_pending' for row in parsed.rows)
+        if pending_refunds:
+            layout.addWidget(label(f'识别到 {pending_refunds} 条退款流水。待关联原消费，当前不计入普通收入。', 'muted'))
         if preview.get('refunds_to_correct'):
             layout.addWidget(label(f"确认导入后，会把 {preview['refunds_to_correct']} 条同来源记录从普通收入更正为待处理退款。"))
         if not parsed.document.get('account_id'):
             layout.addWidget(label(f'识别的 {len(parsed.rows)} 行均未指定来源账户。', 'muted'))
         tabs = QTabWidget()
-        rows, _ = table(EVIDENCE_COLUMNS, parsed.rows)
+        rows, _ = table((*EVIDENCE_COLUMNS, ('计入说明', lambda row: {
+            'refund_pending': '退款待处理', 'review': '待复核',
+        }.get(row['status'], '—'))), parsed.rows)
         tabs.addTab(rows, '待导入')
         if parsed.issues or parsed.warnings:
             tabs.addTab(readonly_text({'issues': parsed.issues, 'warnings': parsed.warnings}), '解析提示')

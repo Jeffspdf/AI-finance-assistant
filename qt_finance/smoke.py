@@ -235,9 +235,16 @@ def query_feedback(app, window, directory, output):
             ('我想知道二〇二六年八月吃饭一共花掉多少钱，只告诉我金额。', '10.00 元'),
             ('把十月份吃饭相关的小票加在一起，总共花了多少钱？', '32.00 元'),
             ('请问十月份我花在吃饭上的钱累计是多少？只要数字。', '32.00 元'),
+            ('帮我算算二〇二六年八月里，我为了吃吃喝喝总共掏了多少钱。', '10.00 元'),
+            ('帮我算一下2026年8月份，我在吃饭喝饮料上一共花去多少钱？', '10.00 元'),
+            ('请问2026-08我吃喝总计花了多少钱？', '10.00 元'),
         ):
             answer = query_ledger(fixture.path, question, model, cancel)
             assert answer['parser'] == '本地解析' and expected in answer['display_answer'], answer
+            assert answer['status'] == 'ok' and answer['evidence']
+    with patch.object(ModelClient, 'parse_question', return_value=None):
+        qualified_dining = query_ledger(fixture.path, '2026-08 不含外卖的吃吃喝喝总共掏了多少钱？', model, cancel)
+    assert qualified_dining['status'] == 'unsupported' and not qualified_dining['evidence']
     assert october['parser'] == '本地解析' and '32.00 元' in october['display_answer']
     assert october['scope'] == '2026-10' and october['evidence'][0]['merchant'] == '星巴克'
     assert august['status'] == 'no_match' and '没有符合条件' in august['answer']
@@ -736,8 +743,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.11'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.11-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.12'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.12-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -928,6 +935,26 @@ def reimport_after_edit(app, window, directory):
         assert record['description'] == ('咖啡' if restore else '咖啡（复测）')
         assert record['status'] == ('normal' if restore else 'deleted')
     assert checks == [True, True]
+
+    refund_source = directory / 'wechat-refund.csv'
+    refund_source.write_text('交易时间,交易类型,交易对方,商品,收/支,金额(元),当前状态,交易单号\n'
+                             '2026-08-06,退款,星巴克,退款到账,收入,12.00,支付成功,REFUND',
+                             encoding='utf-8-sig')
+    parsed, preview = preview_statement(store.path, refund_source, 'auto', None)
+    before = Path(store.path).read_bytes()
+    observed = []
+
+    def inspect_refund():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '导入预览':
+            view = dialog.findChild(QTableView)
+            model = view.model()
+            observed.append(model.data(model.index(0, model.columnCount() - 1)))
+            dialog.reject()
+
+    QTimer.singleShot(40, inspect_refund)
+    ledger.finish_import(store.path, (parsed, preview), '')
+    assert observed == ['退款待处理'] and Path(store.path).read_bytes() == before
 
 
 def exercise(app, output, tk_backup=None, return_fixture=None):

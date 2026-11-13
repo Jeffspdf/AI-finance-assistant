@@ -10,7 +10,7 @@ ALIASES = {
     'date': ['日期','交易时间','交易日期','记账日期','date','datetime'],
     'amount': ['金额','金额(元)','金额（元）','交易金额','收支金额','amount'],
     'merchant': ['商户','交易对方','对方名称','商户名称','merchant'],
-    'description': ['描述','商品','商品名称','交易说明','备注','摘要','description'],
+    'description': ['描述','商品','商品名称','商品说明','交易说明','备注','摘要','description'],
     'kind': ['类型','收支','收/支','收支类型','交易类型','kind','type'],
     'external_id': ['交易ID','交易id','交易单号','交易订单号','订单号','流水号','transaction_id','id'],
     'channel': ['平台','渠道','支付平台','channel','platform'],
@@ -114,6 +114,7 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
         frame['金额']=amounts;frame['类型']=kinds;frame['平台']='银行'
     if adapter!='generic':retain_source=True
     mapping = map_columns(frame.columns)
+    wechat_layout = WECHAT_COLUMNS <= set(frame.columns)
     result = ImportResult(adapter=adapter)
     if retain_source:
         result.document=dict(sha256=sha256(content).hexdigest(),filename=__import__('pathlib').Path(filename).name,
@@ -125,6 +126,7 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
         result.warnings.append('缺少交易 ID：按日期时间、金额、收支、商户、描述和平台识别重复；完全相同的真实交易可能被合并。')
     for offset, (_, source) in enumerate(frame.iterrows()):
         row_number = first_row + offset
+        wechat_type = str(source.get('交易类型', '')).strip() if wechat_layout else ''
         def get(key):
             col=mapping.get(key)
             return str(source[col]).strip() if col is not None else ''
@@ -133,6 +135,8 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
             # Allowlist only the fields needed for reconciliation. Never retain arbitrary
             # exported columns (full card numbers, names, account balances, etc.).
             raw=dict(row_no=row_number,fields={k:get(k)[:500] for k in ALIASES if mapping.get(k) is not None},parse_status='parsed')
+            if wechat_type:
+                raw['fields']['交易类型']=wechat_type[:500]
             if adapter=='bank_template_v1':
                 raw['fields']={k:str(original_frame.iloc[offset][k])[:500] for k in ('流水号','交易时间','借方发生额','贷方发生额','对方名称','摘要','币种','业务类型')}
             result.raw_rows.append(raw)
@@ -141,12 +145,18 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
                 if raw:raw['parse_status']='skipped'
                 result.skipped += 1; continue
             status = get('status')
-            refund=retain_source and ('退款' in get('kind') or ('退款' in status and get('kind') in ('收入','收')))
+            kind_text = get('kind')
+            # 微信 exports split the transaction type and the direction into two columns.
+            explicit_wechat_refund = wechat_type in {
+                '退款', '退款到账', '商户退款',
+            } and kind_text in ('收入', '收', '/')
+            refund_marker = explicit_wechat_refund or '退款' in kind_text or ('退款' in status and kind_text in ('收入','收'))
+            refund = retain_source and refund_marker
             review=retain_source and not refund and '退款' in status
-            if any(w in status for w in (['失败','关闭','已撤销'] if retain_source else ['失败','关闭','已撤销','已退款','退款成功'])):
+            if any(w in status for w in (['失败','关闭','已撤销','退款中','退款处理中'] if retain_source else ['失败','关闭','已撤销','已退款','退款成功'])):
                 if raw:raw['parse_status']='skipped'
                 result.skipped += 1; continue
-            if not retain_source and ('退款' in status or '退款' in get('kind')):
+            if not retain_source and (refund_marker or '退款' in status):
                 raise ValueError('退款记录需人工核对，当前不自动计入')
             currency=get('currency').upper()
             if currency and currency not in ['CNY','RMB','人民币','元','¥','￥']:
@@ -161,7 +171,6 @@ def parse_statement(content, filename, *, retain_source=False, adapter='generic'
                 raise ValueError('非法日期或时区，支持 2000 至 2100 年本地日期')
             date = dt.strftime('%Y-%m-%d %H:%M:%S')
             signed = money_to_cents(get('amount'))
-            kind_text=get('kind')
             if refund:kind='收入'
             elif kind_text in ['收入','收','income','Income']: kind='收入'
             elif kind_text in ['支出','支','expense','Expense']: kind='支出'

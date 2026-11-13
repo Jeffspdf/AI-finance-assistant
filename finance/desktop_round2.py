@@ -194,6 +194,8 @@ class RoundTwo:
             deleted_count=deleted_preview['deleted_count']
             deleted_note=self.label(content,f'匹配 {deleted_count} 行已删除来源；默认保持删除，不会恢复。',10,PRIMARY)
             deleted_note.configure(wraplength=px(730))
+            if deleted_preview.get('refunds_to_correct'):
+                self.label(content,f"确认导入后，会把 {deleted_preview['refunds_to_correct']} 条同来源记录更正为待处理退款。",10,PRIMARY)
             if deleted_count:
                 def update_restore_note():
                     deleted_note.configure(text=f'已选择显式恢复本次预览的 {deleted_count} 个匹配来源行；旧对账/退款关系仍需复核。' if restore_choice.get()
@@ -249,6 +251,8 @@ class RoundTwo:
                 for child in actions.winfo_children():child.destroy()
                 status.config(text=f'已新增 {added-saved.restored} 笔，显式恢复 {saved.restored} 笔，重复跳过 {duplicates} 行，已删除保持 {saved.deleted_skipped} 行，冲突 {len(conflicts)} 行。')
                 status.configure(wraplength=px(730))
+                if saved.refunds_corrected:
+                    self.label(content,f'已更正 {saved.refunds_corrected} 条待处理退款。',11,PRIMARY)
                 window.import_controls['outcome']=saved
                 self.label(content,f'异常 {len(result.issues)} 行未入库；原有冲突交易未被覆盖。',11,MUTED)
                 if candidates is not None:

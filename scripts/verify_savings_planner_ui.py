@@ -233,7 +233,7 @@ if __name__ == '__main__':
                 output = Path(sys.argv[1]); output.mkdir(parents=True, exist_ok=True)
                 shell = shutil.which('pwsh') or shutil.which('powershell')
                 if not shell: raise RuntimeError('PowerShell required for the Windows candidate build')
-                version = '0.10.0-rc.4'
+                version = '0.10.0-rc.5'
                 command = [shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'packaging/build.ps1'),
                            '-Python', sys.executable, '-Iscc', str(ROOT.parent/'finance_assistant/tools/inno/ISCC.exe'),
                            '-Version', version, '-CoursePreview']

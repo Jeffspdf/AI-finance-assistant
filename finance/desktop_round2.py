@@ -204,7 +204,12 @@ class RoundTwo:
                                bg=BG,fg=INK,anchor='w',wraplength=px(730)).pack(fill='x')
             notebook=ttk.Notebook(content);notebook.pack(fill='both',expand=True)
             valid=tk.Frame(notebook,bg='white');issues=tk.Frame(notebook,bg='white');notebook.add(valid,text='有效记录预览（前200）');notebook.add(issues,text=f'全部异常（{len(result.issues)}）')
-            self.table(valid,['日期','商户','类型','金额','分类'],[[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:.2f}",r['category']] for r in result.rows[:200]],8)
+            self.table(valid,['日期','商户','类型','金额','分类','计入说明'],
+                       [[r['date'][:10],r['merchant'],r['kind'],f"{r['amount_cents']/100:.2f}",r['category'],
+                         '退款待处理' if r['status']=='refund_pending' else '待复核' if r['status']=='review' else '—']
+                        for r in result.rows[:200]],8)
+            if any(r['status']=='refund_pending' for r in result.rows):
+                self.label(content,'待处理退款不计入普通收入，核对原消费后才抵扣净支出。',10,PRIMARY)
             self.table(issues,['行号','原因','日期','金额'],[[r.get(k,'') for k in ['行号','原因','日期','金额']] for r in result.issues],8)
             if deleted_count:
                 deleted_tab=tk.Frame(notebook,bg='white');notebook.add(deleted_tab,text=f'已删除来源（{deleted_count}行）')

@@ -9,6 +9,7 @@ from finance.agent_runtime import AggregateConsent
 from finance.agent_planner import scenario_goal_values
 from finance.analytics import estimate_from_records, plan_savings, yuan
 from finance.importer import money_to_cents
+from finance.qa import month_shift
 from finance.spending_presenter import BASIS_LABELS
 from .goals import GoalsDialog
 from .services import savings_inputs, savings_plan
@@ -118,6 +119,8 @@ class PlanPage(QWidget):
         self.mode.addItem('最近三个完整月', 'historical')
         self.mode.addItem('手动输入假设', 'assumption')
         fields.addRow('计算依据', self.mode)
+        self.coverage_hint = label('', 'muted')
+        fields.addRow(self.coverage_hint)
         self.inputs = {}
         self.assumptions = []
         for key, caption, initial in (
@@ -168,7 +171,9 @@ class PlanPage(QWidget):
         self.scenario.addItems(('A', 'B', 'C'))
         self.prefill = button('将所选方案填入储蓄目标', lambda: self.owner.perform(self.prefill_goal))
         next_steps.addWidget(self.switch_assumptions)
-        next_steps.addWidget(button('手动比较 A/B', lambda: ManualPlan(self.owner).exec()))
+        manual = button('手动比较两套预算…', lambda: ManualPlan(self.owner).exec())
+        manual.setToolTip('自填两套月预算和具体日期，比较方案 A/B。上方生成规划会比较三种情景。')
+        next_steps.addWidget(manual)
         next_steps.addStretch(1)
         next_steps.addWidget(self.scenario)
         next_steps.addWidget(self.prefill)
@@ -184,6 +189,22 @@ class PlanPage(QWidget):
             for widget in pair:
                 widget.setVisible(visible)
         self.invalidate()
+        self.refresh()
+
+    def refresh(self):
+        if self.mode.currentData() == 'assumption':
+            self.coverage_hint.setText('根据你填写的每月收入和预算模拟。')
+            return
+        frame = self.owner.workspace.store.spending_view()
+        expected = [month_shift(date.today(), offset) for offset in (-3, -2, -1)]
+        available = set(frame.date.str[:7])
+        missing = [month for month in expected if month not in available]
+        if missing:
+            self.coverage_hint.setText('历史范围缺少 ' + '、'.join(missing) + '，可改用输入假设。')
+            self.switch_assumptions.show()
+        else:
+            self.coverage_hint.setText('有记录的月份：' + '、'.join(expected))
+            self.switch_assumptions.hide()
 
     def authorization_changed(self, allowed):
         if not allowed and self.consent is not None:

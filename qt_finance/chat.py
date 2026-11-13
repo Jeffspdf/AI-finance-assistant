@@ -94,6 +94,7 @@ class ChatPage(QWidget):
         self.last_result = None
         self.scroll_epoch = 0
         self.busy = False
+        self.has_sources = False
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 10, 20, 12)
         column = QWidget()
@@ -183,6 +184,14 @@ class ChatPage(QWidget):
     def refresh(self):
         store = self.owner.workspace.store
         coverage = self.coverage_data = ledger_coverage(store)
+        has_sources = bool(coverage['count'])
+        if has_sources != self.has_sources:
+            self.has_sources = has_sources
+            if not self.active_history():
+                self.empty.hide()
+                self.empty.deleteLater()
+                self.welcome()
+        self.snapshot.setVisible(has_sources and not self.active_history())
         months = coverage['months']
         shown = '、'.join(months[-4:]) or '尚无账单'
         if len(months) > 4:
@@ -352,7 +361,7 @@ class ChatPage(QWidget):
             item.widget().hide()
             item.widget().deleteLater()
         rows = self.active_history()
-        self.snapshot.setVisible(not rows)
+        self.snapshot.setVisible(self.has_sources and not rows)
         self.last_result = next((value for role, value in reversed(rows) if role == 'assistant'), None)
         if rows:
             for role, payload in rows:
@@ -368,22 +377,34 @@ class ChatPage(QWidget):
         self.empty = QWidget()
         layout = QVBoxLayout(self.empty)
         layout.setContentsMargins(10, 12, 10, 8)
-        headline = label('今天想了解哪笔账？', 'hero')
+        headline = label('今天想了解哪笔账？' if self.has_sources else '开始记录你的账单', 'hero')
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(headline)
-        caption = label('查收支、核对来源，或给一个储蓄目标做 A/B/C 规划。', 'muted')
+        caption = label('查收支、核对来源，或给一个储蓄目标做 A/B/C 规划。' if self.has_sources
+                        else '导入已有账单，或手动记下第一笔。演示账单和个人账单分开保存。', 'muted')
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(caption)
         layout.addSpacing(9)
         grid = QGridLayout()
         grid.setSpacing(10)
-        for i, (title, prompt) in enumerate(PROMPTS):
-            item = button(f'{title}\n{prompt}', lambda checked=False, q=prompt: self.submit(q))
-            item.setProperty('suggestion', True)
-            item.setMinimumHeight(56)
-            grid.addWidget(item, i // 2, i % 2)
+        if self.has_sources:
+            for i, (title, prompt) in enumerate(PROMPTS):
+                item = button(f'{title}\n{prompt}', lambda checked=False, q=prompt: self.submit(q))
+                item.setProperty('suggestion', True)
+                item.setMinimumHeight(56)
+                grid.addWidget(item, i // 2, i % 2)
+        else:
+            grid.addWidget(button('导入账单', self.open_import, primary=True), 0, 0)
+            grid.addWidget(button('手动记一笔', self.owner.quick_entry), 0, 1)
+            if self.owner.workspace.mode == 'personal':
+                grid.addWidget(button('看看演示账单', lambda: self.owner.space.setCurrentIndex(
+                    self.owner.space.findData('demo'))), 1, 0, 1, 2)
         layout.addLayout(grid)
         self.messages.insertWidget(0, self.empty)
+
+    def open_import(self):
+        self.owner.navigate('ledger')
+        self.owner.perform(self.owner.pages['ledger'].choose_import)
 
     def add_bubble(self, role, payload):
         row = QWidget()

@@ -313,7 +313,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
             backup_database(source,staged)
             staged_backup=ensure_schema(staged)
             with self._lock:
-                before=self.backup()
+                before=self.create_managed_backup('restore')
                 try:
                     # SQLite backup writes a transaction, rather than copying an open file.
                     with closing(sqlite3.connect(staged)) as origin, closing(sqlite3.connect(self.path)) as target:

@@ -299,6 +299,7 @@ class FinanceWindow(QMainWindow):
         self.plan.reset_workspace()
         ledger = self.pages['ledger']
         ledger.last_batch = None
+        ledger.import_result.hide()
         ledger.search.clear()
         ledger.month_filter.setCurrentIndex(0)
         ledger.category_filter.setCurrentIndex(0)

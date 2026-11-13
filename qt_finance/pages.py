@@ -6,6 +6,7 @@ import json
 from operator import ge, gt, le, lt
 from pathlib import Path
 import re
+import sqlite3
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -81,6 +82,42 @@ def form_buttons(dialog, layout, title='确定'):
     controls.rejected.connect(dialog.reject)
     layout.addWidget(controls)
     return controls
+
+
+def save_form(dialog, layout, form, title, save):
+    error = label('', 'error')
+    error.hide()
+    layout.addWidget(error)
+    controls = form_buttons(dialog, layout, title)
+    controls.accepted.disconnect(dialog.accept)
+
+    def submit():
+        try:
+            save()
+        except (ValueError, OSError, sqlite3.Error) as exc:
+            field = getattr(exc, 'field', None)
+            if form.getWidgetPosition(error)[0] >= 0:
+                form.takeRow(error)
+            else:
+                layout.removeWidget(error)
+            if field is not None:
+                row, _ = form.getWidgetPosition(field)
+                form.insertRow(row + 1, error)
+                field.setFocus()
+            else:
+                layout.insertWidget(layout.indexOf(controls), error)
+            error.setText(str(exc))
+            error.show()
+        else:
+            dialog.accept()
+
+    controls.accepted.connect(submit)
+
+
+class FieldError(ValueError):
+    def __init__(self, field, message):
+        super().__init__(message)
+        self.field = field
 
 
 class Page(QWidget):
@@ -317,9 +354,9 @@ class LedgerPage(Page):
         self.action(row, '导入账单', self.choose_import, primary=True)
         self.action(row, '记一笔', self.edit_new)
         actions = toolbar(self.layout)
-        self.action(actions, '查看来源', self.source)
-        self.action(actions, '编辑选中', self.edit_selected)
-        self.action(actions, '删除选中', self.delete_selected)
+        self.selected_actions = [self.action(actions, title, callback) for title, callback in (
+            ('查看来源', self.source), ('编辑选中', self.edit_selected), ('删除选中', self.delete_selected),
+        )]
         self.action(actions, '导入批次', self.import_history)
         self.action(actions, '导出净额', self.export)
         category_button = button('分类', lambda: None)
@@ -346,6 +383,25 @@ class LedgerPage(Page):
         self.records = []
         self.last_batch = None
         self.view, self.model = self.add_table(LEDGER_COLUMNS, multiple=True)
+        self.view.selectionModel().selectionChanged.connect(self.update_selection)
+        self.model.modelReset.connect(self.update_selection)
+        self.update_selection()
+        self.import_result, result_layout = card()
+        self.import_summary = label('')
+        result_layout.addWidget(self.import_summary)
+        result_actions = toolbar(result_layout)
+        self.action(result_actions, '继续导入', self.choose_import)
+        self.action(result_actions, '退款与对账', lambda: self.owner.navigate('review'))
+        self.action(result_actions, '返回 AI 对话', lambda: self.owner.navigate('chat'))
+        self.action(result_actions, '关闭摘要', self.import_result.hide)
+        result_actions.addStretch(1)
+        self.layout.insertWidget(self.layout.count() - 1, self.import_result)
+        self.import_result.hide()
+
+    def update_selection(self, *_):
+        single = len(self.view.selectionModel().selectedRows()) == 1
+        for control in self.selected_actions:
+            control.setEnabled(single)
 
     def refresh(self):
         frame = self.store.source_transactions().sort_values('date', ascending=False)
@@ -546,18 +602,32 @@ class LedgerPage(Page):
         learn = QCheckBox('记住此商户的分类')
         if original:
             form.addRow('', learn)
-        form_buttons(dialog, layout, '保存交易')
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        data = {key: entry.text().strip() for key, entry in inputs.items()}
-        data['amount_cents'] = money_to_cents(data['amount_cents'])
-        data.update(kind=kind.currentText(), category=category.currentText())
-        if original:
-            self.store.edit_transaction(original['id'], data, learn=learn.isChecked())
-        else:
-            self.store.add_manual_transaction(data['date'], data['merchant'], data['amount_cents'],
-                                              data['kind'], data['category'], data['description'])
-        self.changed('交易已保存。')
+        def save():
+            data = {key: entry.text().strip() for key, entry in inputs.items()}
+            try:
+                when = datetime.fromisoformat(data['date'])
+                if not 2000 <= when.year <= 2100 or when.tzinfo:
+                    raise ValueError
+            except ValueError:
+                raise FieldError(inputs['date'], '请输入 2000 至 2100 年的有效本地日期，例如 2026-11-13。') from None
+            try:
+                data['amount_cents'] = money_to_cents(data['amount_cents'])
+                if data['amount_cents'] <= 0:
+                    raise ValueError
+            except ValueError:
+                raise FieldError(inputs['amount_cents'], '请输入大于零的金额，最多两位小数。') from None
+            if not (data['merchant'] or data['description']):
+                raise FieldError(inputs['merchant'], '请填写商户或摘要。')
+            data.update(kind=kind.currentText(), category=category.currentText())
+            if original:
+                self.store.edit_transaction(original['id'], data, learn=learn.isChecked())
+            else:
+                self.store.add_manual_transaction(data['date'], data['merchant'], data['amount_cents'],
+                                                  data['kind'], data['category'], data['description'])
+
+        save_form(dialog, layout, form, '保存交易', save)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.changed('交易已保存。')
 
     def delete_selected(self):
         row = selected(self.view, self.model)
@@ -571,10 +641,12 @@ class LedgerPage(Page):
             return
         dialog, layout, form = fields(self, '导入选项')
         adapter = ComboBox()
+        adapter.setObjectName('importFormat')
         for title, key in (('自动识别', 'auto'), ('通用表格', 'generic'), ('微信 CSV', 'wechat_csv'),
                            ('银行模板 XLSX', 'bank_template_v1')):
             adapter.addItem(title, key)
         account = ComboBox()
+        account.setObjectName('importAccount')
 
         def refresh_accounts(preferred=None):
             account.clear()
@@ -591,6 +663,7 @@ class LedgerPage(Page):
         refresh_accounts()
         form.addRow('格式', adapter)
         form.addRow('来源账户', account)
+        form.addRow('', label('指定来源账户有助于跨源对账。暂不声明仍可导入，但这些流水没有账户归属。', 'muted'))
         row = toolbar(layout)
         self.action(row, '新建来源账户', add_account)
         row.addStretch(1)
@@ -613,6 +686,7 @@ class LedgerPage(Page):
         if error:
             self.owner.notice(error)
             return
+        self.owner.notice()
         self.owner.perform(lambda: self.show_import(path, *result))
 
     def show_import(self, path, parsed, preview):
@@ -621,6 +695,8 @@ class LedgerPage(Page):
         dialog.resize(920, 620)
         layout = QVBoxLayout(dialog)
         layout.addWidget(label(f"识别 {len(parsed.rows)} 行 · 问题 {len(parsed.issues)} 项 · 已删除 {preview['deleted_count']} 行"))
+        if not parsed.document.get('account_id'):
+            layout.addWidget(label(f'识别的 {len(parsed.rows)} 行均未指定来源账户。', 'muted'))
         tabs = QTabWidget()
         rows, _ = table(EVIDENCE_COLUMNS, parsed.rows)
         tabs.addTab(rows, '待导入')
@@ -639,13 +715,22 @@ class LedgerPage(Page):
             self.action(actions, '导出解析异常 CSV', lambda: export_issues(dialog, parsed.issues))
             actions.addStretch(1)
         form_buttons(dialog, layout, '确认导入')
-        if dialog.exec() != QDialog.DialogCode.Accepted or path != self.store.path:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            if path == self.store.path:
+                self.owner.notice('已取消导入。')
+            return
+        if path != self.store.path:
             return
         restore_ids = {row['id'] for row in preview['deleted_rows']} if restore.isChecked() else None
         result = self.store.import_statement(parsed, restore_deleted=restore.isChecked(), restore_ids=restore_ids)
         added, duplicates, conflicts = result
         self.changed(f'新增 {added - result.restored} · 恢复 {result.restored} · 重复 {duplicates} · '
                      f'保持删除 {result.deleted_skipped} · 冲突 {len(conflicts)}')
+        summary = self.owner.message.text()
+        if not parsed.document.get('account_id'):
+            summary += f' · 本批新增或恢复的 {added} 笔未声明账户'
+        self.import_summary.setText(f"{parsed.document['filename']} · {summary}")
+        self.import_result.show()
 
     def import_history(self):
         dialog = QDialog(self)
@@ -780,8 +865,8 @@ class AccountsPage(Page):
         super().__init__(owner, '资金账户', '仅记录平台与卡号末四位。支付绑定用于跨源对账。')
         row = toolbar(self.layout)
         self.action(row, '添加账户', lambda: self.edit({}), primary=True)
-        self.action(row, '编辑账户', lambda: self.edit(selected(self.view, self.model)))
-        self.action(row, '归档／恢复', self.archive)
+        self.account_actions = (self.action(row, '编辑账户', lambda: self.edit(selected(self.view, self.model))),
+                                self.action(row, '归档／恢复', self.archive))
         row.addStretch(1)
         self.view, self.model = self.add_table((
             ('账户名', 'label'), ('平台', 'channel'), ('类型', lambda r: ACCOUNT_TYPES.get(r['type'], r['type'])),
@@ -790,10 +875,19 @@ class AccountsPage(Page):
         row = toolbar(self.layout)
         row.addWidget(label('支付绑定'), 1)
         self.action(row, '新建绑定', self.bind_account)
-        self.action(row, '结束绑定', self.end_binding)
+        self.end_link_button = self.action(row, '结束绑定', self.end_binding)
         self.links_view, self.links = self.add_table((
             ('钱包', 'wallet_label'), ('资金账户', 'bank_label'), ('生效日期', 'active_from'), ('结束日期', 'active_to'),
         ))
+        for view, model in ((self.view, self.model), (self.links_view, self.links)):
+            view.selectionModel().selectionChanged.connect(self.update_selection)
+            model.modelReset.connect(self.update_selection)
+        self.update_selection()
+
+    def update_selection(self, *_):
+        for control in self.account_actions:
+            control.setEnabled(self.view.selectionModel().hasSelection())
+        self.end_link_button.setEnabled(self.links_view.selectionModel().hasSelection())
 
     def refresh(self):
         accounts = self.store.accounts()
@@ -816,14 +910,24 @@ class AccountsPage(Page):
             kind.setEnabled(False)
         for title, widget in (('账户名', name), ('平台', channel), ('类型', kind), ('末四位', last4)):
             form.addRow(title, widget)
-        form_buttons(dialog, layout, '保存账户')
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        identifier = None
+
+        def save():
+            nonlocal identifier
+            for field, limit, title in ((name, 60, '账户名'), (channel, 30, '平台')):
+                if not 1 <= len(field.text().strip()) <= limit:
+                    raise FieldError(field, f'请填写{title}（1–{limit} 字）。')
+            if last4.text().strip() and not re.fullmatch(r'[0-9]{4}', last4.text().strip()):
+                raise FieldError(last4, '请填写四位数字，或留空。')
             if original:
                 self.store.update_account(original['id'], label=name.text(), channel=channel.text(),
                                           last4=last4.text(), confirmed=True)
                 identifier = original['id']
             else:
                 identifier = self.store.add_account(channel.text(), kind.currentData(), name.text(), last4.text())
+
+        save_form(dialog, layout, form, '保存账户', save)
+        if dialog.exec() == QDialog.DialogCode.Accepted and identifier is not None:
             self.changed('账户已保存。')
             return identifier
 
@@ -1078,8 +1182,11 @@ class BackupPage(Page):
         self.action(row, '语义修复历史', lambda: details(self, '语义修复历史', self.store.semantic_repair_history()))
         row.addStretch(1)
         self.history, self.model = self.add_table((
-            ('文件', 'name'), ('大小 / 字节', 'bytes'), ('用途', 'purpose'),
+            ('创建时间', lambda row: datetime.fromtimestamp(row['created']).strftime('%Y-%m-%d %H:%M:%S')),
+            ('用途', 'purpose'), ('标识', 'reference'), ('大小 / 字节', 'bytes'), ('文件', 'name'),
         ))
+        for index, width in enumerate((154, 160, 86, 105)):
+            self.history.setColumnWidth(index, width)
 
     def refresh(self):
         folder = self.store.managed_backup_folder()
@@ -1089,7 +1196,12 @@ class BackupPage(Page):
     def inspect(self):
         row = selected(self.history, self.model)
         info = self.store.preview_managed_backup(row['path'])
-        details(self, '备份预览', {key: value for key, value in info.items() if key != 'identity'})
+        counts = info['counts']
+        created = datetime.fromtimestamp(info['created']).strftime('%Y-%m-%d %H:%M:%S')
+        details(self, '备份预览', f"文件：{info['name']}\n创建时间：{created}\n用途：{info['purpose']}\n"
+                f"大小：{info['bytes']:,} 字节\n数据库模式：{info['version']}\n\n"
+                f"交易 {counts.get('transactions', 0)} 条 · 预算 {counts.get('budgets', 0)} 项 · "
+                f"储蓄目标 {counts.get('goals', 0)} 项 · 退款关联 {counts.get('refund_links', 0)} 条")
 
     def delete(self):
         row = selected(self.history, self.model)
@@ -1099,8 +1211,9 @@ class BackupPage(Page):
             self.owner.notice('已删除选中备份。')
 
     def create(self):
-        path = self.store.backup()
+        path = self.store.create_managed_backup('manual')
         self.refresh()
+        self.history.selectRow(next(i for i, row in enumerate(self.model.records) if row['path'] == str(path)))
         self.owner.notice(f'已创建备份 {path.name}')
 
     def choose_restore(self):
@@ -1117,7 +1230,7 @@ class BackupPage(Page):
         if expected_identity is not None and info['identity'] != expected_identity:
             raise ValueError('备份已变化，请刷新后重新选择。')
         counts = info['counts']
-        modified = datetime.fromtimestamp(Path(path).stat().st_mtime).strftime('%Y-%m-%d %H:%M')
+        modified = datetime.fromtimestamp(info.get('created', Path(path).stat().st_mtime)).strftime('%Y-%m-%d %H:%M:%S')
         message = (f"文件 {Path(path).name}\n文件时间 {modified}\n数据库模式 {info['version']} · 交易 {counts.get('transactions', 0)} 条\n"
                    f"目标空间：{self.owner.space.currentText()}\n将替换该空间的交易、预算、目标和其他账本资料。恢复前会创建备份。")
         if confirm(self, '确认恢复', message):
@@ -1125,6 +1238,7 @@ class BackupPage(Page):
                 raise ValueError('备份已变化，请刷新后重新选择。')
             self.store.restore(path, confirmed=True)
             self.owner.pages['ledger'].last_batch = None
+            self.owner.pages['ledger'].import_result.hide()
             self.owner.chat.reset_sessions()
             self.changed('账本已恢复，恢复前备份已保留。')
 
@@ -1132,7 +1246,8 @@ class BackupPage(Page):
 class HelpPage(Page):
     def __init__(self, owner, asset_root):
         super().__init__(owner, '使用帮助', '本地帮助按主题查看。')
-        topics = load_help(asset_root / 'help.md')
+        topics = {name: text.replace('设置与连接 → 管理账户与绑定', '侧栏 → 资金账户')
+                  for name, text in load_help(asset_root / 'help.md').items()}
         chapters = ComboBox()
         chapters.addItems(topics)
         self.layout.addWidget(chapters)

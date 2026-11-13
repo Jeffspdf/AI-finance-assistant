@@ -53,7 +53,11 @@ QPushButton[nav="true"]:checked, QPushButton[nav="true"]:hover { background: $se
 QPushButton[nav="true"]:focus { border-color: $accent; }
 QPushButton[suggestion="true"] { background: $surface; text-align: left; padding: 11px 14px; }
 QPushButton[suggestion="true"]:hover { background: $muted_surface; }
-QLineEdit, QSpinBox, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
+QLineEdit, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
+QSpinBox { background: $surface; border: 1px solid $border; border-radius: 8px; min-height: 34px;
+           padding: 0 24px 0 8px; }
+QSpinBox QLineEdit { padding: 0; border: none; background: transparent; }
+QSpinBox::up-button, QSpinBox::down-button { width: 20px; }
 QComboBox { background: $surface; border: 1px solid $border; border-radius: 10px;
             min-height: 19px; padding: 6px 30px 6px 10px; }
 QComboBox:hover { border-color: $accent; }
@@ -177,7 +181,7 @@ class Rows(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.columns)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if not index.isValid() or role not in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.TextAlignmentRole):
+        if not index.isValid() or role not in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.TextAlignmentRole, Qt.ItemDataRole.ToolTipRole):
             return None
         heading, get = self.columns[index.column()]
         row = self.records[index.row()]

@@ -24,23 +24,32 @@ class BackupManagement:
         if folder.resolve()!=folder:raise ValueError('备份目录是重定向路径，请在文件管理器中核对；未读取或清理文件')
         return folder
 
-    def create_semantic_backup(self):
-        if self.read_only:raise ValueError('只读账本不能创建修复备份')
+    def create_managed_backup(self, purpose):
+        if self.read_only:raise ValueError('只读账本不能创建备份')
+        if purpose not in ('manual', 'restore', 'semantic'):raise ValueError('未知备份用途')
         folder=self.managed_backup_folder()
         stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
-        return self.backup(folder/f'{Path(self.path).stem}-semantic-v{SCHEMA_VERSION}-{stamp}-{uuid.uuid4().hex[:8]}.sqlite3')
+        return self.backup(folder/f'{Path(self.path).stem}-{purpose}-v{SCHEMA_VERSION}-{stamp}-{uuid.uuid4().hex[:8]}.sqlite3')
+
+    def create_semantic_backup(self):
+        return self.create_managed_backup('semantic')
 
     def managed_backups(self):
         folder=self.managed_backup_folder()
-        pattern=re.compile(re.escape(Path(self.path).stem)+r'-(?:semantic-)?v\d+-\d{8}T\d{6}-[0-9a-f]{8}\.sqlite3')
+        pattern=re.compile(re.escape(Path(self.path).stem)+r'-(?:(manual|restore|semantic)-)?v\d+-(\d{8}T\d{6})-([0-9a-f]{8})\.sqlite3')
+        purposes={'manual':'手动备份','restore':'恢复前自动备份','semantic':'语义修复前'}
         rows=[]
         if not folder.is_dir():return rows
         for path in folder.iterdir():
-            if not pattern.fullmatch(path.name):continue
-            try:info=self._checked_backup_stat(path)
+            match=pattern.fullmatch(path.name)
+            if not match:continue
+            try:
+                info=self._checked_backup_stat(path)
+                created=datetime.strptime(match[2],'%Y%m%dT%H%M%S').replace(tzinfo=timezone.utc)
             except (ValueError,OSError):continue
             rows.append(dict(path=str(path),name=path.name,bytes=info.st_size,modified=info.st_mtime,identity=self._backup_identity(info),
-                             purpose='语义修复前' if path.name.startswith(Path(self.path).stem+'-semantic-') else '旧版/通用快照（用途未记录）'))
+                             created=created.timestamp(), reference=match[3],
+                             purpose=purposes.get(match[1],'旧版/通用快照（用途未记录）')))
         return sorted(rows,key=lambda r:(r['modified'],r['name']),reverse=True)
 
     def _managed_backup(self,path):

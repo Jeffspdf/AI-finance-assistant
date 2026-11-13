@@ -15,7 +15,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTableView,
+    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QTableView,
 )
 import pandas as pd
 
@@ -59,6 +59,20 @@ def chat_and_plan(app, window, output):
     assert window.current == 'overview' and window.pages['overview'].month.currentData() == date.today().strftime('%Y-%m')
     assert window.pages['overview'].metrics['net_cents'].text() == chat.snapshot_values['net_cents'].text()
     assert window.grab().save(str(output / 'qt-overview.png'))
+    spin_checks = []
+
+    def inspect_demo_form():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '生成演示账单':
+            for spin, expected in zip(dialog.findChildren(QSpinBox), (3, 30)):
+                editor = spin.findChild(QLineEdit)
+                spin_checks.append(spin.value() == expected and editor.height() >= editor.fontMetrics().height() + 4)
+            dialog.grab().save(str(output / 'qt-demo-form.png'))
+            dialog.reject()
+
+    QTimer.singleShot(40, inspect_demo_form)
+    click(window.pages['overview'], '生成演示账单')
+    assert spin_checks == [True, True], spin_checks
     window.navigate('chat')
     shown = []
 
@@ -162,6 +176,8 @@ def space_isolation(app, window):
         wait(app, lambda: window.jobs.pool.activeThreadCount() == 0, 'late result')
         app.processEvents()
         assert not window.chat.active_history('personal')
+        assert any(widget.text() == '导入账单' for widget in window.chat.empty.findChildren(QPushButton))
+        assert not any('餐饮花了多少' in widget.text() for widget in window.chat.empty.findChildren(QPushButton))
         assert not any(role == 'assistant' and value['answer'] == '模拟迟到的演示数据'
                        for role, value in window.chat.active_history('demo'))
 
@@ -304,6 +320,22 @@ def import_budget_backup(app, window, directory):
                       f'QT-INVALID,错误日期,=公式文本,午餐,无效金额,支出,样例,CNY\n', encoding='utf-8-sig')
     window.navigate('ledger')
     path = Path(window.workspace.store.path)
+    assert not any(control.isEnabled() for control in ledger.selected_actions)
+    form_checks = []
+
+    def invalid_amount():
+        dialog = app.activeModalWidget()
+        entries = dialog.findChildren(QLineEdit)
+        entries[1].setText('保留商户')
+        entries[2].setText('保留摘要')
+        control = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok)
+        QTest.mouseClick(control, Qt.MouseButton.LeftButton)
+        form_checks.append(dialog.isVisible() and entries[1].text() == '保留商户' and entries[2].text() == '保留摘要')
+        dialog.reject()
+
+    QTimer.singleShot(30, invalid_amount)
+    click(ledger, '记一笔')
+    assert form_checks == [True]
     before = path.read_bytes()
     preview = []
     deadline = monotonic() + 5
@@ -333,13 +365,18 @@ def import_budget_backup(app, window, directory):
             assert account.windowTitle() == '添加账户'
             name, channel, _ = account.findChildren(QLineEdit)
             name.setText('合成来源账户')
+            controls = account.findChild(QDialogButtonBox)
+            save = controls.button(QDialogButtonBox.StandardButton.Ok)
+            QTest.mouseClick(save, Qt.MouseButton.LeftButton)
+            assert account.isVisible() and name.text() == '合成来源账户'
             channel.setText('测试渠道')
-            account.accept()
+            QTest.mouseClick(save, Qt.MouseButton.LeftButton)
 
         QTimer.singleShot(30, enter_account)
         click(options, '新建来源账户')
         before = path.read_bytes()
-        adapters, accounts = options.findChildren(QComboBox)
+        adapters = options.findChild(QComboBox, 'importFormat')
+        accounts = options.findChild(QComboBox, 'importAccount')
         picked.append(accounts.currentData())
         adapters.setCurrentIndex(adapters.findData('generic'))
         options.accept()
@@ -350,6 +387,7 @@ def import_budget_backup(app, window, directory):
     QTimer.singleShot(20, accept_preview)
     wait(app, lambda: bool(preview) and ledger.model.rowCount() == 1, 'preview and import')
     assert preview == [True]
+    assert ledger.import_result.isVisible() and source.name in ledger.import_summary.text()
     with (directory / 'issues.csv').open(encoding='utf-8-sig', newline='') as exported:
         issues = list(csv.DictReader(exported))
     assert len(issues) == 1 and issues[0]['商户'] == "'=公式文本" and issues[0]['原因']
@@ -358,6 +396,18 @@ def import_budget_backup(app, window, directory):
     batch = window.workspace.store.import_batches()[0]
     assert batch['added'] == 1 and batch['account_label'] == '合成来源账户'
     assert picked and picked[0] and imported['account_id'] == picked[0]
+    from .services import preview_statement
+    cancelled_preview = preview_statement(path, source, 'generic', picked[0])
+    before_cancel = path.read_bytes()
+    def reject_preview():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '导入预览':
+            dialog.reject()
+
+    QTimer.singleShot(30, reject_preview)
+    ledger.finish_import(window.workspace.store.path, cancelled_preview, '')
+    assert window.message.text() == '已取消导入。', window.message.text()
+    assert path.read_bytes() == before_cancel
     ledger.search.setText('>40')
     assert ledger.model.rowCount() == 0
     ledger.search.setText('>=36.50')
@@ -397,6 +447,8 @@ def import_budget_backup(app, window, directory):
     backup = window.pages['backup']
     click(backup, '创建备份')
     backup_path = backup.model.records[0]['path']
+    assert backup.model.records[0]['purpose'] == '手动备份'
+    assert backup.history.selectionModel().hasSelection()
     window.navigate('ledger')
     ledger.view.selectRow(0)
     with patch('qt_finance.pages.confirm', return_value=True):
@@ -407,6 +459,7 @@ def import_budget_backup(app, window, directory):
     with patch('qt_finance.pages.confirm', return_value=True) as restore_prompt, \
          patch('qt_finance.pages.QFileDialog.getOpenFileName', side_effect=AssertionError('selected backup opened file picker')):
         click(backup, '恢复选中备份')
+    assert any(row['purpose'] == '恢复前自动备份' for row in backup.model.records)
     assert Path(backup_path).name in restore_prompt.call_args.args[-1]
     assert window.workspace.store.transaction_source(imported['id'])['status'] != 'deleted'
 
@@ -569,8 +622,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.6'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.6-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.7'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.7-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None

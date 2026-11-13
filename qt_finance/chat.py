@@ -16,7 +16,7 @@ from finance.spending_presenter import basis_label, spending_totals
 from finance.categories import category_options
 from .services import guidance, ledger_coverage, query_ledger
 from .session_history import MAX_MESSAGES, MAX_SESSIONS, SessionHistory
-from .ui import ComboBox, button, card, confirm, label, readonly_text, table
+from .ui import ComboBox, button, card, confirm, dialog_buttons, label, readonly_text, table
 
 
 DINING = '上个月餐饮花了多少？'
@@ -34,8 +34,8 @@ EVIDENCE_COLUMNS = (
 
 def display_date(value):
     text = str(value)
-    if len(text) >= 19 and text[10] in ' T' and text[19:] in ('', '.000000'):
-        return text[:10] if text[11:19] == '00:00:00' else text[:10] + ' ' + text[11:19]
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}(?:[ T].*)?', text):
+        return text[:10]
     return text
 
 
@@ -286,9 +286,8 @@ class ChatPage(QWidget):
         layout.addWidget(sessions, 1)
         empty = label('', 'muted')
         layout.addWidget(empty)
-        controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Open | QDialogButtonBox.StandardButton.Cancel)
+        controls = dialog_buttons(QDialogButtonBox.StandardButton.Open, action='打开会话')
         open_button = controls.button(QDialogButtonBox.StandardButton.Open)
-        open_button.setText('打开会话')
         layout.addWidget(controls)
 
         def refresh():
@@ -578,8 +577,7 @@ class ChatPage(QWidget):
         layout.addRow('月份或起止日期', period)
         layout.addRow('商户（可留空）', merchant)
         layout.addRow('分类', category)
-        controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        controls.button(QDialogButtonBox.StandardButton.Ok).setText('查询净支出')
+        controls = dialog_buttons(action='查询净支出')
         controls.accepted.connect(dialog.accept)
         controls.rejected.connect(dialog.reject)
         layout.addRow(controls)

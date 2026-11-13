@@ -31,6 +31,7 @@ QFrame#headerRule { background: $border; border: none; }
 QLabel#title { font-size: 24px; font-weight: 700; }
 QLabel#hero { font-size: 30px; font-weight: 700; }
 QLabel#muted, QLabel#parser, QLabel#brandSubtitle { color: $muted; }
+QLabel#companionPortrait { background: $muted_surface; border-radius: 16px; }
 QLabel#amount { color: $primary; font-size: 27px; font-weight: 700; }
 QLabel#snapshotAmount { color: $primary; font-size: 19px; font-weight: 700; }
 QLabel#warning { color: $warning; }
@@ -54,6 +55,8 @@ QPushButton[nav="true"]:focus { border-color: $accent; }
 QPushButton[suggestion="true"] { background: $surface; text-align: left; padding: 11px 14px; }
 QPushButton[suggestion="true"]:hover { background: $muted_surface; }
 QLineEdit, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
+QLineEdit[invalid="true"], QLineEdit[invalid="true"]:focus { border: 1px solid $negative; }
+QPushButton[monthSelected="true"] { background: $primary; color: white; border-color: $primary; }
 QLineEdit#demoMonths, QLineEdit#demoCount { min-height: 22px; }
 QPushButton#sessionHistory { text-align: left; }
 QListWidget#sessionList { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 4px; }
@@ -157,11 +160,22 @@ def card():
     return frame, layout
 
 
-def confirm(parent, title, message):
+def dialog_buttons(standard=QDialogButtonBox.StandardButton.Ok, *, action='确定'):
+    cancel = QDialogButtonBox.StandardButton.Cancel
+    controls = QDialogButtonBox(standard | cancel)
+    controls.button(standard).setText(action)
+    controls.button(cancel).setText('取消')
+    return controls
+
+
+def confirm(parent, title, message, *, accept='确认', decline='取消'):
     dialog = QMessageBox(QMessageBox.Icon.Question, title, message,
                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, parent)
     dialog.setTextFormat(Qt.TextFormat.PlainText)
+    dialog.button(QMessageBox.StandardButton.Yes).setText(accept)
+    dialog.button(QMessageBox.StandardButton.No).setText(decline)
     dialog.setDefaultButton(QMessageBox.StandardButton.No)
+    dialog.setEscapeButton(QMessageBox.StandardButton.No)
     return dialog.exec() == QMessageBox.StandardButton.Yes
 
 

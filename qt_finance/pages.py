@@ -8,11 +8,11 @@ from pathlib import Path
 import re
 import sqlite3
 
-from PySide6.QtCore import QLocale, Qt, QUrl
+from PySide6.QtCore import QLocale, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIntValidator
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMenu,
-    QTabWidget, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLineEdit, QMenu,
+    QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from finance.analytics import budget_report, goal_progress, month_records, overview, yuan
@@ -33,7 +33,7 @@ from finance.spending_presenter import basis_label, net_export_csv, spending_tot
 from .chat import EVIDENCE_COLUMNS, Evidence, display_date
 from .overview_chart import SpendingChart
 from .services import preview_statement
-from .ui import ComboBox, button, card, confirm, details, label, readonly_text, selected, selected_rows, table
+from .ui import ComboBox, button, card, confirm, details, dialog_buttons, label, readonly_text, selected, selected_rows, table
 from . import updates
 
 
@@ -76,8 +76,7 @@ def fields(parent, title):
 
 
 def form_buttons(dialog, layout, title='确定'):
-    controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-    controls.button(QDialogButtonBox.StandardButton.Ok).setText(title)
+    controls = dialog_buttons(action=title)
     controls.accepted.connect(dialog.accept)
     controls.rejected.connect(dialog.reject)
     layout.addWidget(controls)
@@ -301,8 +300,6 @@ class OverviewPage(Page):
         if row['type'] == '预算超支':
             self.owner.navigate('budget')
             budget = self.owner.pages['budget']
-            if budget.month.findText(row['month']) < 0:
-                budget.month.addItem(row['month'])
             budget.month.setCurrentText(row['month'])
             index = next((i for i, value in enumerate(budget.model.records) if value['分类'] == row['title']), None)
             if index is not None:
@@ -723,7 +720,7 @@ class LedgerPage(Page):
         if parsed.issues or parsed.warnings:
             tabs.addTab(readonly_text({'issues': parsed.issues, 'warnings': parsed.warnings}), '解析提示')
         if preview['deleted_rows']:
-            deleted, _ = table((('日期', 'date'), ('商户', 'merchant'), ('金额 / 元', lambda r: yuan(r['amount_cents'])),
+            deleted, _ = table((('日期', lambda row: display_date(row['date'])), ('商户', 'merchant'), ('金额 / 元', lambda r: yuan(r['amount_cents'])),
                                 ('删除原因', 'reason')), preview['deleted_rows'])
             tabs.addTab(deleted, '已删除记录')
         layout.addWidget(tabs, 1)
@@ -793,23 +790,97 @@ class LedgerPage(Page):
             self.owner.notice(f'已导出{period or "全部月份"}的净额投影。')
 
 
+class BudgetMonthPicker(QPushButton):
+    currentTextChanged = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.setAccessibleName('选择预算月份')
+        self.setCurrentText(date.today().strftime('%Y-%m'))
+        self.clicked.connect(self.choose)
+
+    def currentText(self):
+        return self.month
+
+    def setCurrentText(self, month):
+        date.fromisoformat(month + '-01')
+        if month != getattr(self, 'month', None):
+            self.month = month
+            self.setText(f'{month}  ▾')
+            self.currentTextChanged.emit(month)
+
+    def choose(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle('选择预算月份')
+        layout = QVBoxLayout(dialog)
+        header = toolbar(layout)
+        year_label = label('')
+        year_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        year = int(self.month[:4])
+        previous = button('上一年', lambda: change_year(-1))
+        following = button('下一年', lambda: change_year(1))
+        header.addWidget(previous)
+        header.addWidget(year_label, 1)
+        header.addWidget(following)
+        grid = QGridLayout()
+        layout.addLayout(grid)
+
+        def pick(number):
+            self.setCurrentText(f'{year:04d}-{number:02d}')
+            dialog.accept()
+
+        months = [button(f'{number} 月', lambda checked=False, number=number: pick(number))
+                  for number in range(1, 13)]
+        for index, choice in enumerate(months):
+            grid.addWidget(choice, index // 4, index % 4)
+
+        def update_year():
+            year_label.setText(f'{year} 年')
+            previous.setEnabled(year > 1)
+            following.setEnabled(year < 9999)
+            for number, choice in enumerate(months, 1):
+                choice.setProperty('monthSelected', f'{year:04d}-{number:02d}' == self.month)
+                choice.style().unpolish(choice)
+                choice.style().polish(choice)
+
+        def change_year(step):
+            nonlocal year
+            year += step
+            update_year()
+
+        layout.addWidget(button('取消', dialog.reject), alignment=Qt.AlignmentFlag.AlignRight)
+        update_year()
+        months[int(self.month[5:]) - 1].setFocus()
+        dialog.exec()
+
+
 class BudgetPage(Page):
     def __init__(self, owner):
         super().__init__(owner, '预算与提醒', '预算、支出和剩余均按所选月份显示。')
         row = toolbar(self.layout)
-        self.month = ComboBox()
-        self.month.addItems([month_shift(date.today(), i) for i in range(12, -25, -1)])
-        self.month.setCurrentText(date.today().strftime('%Y-%m'))
+        self.month = BudgetMonthPicker()
         self.category = ComboBox()
         self.category.addItems(category_options('支出'))
         self.amount = QLineEdit()
         self.amount.setPlaceholderText('预算 / 元')
+        self.amount.setAccessibleName('预算金额（元）')
+        self.amount_error = label('', 'error')
+        self.amount_error.hide()
+        amount_field = QWidget()
+        amount_layout = QVBoxLayout(amount_field)
+        amount_layout.setContentsMargins(0, 0, 0, 0)
+        amount_layout.setSpacing(4)
+        amount_layout.addWidget(self.amount)
+        amount_layout.addWidget(self.amount_error)
         row.addWidget(self.month)
         row.addWidget(self.category)
-        row.addWidget(self.amount, 1)
+        row.addWidget(amount_field, 1)
         self.action(row, '保存预算', self.save, primary=True)
         self.action(row, '复制上月', self.copy_previous)
         self.action(row, '建议预算', self.suggest)
+        for index in range(row.count()):
+            row.setAlignment(row.itemAt(index).widget(), Qt.AlignmentFlag.AlignTop)
+        self.amount.textChanged.connect(lambda _: self.set_amount_error(''))
         self.coverage = label('', 'muted')
         self.layout.addWidget(self.coverage)
         self.view, self.model = self.add_table([(name, name) for name in ('分类', '预算', '已支出', '剩余', '使用率', '超支')])
@@ -852,9 +923,23 @@ class BudgetPage(Page):
         category = selected(self.view, self.model)['分类']
         self.owner.open_ledger(self.month.currentText(), category)
 
+    def set_amount_error(self, message):
+        self.amount_error.setText(message)
+        self.amount_error.setVisible(bool(message))
+        self.amount.setProperty('invalid', bool(message))
+        self.amount.style().unpolish(self.amount)
+        self.amount.style().polish(self.amount)
+
     def save(self):
-        self.store.save_budget(self.month.currentText(), self.category.currentText(),
-                               money_to_cents(self.amount.text(), allow_zero=True))
+        try:
+            cents = money_to_cents(self.amount.text(), allow_zero=True)
+            if cents < 0:
+                raise ValueError('预算不能为负数。')
+        except ValueError as exc:
+            self.set_amount_error(str(exc))
+            self.amount.setFocus()
+            return
+        self.store.save_budget(self.month.currentText(), self.category.currentText(), cents)
         self.amount.clear()
         self.changed('预算已保存。')
 
@@ -1253,7 +1338,7 @@ class BackupPage(Page):
         modified = datetime.fromtimestamp(info.get('created', Path(path).stat().st_mtime)).strftime('%Y-%m-%d %H:%M:%S')
         message = (f"文件 {Path(path).name}\n文件时间 {modified}\n数据库模式 {info['version']} · 交易 {counts.get('transactions', 0)} 条\n"
                    f"目标空间：{self.owner.space.currentText()}\n将替换该空间的交易、预算、目标和其他账本资料。恢复前会创建备份。")
-        if confirm(self, '确认恢复', message):
+        if confirm(self, '确认恢复', message, accept='确认恢复', decline='暂不恢复'):
             if expected_identity is not None and self.store.preview_managed_backup(path)['identity'] != expected_identity:
                 raise ValueError('备份已变化，请刷新后重新选择。')
             self.store.restore(path, confirmed=True)

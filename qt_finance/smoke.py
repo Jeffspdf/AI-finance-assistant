@@ -58,6 +58,7 @@ def chat_and_plan(app, window, output):
     click(chat, '打开财务概览')
     assert window.current == 'overview' and window.pages['overview'].month.currentData() == date.today().strftime('%Y-%m')
     assert window.pages['overview'].metrics['net_cents'].text() == chat.snapshot_values['net_cents'].text()
+    assert window.mascot.isVisible() and window.mascot.pixmap().deviceIndependentSize().height() >= 130
     assert window.grab().save(str(output / 'qt-overview.png'))
     spin_checks = []
 
@@ -201,6 +202,7 @@ def query_feedback(app, window, directory, output):
         if dialog and dialog.windowTitle() == '历史会话':
             search = dialog.findChild(QLineEdit)
             listing = dialog.findChild(QListWidget)
+            assert dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Cancel).text() == '取消'
             picker_checks.append(listing.count() == 2 and '当前会话' in listing.currentItem().text())
             search.setText('无匹配的搜索关键词')
             picker_checks.append(listing.count() == 0)
@@ -455,7 +457,29 @@ def import_budget_backup(app, window, directory):
     window.navigate('budget')
     budget = window.pages['budget']
     budget.category.setCurrentText('餐饮')
+    original_month = budget.month.currentText()
+    picker_checks = []
+
+    def pick_next_year():
+        dialog = app.activeModalWidget()
+        if not dialog or dialog.windowTitle() != '选择预算月份':
+            return
+        months = [item for item in dialog.findChildren(QPushButton) if item.text().endswith(' 月')]
+        picker_checks.append(len(months) == 12 and months[int(original_month[5:]) - 1].property('monthSelected'))
+        click(dialog, '下一年')
+        click(dialog, '1 月')
+
+    QTimer.singleShot(40, pick_next_year)
+    budget.month.click()
+    assert picker_checks == [True] and budget.month.currentText() == f'{int(original_month[:4]) + 1}-01'
+    budget.month.setCurrentText(original_month)
+    budget.amount.setText('-1')
+    click(budget, '保存预算')
+    assert budget.amount.text() == '-1' and budget.amount.property('invalid') and budget.amount_error.isVisible()
+    assert budget.amount_error.text() == '预算不能为负数。'
+    assert not window.workspace.store.budgets(original_month)
     budget.amount.setText('200.00')
+    assert not budget.amount_error.isVisible()
     click(budget, '保存预算')
     assert window.workspace.store.budgets(when.strftime('%Y-%m'))['餐饮'] == 20000
     budget.view.selectRow(0)
@@ -656,8 +680,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.8'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.8-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.9'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.9-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -719,6 +743,8 @@ def restore_tk_backup(app, window, backup_path):
         dialog = app.activeModalWidget()
         if isinstance(dialog, QMessageBox) and dialog.windowTitle() == '确认恢复':
             prompts.append(dialog.text())
+            assert dialog.button(QMessageBox.StandardButton.Yes).text() == '确认恢复'
+            assert dialog.button(QMessageBox.StandardButton.No).text() == '暂不恢复'
             dialog.button(QMessageBox.StandardButton.Yes).click()
 
     with patch('qt_finance.pages.QFileDialog.getOpenFileName', return_value=(str(source), '')):
@@ -805,6 +831,9 @@ def reimport_after_edit(app, window, directory):
     from .services import preview_statement
     parsed, _ = preview_statement(store.path, source, 'generic', None)
     assert len(parsed.rows) == 1, parsed.issues
+    assert parsed.rows[0]['date'] == '2026-08-05 11:00:00'
+    from .chat import EVIDENCE_COLUMNS
+    assert EVIDENCE_COLUMNS[0][1](parsed.rows[0]) == '2026-08-05'
     store.import_statement(parsed)
     row = parsed.rows[0]
     store.edit_transaction(row['id'], dict(row, description='咖啡（复测）'))
@@ -873,8 +902,6 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
                 if return_fixture:
                     window.navigate('budget')
                     budget = window.pages['budget']
-                    if budget.month.findText('2026-10') < 0:
-                        budget.month.addItem('2026-10')
                     budget.month.setCurrentText('2026-10')
                     budget.category.setCurrentText('餐饮')
                     budget.amount.setText('225')
@@ -899,7 +926,7 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
                    'exact reimport after edit and delete, default skip and explicit restore',
                    'dropdown keyboard navigation and opt-in switch, history restart, isolation and recovery',
                    'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
-                   'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',
+                   'budget month grid, inline validation, evidence and ledger drill-down', 'overview month scope, chart, reminders and companion bust',
                    'import account selection, issues, audited undo and scoped net CSV',
                    'batch category undo', 'soft delete and backup restore',
                    'cross-source reconciliation and refund 120 to 60 to 50', 'refund source grouping and link invalidation',

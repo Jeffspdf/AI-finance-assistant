@@ -161,8 +161,16 @@ class FinanceWindow(QMainWindow):
         portrait = QPixmap(str(ASSETS / 'campus_heroine.png'))
         if not portrait.isNull():
             self.mascot = label('')
-            self.mascot.setPixmap(portrait.scaled(72, 65, Qt.AspectRatioMode.KeepAspectRatio,
-                                             Qt.TransformationMode.SmoothTransformation))
+            self.mascot.setObjectName('companionPortrait')
+            self.mascot.setAccessibleName('小财灵半身立绘')
+            self.mascot.setFixedHeight(142)
+            # Frame the face, shoulders, and notebook from the original campus artwork.
+            bust = portrait.copy(241, 0, 560, 620)
+            scale = self.devicePixelRatioF()
+            bust = bust.scaled(round(146 * scale), round(134 * scale), Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+            bust.setDevicePixelRatio(scale)
+            self.mascot.setPixmap(bust)
             self.mascot.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(self.mascot)
         self.companion_status = label('', 'muted')
@@ -174,7 +182,7 @@ class FinanceWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if getattr(self, 'mascot', None) is not None:
-            self.mascot.setVisible(event.size().height() >= 560)
+            self.mascot.setVisible(event.size().height() >= 620)
 
     def toggle_pet(self):
         if self.pet is None:
@@ -199,8 +207,15 @@ class FinanceWindow(QMainWindow):
         dialog.exec()
 
     def command_palette(self):
-        query, accepted = QInputDialog.getText(self, '搜索与快捷操作', '页面名称、商户、分类、上个月或金额条件（例如 >100）')
-        if not accepted or not query.strip():
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle('搜索与快捷操作')
+        dialog.setLabelText('页面名称、商户、分类、上个月或金额条件（例如 >100）')
+        dialog.setOkButtonText('搜索')
+        dialog.setCancelButtonText('取消')
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        query = dialog.textValue()
+        if not query.strip():
             return
         query = query.strip()
         destinations = {title: page for page, title in self.page_labels.items()}

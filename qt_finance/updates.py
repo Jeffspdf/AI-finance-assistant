@@ -15,7 +15,7 @@ from finance.updates import REPO, _fresh_request, _open_download
 
 RELEASES = f'https://github.com/{REPO}/releases'
 FEED = f'https://api.github.com/repos/{REPO}/releases?per_page=30'
-VERSION = '0.10.0-preview.9'
+VERSION = '0.10.0-preview.10'
 VERSION_PATTERN = r'(\d+)\.(\d+)\.(\d+)(?:-preview\.(\d+))?'
 MAX_BYTES = 512 * 1024 * 1024
 

@@ -15,7 +15,7 @@ from finance.qa import month_shift
 from finance.spending_presenter import basis_label, spending_totals
 from finance.categories import category_options
 from .services import guidance, ledger_coverage, query_ledger
-from .session_history import MAX_MESSAGES, MAX_SESSIONS, SessionHistory
+from .session_history import MAX_MESSAGES, MAX_SESSIONS, MAX_TITLE, SessionHistory
 from .ui import ComboBox, button, card, confirm, dialog_buttons, label, readonly_text, table
 
 
@@ -94,6 +94,7 @@ class ChatPage(QWidget):
         super().__init__()
         self.owner = owner
         self.sessions = {'demo': [[]], 'personal': [[]]}
+        self.session_titles = {'demo': [''], 'personal': ['']}
         self.active = {'demo': 0, 'personal': 0}
         self.saved = {mode: SessionHistory(owner.workspace.directory, mode) for mode in self.sessions}
         self.loaded = set()
@@ -263,13 +264,6 @@ class ChatPage(QWidget):
 
     def open_history(self):
         mode = self.owner.workspace.mode
-        active = self.active[mode]
-        summaries = []
-        for index, rows in enumerate(self.sessions[mode]):
-            messages = [' '.join((value if role == 'user' else value.get('display_answer', value['answer'])).split())
-                        for role, value in rows]
-            title = next((text for (role, _), text in zip(rows, messages) if role == 'user'), '新对话')
-            summaries.append((index, title, messages))
 
         dialog = QDialog(self.owner)
         dialog.setWindowTitle('历史会话')
@@ -286,24 +280,34 @@ class ChatPage(QWidget):
         layout.addWidget(sessions, 1)
         empty = label('', 'muted')
         layout.addWidget(empty)
+        error = label('', 'error')
+        error.hide()
+        layout.addWidget(error)
         controls = dialog_buttons(QDialogButtonBox.StandardButton.Open, action='打开会话')
         open_button = controls.button(QDialogButtonBox.StandardButton.Open)
+        rename = controls.addButton('重命名', QDialogButtonBox.ButtonRole.ActionRole)
+        delete = controls.addButton('删除会话', QDialogButtonBox.ButtonRole.ActionRole)
         layout.addWidget(controls)
 
         def refresh():
             keyword = search.text().strip().casefold()
             sessions.clear()
-            for index, title, messages in reversed(summaries):
+            for index in reversed(range(len(self.sessions[mode]))):
+                rows = self.sessions[mode][index]
+                messages = [' '.join((value if role == 'user' else value.get('display_answer', value['answer'])).split())
+                            for role, value in rows]
+                title = self.session_titles[mode][index] or next(
+                    (text for (role, _), text in zip(rows, messages) if role == 'user'), '新对话')
                 if keyword and not any(keyword in text.casefold() for text in (title, *messages)):
                     continue
                 preview = messages[-1] if len(messages) > 1 else ('等待回复' if messages else '尚无消息')
                 item = QListWidgetItem(f'{title[:25]}{"…" if len(title) > 25 else ""}'
-                                       f'{" · 当前会话" if index == active else ""}\n'
+                                       f'{" · 当前会话" if index == self.active[mode] else ""}\n'
                                        f'{preview[:36]}{"…" if len(preview) > 36 else ""}')
                 item.setData(Qt.ItemDataRole.UserRole, index)
                 item.setToolTip(title)
                 sessions.addItem(item)
-                if index == active:
+                if index == self.active[mode]:
                     sessions.setCurrentItem(item)
             if sessions.count() and not sessions.currentItem():
                 sessions.setCurrentRow(0)
@@ -314,13 +318,60 @@ class ChatPage(QWidget):
             if sessions.currentItem():
                 dialog.accept()
 
-        sessions.currentItemChanged.connect(lambda current, _: open_button.setEnabled(current is not None))
+        def update_actions(current, _):
+            open_button.setEnabled(current is not None)
+            index = current.data(Qt.ItemDataRole.UserRole) if current else None
+            has_messages = index is not None and bool(self.sessions[mode][index])
+            rename.setEnabled(has_messages)
+            delete.setEnabled(has_messages)
+
+        def change_history(remove=False):
+            item = sessions.currentItem()
+            if item is None:
+                return
+            index = item.data(Qt.ItemDataRole.UserRole)
+            title = item.toolTip()
+            if remove:
+                if not confirm(dialog, '删除会话', f'删除「{title}」及其中的消息？',
+                               accept='确认删除', decline='暂不删除'):
+                    return
+            else:
+                editor = QDialog(dialog)
+                editor.setWindowTitle('重命名会话')
+                editor_layout = QVBoxLayout(editor)
+                editor_layout.addWidget(label('会话名称'))
+                name = QLineEdit(title[:MAX_TITLE])
+                name.setMaxLength(MAX_TITLE)
+                name.selectAll()
+                editor_layout.addWidget(name)
+                actions = dialog_buttons(action='保存名称')
+                save = actions.button(QDialogButtonBox.StandardButton.Ok)
+                name.textChanged.connect(lambda value: save.setEnabled(bool(value.strip())))
+                actions.accepted.connect(editor.accept)
+                actions.rejected.connect(editor.reject)
+                editor_layout.addWidget(actions)
+                if editor.exec() != QDialog.DialogCode.Accepted or not name.text().strip():
+                    return
+                title = ' '.join(name.text().split())
+            try:
+                self.change_session(index, None if remove else title)
+            except (OSError, ValueError) as exc:
+                error.setText(str(exc) if isinstance(exc, ValueError) else '本机历史无法写入，会话已保留。')
+                error.show()
+                return
+            error.hide()
+            refresh()
+
+        rename.clicked.connect(lambda: change_history())
+        delete.clicked.connect(lambda: change_history(remove=True))
+        sessions.currentItemChanged.connect(update_actions)
         sessions.itemActivated.connect(open_selected)
         search.textChanged.connect(refresh)
         search.returnPressed.connect(open_selected)
         controls.accepted.connect(open_selected)
         controls.rejected.connect(dialog.reject)
         refresh()
+        update_actions(sessions.currentItem(), None)
         search.setFocus()
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.owner.select_chat(sessions.currentItem().data(Qt.ItemDataRole.UserRole))
@@ -331,7 +382,7 @@ class ChatPage(QWidget):
             return
         self.loaded.add(mode)
         try:
-            self.sessions[mode], self.active[mode] = self.saved[mode].load()
+            self.sessions[mode], self.active[mode], self.session_titles[mode] = self.saved[mode].load_with_titles()
         except (OSError, ValueError) as exc:
             self.history_errors[mode] = str(exc) if isinstance(exc, ValueError) else '无法读取本机对话历史。'
 
@@ -350,7 +401,7 @@ class ChatPage(QWidget):
         if self.saved[mode].previous is None or mode in self.history_errors:
             return
         try:
-            self.saved[mode].save(self.sessions[mode], self.active[mode])
+            self.saved[mode].save(self.sessions[mode], self.active[mode], self.session_titles[mode])
         except (OSError, ValueError) as exc:
             self.history_errors[mode] = str(exc) if isinstance(exc, ValueError) else '本机对话历史写入失败。'
             self.sync_history_options()
@@ -364,7 +415,7 @@ class ChatPage(QWidget):
         if confirm(self, title, message):
             try:
                 if enabled:
-                    self.saved[mode].save(self.sessions[mode], self.active[mode])
+                    self.saved[mode].save(self.sessions[mode], self.active[mode], self.session_titles[mode])
                 else:
                     self.saved[mode].erase()
                 self.history_errors.pop(mode, None)
@@ -382,9 +433,34 @@ class ChatPage(QWidget):
     def reset_sessions(self):
         mode = self.owner.workspace.mode
         self.sessions[mode] = [[]]
+        self.session_titles[mode] = ['']
         self.active[mode] = 0
         self.reload()
         self.save_sessions()
+
+    def change_session(self, index, title):
+        mode = self.owner.workspace.mode
+        if mode in self.history_errors and self.saved[mode].previous is not None:
+            raise ValueError('本机历史目前无法更新，请重启并检查历史文件后再操作。')
+        rows = self.sessions[mode].copy()
+        titles = self.session_titles[mode].copy()
+        active = self.active[mode]
+        if title is None:
+            rows.pop(index)
+            titles.pop(index)
+            if not rows:
+                rows, titles = [[]], ['']
+            new_active = min(active - int(index < active), len(rows) - 1)
+        else:
+            titles[index] = title
+            new_active = active
+        if self.saved[mode].previous is not None:
+            self.saved[mode].save(rows, new_active, titles)
+        self.sessions[mode], self.active[mode], self.session_titles[mode] = rows, new_active, titles
+        if title is None and index == active:
+            self.reload()
+        else:
+            self.sync_sessions()
 
     def near_bottom(self):
         bar = self.scroll.verticalScrollBar()
@@ -632,8 +708,10 @@ class ChatPage(QWidget):
         if self.active_history():
             rows = self.sessions[mode]
             rows.append([])
+            self.session_titles[mode].append('')
             if len(rows) > MAX_SESSIONS:
                 rows.pop(0)
+                self.session_titles[mode].pop(0)
             self.active[mode] = len(rows) - 1
         self.reload()
         self.save_sessions()

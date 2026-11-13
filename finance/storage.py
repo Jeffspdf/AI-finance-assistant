@@ -20,9 +20,10 @@ class ImportOutcome(tuple):
 
     added retains its historical meaning: newly written OR explicitly restored.
     """
-    def __new__(cls, added, duplicates, conflicts, *, deleted_skipped=0, restored=0):
+    def __new__(cls, added, duplicates, conflicts, *, deleted_skipped=0, restored=0, refunds_corrected=0):
         result = super().__new__(cls, (added, duplicates, conflicts))
         result.deleted_skipped, result.restored = deleted_skipped, restored
+        result.refunds_corrected = refunds_corrected
         return result
 
 
@@ -149,23 +150,34 @@ class Store(Refunds,Reconciliation,BackupManagement):
             return None,'同一交易 ID 的内容不同，未覆盖原记录（含原始行冲突）'
         return old,None
 
+    @staticmethod
+    def _is_import_refund_correction(row, old):
+        return (old and row['status']=='refund_pending' and old['status']=='normal'
+                and row.get('source_document_id') and old.get('raw_row_id')
+                and all(old[k]==row[k] for k in ('source_document_id','source_row','raw_row_id','channel','account_id'))
+                and old['category_source']!='用户修正')
+
     def preview_import(self, result):
         """Read-only tombstone preview, sharing the commit's identity matching."""
         if not result.document:raise ValueError('此预览没有来源信息，请重新解析')
         with self.connect(read_only=True) as db:
-            db.execute('BEGIN');lookup=self._import_lookup(db);rows=[]
+            db.execute('BEGIN');lookup=self._import_lookup(db);rows=[];refunds_corrected=0
             deletes={}
             for event in db.execute("SELECT id,event,entity_id FROM audit_events WHERE event IN ('transaction_soft_deleted','batch_deleted') ORDER BY id"):
                 deletes[(event['event'],event['entity_id'])]=(event['id'], '单笔删除' if event['event']=='transaction_soft_deleted' else '整批删除')
             for value in result.rows:
-                row=dict(value,source_document_id='DOC-'+result.document['sha256'],account_id=result.document.get('account_id'))
+                doc='DOC-'+result.document['sha256']
+                row=dict(value,source_document_id=doc,account_id=result.document.get('account_id'),
+                         raw_row_id=doc+'-'+str(value['source_row']))
                 old,conflict=self._match_import(row,lookup)
+                if not conflict and self._is_import_refund_correction(row, old):
+                    refunds_corrected+=1
                 if conflict or not old or old['status']!='deleted':continue
                 events=[deletes[k] for k in [('transaction_soft_deleted',old['id']),('batch_deleted',old.get('import_batch_id'))] if k in deletes]
                 delete_event,reason=max(events) if events else (0,'历史删除（无逐笔原因）')
                 rows.append(dict(id=old['id'],source_row=row['source_row'],date=old['date'],merchant=old['merchant'],
                                  kind=old['kind'],amount_cents=old['amount_cents'],reason=reason,delete_event=delete_event))
-            return dict(deleted_count=len(rows),deleted_rows=rows)
+            return dict(deleted_count=len(rows),deleted_rows=rows,refunds_to_correct=refunds_corrected)
 
     def _insert_rows(self, db, rows, *, restore_deleted=False, restore_ids=None):
         if type(restore_deleted) is not bool:raise ValueError('恢复已删除记录必须明确选择')
@@ -174,7 +186,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
             restore_ids=tuple(restore_ids)
             if any(not isinstance(x,str) for x in restore_ids):raise ValueError('恢复范围无效')
             restore_ids=set(restore_ids)
-        added,duplicates,conflicts,deleted_skipped,restored=0,0,[],0,0
+        added,duplicates,conflicts,deleted_skipped,restored,refunds_corrected=0,0,[],0,0,0
         lookup=self._import_lookup(db);existing,_,_,_,index,_=lookup
         learned={(r['merchant'],r['kind']):r['category'] for r in db.execute('SELECT * FROM merchant_rules')}
         keys=['id','external_id','date','merchant','description','amount_cents','kind','category','category_source','channel','source_file','source_row','signature',
@@ -189,6 +201,17 @@ class Store(Refunds,Reconciliation,BackupManagement):
             if conflict:
                 conflicts.append({'行号':row['source_row'],'原因':conflict});continue
             if old and old['status']!='deleted':
+                if self._is_import_refund_correction(row, old):
+                    self.invalidate_groups(db, old['id'], '重新导入原文件，识别为退款流水')
+                    db.execute("UPDATE transactions SET status='refund_pending' WHERE id=?", (old['id'],))
+                    db.execute("UPDATE raw_rows SET parse_status='refund_pending' WHERE id=?", (old['raw_row_id'],))
+                    audit(db, 'import_refund_corrected', old['id'], {
+                        'source_document_id': row['source_document_id'], 'source_row': row['source_row'],
+                        'old_status': 'normal', 'new_status': 'refund_pending',
+                    })
+                    old['status']='refund_pending'
+                    refunds_corrected+=1
+                    continue
                 duplicates+=1
                 continue
             if old and (not restore_deleted or restore_ids is not None and old['id'] not in restore_ids):
@@ -213,7 +236,8 @@ class Store(Refunds,Reconciliation,BackupManagement):
             else:
                 db.execute(f"INSERT INTO transactions ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})",[row[k] for k in keys])
             existing[row['signature']]=row;index(row);added+=1
-        return ImportOutcome(added,duplicates,conflicts,deleted_skipped=deleted_skipped,restored=restored)
+        return ImportOutcome(added,duplicates,conflicts,deleted_skipped=deleted_skipped,restored=restored,
+                             refunds_corrected=refunds_corrected)
 
     def import_statement(self,result,*,restore_deleted=False,restore_ids=None):
         """Commit provenance, issues and transactions together, even an all-invalid file."""
@@ -243,10 +267,13 @@ class Store(Refunds,Reconciliation,BackupManagement):
                        (raw_id,document_id,raw['row_no'],json.dumps(raw['fields'],ensure_ascii=False),raw['parse_status']))
         rows=[dict(r,source_document_id=document_id,raw_row_id=raw_ids[r['source_row']],import_batch_id=batch_id,account_id=account) for r in result.rows]
         outcome=self._insert_rows(db,rows,restore_deleted=restore_deleted,restore_ids=restore_ids)
+        if outcome.refunds_corrected:
+            self.repair_invalid_groups(db=db,source='import_refund_corrected')
         added,duplicates,conflicts=outcome
         db.execute("UPDATE import_batches SET status='committed',finished_at=CURRENT_TIMESTAMP,added=?,duplicates=?,conflicts=?,issues_json=? WHERE id=?",(added,duplicates,len(conflicts),json.dumps(result.issues+conflicts,ensure_ascii=False),batch_id))
         audit(db,'batch_imported',batch_id,{'document':document_id,'added':added,'duplicates':duplicates,'conflicts':len(conflicts),
-              'deleted_skipped':outcome.deleted_skipped,'restored':outcome.restored,'restore_requested':restore_deleted})
+              'deleted_skipped':outcome.deleted_skipped,'restored':outcome.restored,'restore_requested':restore_deleted,
+              'refunds_corrected':outcome.refunds_corrected})
         return outcome
 
     def import_batches(self):

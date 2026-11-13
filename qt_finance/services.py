@@ -55,6 +55,10 @@ def query_ledger(path, question, client, cancelled):
         return None
     normalized = re.sub(rf'(?<!\d)({YEAR_TOKEN})\s*年\s*({MONTH_TOKEN})\s*月(?:份)?(?!\s*(?:\d|[一二三四五六七八九十]+\s*[日号]))',
                         lambda match: f'{match[1].translate(YEAR_DIGITS)}-{month_number(match[2]):02}', question)
+    periods = re.findall(rf'20[0-9]{{2}}-(?:0[1-9]|1[0-2])(?![-\d])|{MONTH_TOKEN}\s*月|上(?:个)?月|本月|这个月', normalized)
+    if len(set(periods)) >= 2 and re.search(r'比较|对比|相差|差额|哪个月', normalized):
+        return dict(answer='目前支持单月或一个连续日期区间的汇总。比较两个月时，请分别查询两个单月，例如“2026-08 餐饮净支出多少？”。',
+                    evidence=[], status='unsupported', parser='本地解析')
     dining = DINING_TOTAL.fullmatch(normalized)
     combined = re.fullmatch(r'(?:请问\s*)?(20[0-9]{2}-(?:0[1-9]|1[0-2]))\s*的?\s*收入(?:和|与|、)净支出分别(?:是)?多少(?:元)?[。？?]?', normalized)
     if dining:

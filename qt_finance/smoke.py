@@ -249,6 +249,9 @@ def query_feedback(app, window, directory, output):
     assert failed['parser'] == '模型未完成条件解析'
     assert failed['clarify']['period'] == '2026-10' and failed['clarify']['merchant'] == '星巴克'
     assert Path(fixture.path).read_bytes() == original
+    with patch.object(ModelClient, 'parse_question', side_effect=AssertionError('unsupported comparison called model')):
+        comparison = query_ledger(fixture.path, '请比较八月和九月的餐饮净支出，告诉我哪个月更高、相差多少。', model, cancel)
+    assert comparison['status'] == 'unsupported' and '分别查询两个单月' in comparison['answer']
     fixture.add_manual_transaction('2025-10-05', '食堂', 2000, '支出', '餐饮')
     ambiguous = query_ledger(fixture.path, '把十月份吃饭相关的小票加在一起，总共花了多少钱？', None, cancel)
     assert ambiguous['status'] == 'unsupported' and '请补充年份' in ambiguous['answer'] and not ambiguous['evidence']
@@ -329,6 +332,41 @@ def session_persistence(app, directory, output):
         assert reopened.save_chat_history.isChecked() and len(reopened.chat.sessions['demo']) == 2
         restored = reopened.chat.active_history()[-1][1]
         assert restored == {'answer': '合成演示金额 32 元', 'archived_text': True}
+        reopened.space.setCurrentIndex(reopened.space.findData('personal'))
+        assert reopened.chat.active_history() == [('user', '合成个人提问')]
+        reopened.space.setCurrentIndex(reopened.space.findData('demo'))
+        chat = reopened.chat
+        checks = []
+
+        def enter_name():
+            editor = app.activeModalWidget()
+            if editor and editor.windowTitle() == '重命名会话':
+                editor.findChild(QLineEdit).setText('复测：本月餐饮')
+                click(editor, '保存名称')
+
+        def manage_history():
+            dialog = app.activeModalWidget()
+            if dialog and dialog.windowTitle() == '历史会话':
+                QTimer.singleShot(40, enter_name)
+                click(dialog, '重命名')
+                listing = dialog.findChild(QListWidget)
+                checks.append('复测：本月餐饮' in listing.currentItem().text())
+                assert dialog.grab().save(str(output / 'qt-history-management.png'))
+                listing.setCurrentRow(0)
+                with patch('qt_finance.chat.confirm', side_effect=[False, True]):
+                    click(dialog, '删除会话')
+                    checks.append(listing.count() == 2)
+                    click(dialog, '删除会话')
+                    checks.append(listing.count() == 1)
+                dialog.reject()
+
+        QTimer.singleShot(40, manage_history)
+        reopened.chat_sessions.click()
+        assert checks == [True, True, True]
+        saved_rows, saved_active, titles = SessionHistory(root, 'demo').load_with_titles()
+        assert len(saved_rows) == 1 and saved_active == 0 and titles == ['复测：本月餐饮']
+        chat.change_session(0, None)
+        assert chat.active['demo'] == 0 and chat.sessions['demo'] == [[]]
         reopened.space.setCurrentIndex(reopened.space.findData('personal'))
         assert reopened.chat.active_history() == [('user', '合成个人提问')]
         with patch('qt_finance.chat.confirm', return_value=True):
@@ -698,8 +736,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.10'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.10-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.11'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.11-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None

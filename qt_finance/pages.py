@@ -726,6 +726,8 @@ class LedgerPage(Page):
         dialog.resize(920, 620)
         layout = QVBoxLayout(dialog)
         layout.addWidget(label(f"识别 {len(parsed.rows)} 行 · 问题 {len(parsed.issues)} 项 · 已删除 {preview['deleted_count']} 行"))
+        if preview.get('refunds_to_correct'):
+            layout.addWidget(label(f"确认导入后，会把 {preview['refunds_to_correct']} 条同来源记录从普通收入更正为待处理退款。"))
         if not parsed.document.get('account_id'):
             layout.addWidget(label(f'识别的 {len(parsed.rows)} 行均未指定来源账户。', 'muted'))
         tabs = QTabWidget()
@@ -756,7 +758,8 @@ class LedgerPage(Page):
         result = self.store.import_statement(parsed, restore_deleted=restore.isChecked(), restore_ids=restore_ids)
         added, duplicates, conflicts = result
         self.changed(f'新增 {added - result.restored} · 恢复 {result.restored} · 重复 {duplicates} · '
-                     f'保持删除 {result.deleted_skipped} · 冲突 {len(conflicts)}')
+                     f'保持删除 {result.deleted_skipped} · 冲突 {len(conflicts)}'
+                     + (f' · 更正退款 {result.refunds_corrected}' if result.refunds_corrected else ''))
         summary = self.owner.message.text()
         if not parsed.document.get('account_id'):
             summary += f' · 本批新增或恢复的 {added} 笔未声明账户'
@@ -815,6 +818,8 @@ class LedgerPage(Page):
             ('冲突', f'{conflicts} 行'),
             ('解析问题', f'{problem_count} 项'),
         ]
+        if audit.get('refunds_corrected'):
+            summary.append(('更正退款', f"{audit['refunds_corrected']} 行"))
         dialog, layout, form = fields(parent, '批次资料')
         dialog.resize(600, 440 if issues else 365)
         for title, value in summary:

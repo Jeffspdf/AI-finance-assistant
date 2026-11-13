@@ -11,6 +11,7 @@ from PySide6.QtCore import QLockFile
 MAX_SESSIONS = 15
 MAX_MESSAGES = 40
 MAX_TEXT = 2000
+MAX_TITLE = 60
 MAX_FILE = 8 * 1024 * 1024
 
 
@@ -27,9 +28,13 @@ class SessionHistory:
             return None
 
     def load(self):
+        sessions, active, _ = self.load_with_titles()
+        return sessions, active
+
+    def load_with_titles(self):
         raw = self.previous = self.read_bytes()
         if raw is None:
-            return [[]], 0
+            return [[]], 0, ['']
         try:
             if len(raw) > MAX_FILE:
                 raise ValueError
@@ -37,6 +42,10 @@ class SessionHistory:
             sessions, active = data['sessions'], data['active']
             if (data['version'] != 1 or not isinstance(sessions, list) or not 1 <= len(sessions) <= MAX_SESSIONS
                     or type(active) is not int or not 0 <= active < len(sessions)):
+                raise ValueError
+            titles = data.get('titles', [''] * len(sessions))
+            if (not isinstance(titles, list) or len(titles) != len(sessions)
+                    or any(not isinstance(title, str) or len(title) > MAX_TITLE for title in titles)):
                 raise ValueError
             result = []
             for rows in sessions:
@@ -48,14 +57,17 @@ class SessionHistory:
                         raise ValueError
                     messages.append((role, text if role == 'user' else {'answer': text, 'archived_text': True}))
                 result.append(messages)
-            return result, active
+            return result, active, titles
         except (KeyError, ValueError, TypeError, UnicodeError, RecursionError):
             raise ValueError('本机对话历史无法读取，原文件已保留。可关闭本机保存并确认删除。') from None
 
-    def save(self, sessions, active):
+    def save(self, sessions, active, titles=None):
         rows = [[(role, (payload if role == 'user' else payload.get('display_answer', payload['answer']))[:MAX_TEXT])
                  for role, payload in messages] for messages in sessions]
-        data = json.dumps(dict(version=1, active=active, sessions=rows), ensure_ascii=False).encode('utf-8')
+        content = dict(version=1, active=active, sessions=rows)
+        if titles is not None:
+            content['titles'] = titles
+        data = json.dumps(content, ensure_ascii=False).encode('utf-8')
         self.replace(data)
 
     def erase(self):

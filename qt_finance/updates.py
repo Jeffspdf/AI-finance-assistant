@@ -15,7 +15,7 @@ from finance.updates import REPO, _fresh_request, _open_download
 
 RELEASES = f'https://github.com/{REPO}/releases'
 FEED = f'https://api.github.com/repos/{REPO}/releases?per_page=30'
-VERSION = '0.10.0-preview.11'
+VERSION = '0.10.0-preview.12'
 VERSION_PATTERN = r'(\d+)\.(\d+)\.(\d+)(?:-preview\.(\d+))?'
 MAX_BYTES = 512 * 1024 * 1024
 
@@ -100,6 +100,8 @@ def launch_installer(release, target, directory, mode):
     command = [str(target), f'/DIR={directory}']
     if mode == 'standalone':
         command.append('/NOREGISTRATION=1')
+    elif mode == 'windows':
+        command.append('/MERGETASKS=!noregistration')
     subprocess.Popen(command)
 
 

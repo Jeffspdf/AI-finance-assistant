@@ -27,7 +27,7 @@ AllowNoIcons=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"
-Name: "noregistration"; Description: "Install without a Windows Installed Apps entry"; Flags: unchecked
+Name: "noregistration"; Description: "Install without a Windows Installed Apps entry"
 [Files]
 Source: "..\dist\AIFinanceHelperQt\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]

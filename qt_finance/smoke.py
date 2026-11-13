@@ -743,8 +743,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.12'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.12-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.13'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.13-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -756,6 +756,9 @@ def model_and_updates(app, window, directory):
     with patch('qt_finance.updates.subprocess.Popen') as launch:
         updates.launch_installer(setup, installer, directory, 'standalone')
         launch.assert_called_once_with([str(installer), f'/DIR={directory}', '/NOREGISTRATION=1'])
+        launch.reset_mock()
+        updates.launch_installer(setup, installer, directory, 'windows')
+        launch.assert_called_once_with([str(installer), f'/DIR={directory}', '/MERGETASKS=!noregistration'])
         installer.write_bytes(b'modified')
         try:
             updates.launch_installer(setup, installer, directory, 'standalone')

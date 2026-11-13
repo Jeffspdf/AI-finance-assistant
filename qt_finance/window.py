@@ -78,7 +78,6 @@ class FinanceWindow(QMainWindow):
         root.addWidget(main, 1)
 
         self.chat = ChatPage(self)
-        self.chat_sessions.currentIndexChanged.connect(self.select_chat)
         self.save_chat_history.toggled.connect(self.chat.toggle_history)
         self.plan = PlanPage(self)
         self.pages = {
@@ -120,11 +119,9 @@ class FinanceWindow(QMainWindow):
         layout.addWidget(label('校园理财助手', 'brandSubtitle'))
         layout.addSpacing(10)
         layout.addWidget(button('＋  新对话', self.new_chat, primary=True))
-        layout.addWidget(label('历史会话', 'muted'))
-        self.chat_sessions = ComboBox()
+        self.chat_sessions = button('历史会话', lambda: self.chat.open_history())
+        self.chat_sessions.setObjectName('sessionHistory')
         self.chat_sessions.setAccessibleName('当前空间的历史会话')
-        self.chat_sessions.setMinimumContentsLength(12)
-        self.chat_sessions.setSizeAdjustPolicy(ComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         layout.addWidget(self.chat_sessions)
         self.save_chat_history = Switch('本机保存对话文本')
         self.save_chat_history.setToolTip('每个账本空间可独立启用，默认关闭。')

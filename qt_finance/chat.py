@@ -5,7 +5,8 @@ import re
 
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QPlainTextEdit, QScrollArea,
+    QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLineEdit,
+    QListWidget, QListWidgetItem, QPlainTextEdit, QScrollArea,
     QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -26,9 +27,16 @@ PROMPTS = (
     ('储蓄规划', '帮我做一个储蓄计划'),
 )
 EVIDENCE_COLUMNS = (
-    ('日期', 'date'), ('商户', 'merchant'), ('金额 / 元', lambda row: yuan(row['amount_cents'])),
+    ('日期', lambda row: display_date(row['date'])), ('商户', 'merchant'), ('金额 / 元', lambda row: yuan(row['amount_cents'])),
     ('类型', 'kind'), ('分类', 'category'), ('来源', 'source_file'), ('行号', 'source_row'),
 )
+
+
+def display_date(value):
+    text = str(value)
+    if len(text) >= 19 and text[10] in ' T' and text[19:] in ('', '.000000'):
+        return text[:10] if text[11:19] == '00:00:00' else text[:10] + ' ' + text[11:19]
+    return text
 
 
 class Composer(QPlainTextEdit):
@@ -250,14 +258,73 @@ class ChatPage(QWidget):
 
     def sync_sessions(self):
         mode = self.owner.workspace.mode
-        selector = self.owner.chat_sessions
-        selector.blockSignals(True)
-        selector.clear()
-        for rows in self.sessions[mode]:
-            title = next((' '.join(value.split()) for role, value in rows if role == 'user'), '新对话')
-            selector.addItem(title[:21] + ('…' if len(title) > 21 else ''))
-        selector.setCurrentIndex(self.active[mode])
-        selector.blockSignals(False)
+        count = sum(bool(rows) for rows in self.sessions[mode])
+        self.owner.chat_sessions.setText(f'历史会话（{count}）')
+
+    def open_history(self):
+        mode = self.owner.workspace.mode
+        active = self.active[mode]
+        summaries = []
+        for index, rows in enumerate(self.sessions[mode]):
+            messages = [' '.join((value if role == 'user' else value.get('display_answer', value['answer'])).split())
+                        for role, value in rows]
+            title = next((text for (role, _), text in zip(rows, messages) if role == 'user'), '新对话')
+            summaries.append((index, title, messages))
+
+        dialog = QDialog(self.owner)
+        dialog.setWindowTitle('历史会话')
+        dialog.resize(510, 410)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(label(f'{self.owner.space.currentText()} · 仅显示当前空间', 'muted'))
+        search = QLineEdit()
+        search.setPlaceholderText('搜索会话标题或消息')
+        search.setAccessibleName('搜索会话')
+        layout.addWidget(search)
+        sessions = QListWidget()
+        sessions.setObjectName('sessionList')
+        sessions.setAccessibleName('历史会话列表')
+        layout.addWidget(sessions, 1)
+        empty = label('', 'muted')
+        layout.addWidget(empty)
+        controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Open | QDialogButtonBox.StandardButton.Cancel)
+        open_button = controls.button(QDialogButtonBox.StandardButton.Open)
+        open_button.setText('打开会话')
+        layout.addWidget(controls)
+
+        def refresh():
+            keyword = search.text().strip().casefold()
+            sessions.clear()
+            for index, title, messages in reversed(summaries):
+                if keyword and not any(keyword in text.casefold() for text in (title, *messages)):
+                    continue
+                preview = messages[-1] if len(messages) > 1 else ('等待回复' if messages else '尚无消息')
+                item = QListWidgetItem(f'{title[:25]}{"…" if len(title) > 25 else ""}'
+                                       f'{" · 当前会话" if index == active else ""}\n'
+                                       f'{preview[:36]}{"…" if len(preview) > 36 else ""}')
+                item.setData(Qt.ItemDataRole.UserRole, index)
+                item.setToolTip(title)
+                sessions.addItem(item)
+                if index == active:
+                    sessions.setCurrentItem(item)
+            if sessions.count() and not sessions.currentItem():
+                sessions.setCurrentRow(0)
+            empty.setText('没有符合搜索条件的会话。' if keyword else '还没有历史会话。')
+            empty.setVisible(not sessions.count())
+
+        def open_selected():
+            if sessions.currentItem():
+                dialog.accept()
+
+        sessions.currentItemChanged.connect(lambda current, _: open_button.setEnabled(current is not None))
+        sessions.itemActivated.connect(open_selected)
+        search.textChanged.connect(refresh)
+        search.returnPressed.connect(open_selected)
+        controls.accepted.connect(open_selected)
+        controls.rejected.connect(dialog.reject)
+        refresh()
+        search.setFocus()
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.owner.select_chat(sessions.currentItem().data(Qt.ItemDataRole.UserRole))
 
     def load_sessions(self):
         mode = self.owner.workspace.mode

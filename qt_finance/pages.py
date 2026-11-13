@@ -8,11 +8,11 @@ from pathlib import Path
 import re
 import sqlite3
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QLocale, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QIntValidator
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMenu,
-    QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
 from finance.analytics import budget_report, goal_progress, month_records, overview, yuan
@@ -30,7 +30,7 @@ from finance.qa import month_shift
 from finance.updates import update_error_message
 from finance.spending_presenter import basis_label, net_export_csv, spending_totals
 
-from .chat import EVIDENCE_COLUMNS, Evidence
+from .chat import EVIDENCE_COLUMNS, Evidence, display_date
 from .overview_chart import SpendingChart
 from .services import preview_statement
 from .ui import ComboBox, button, card, confirm, details, label, readonly_text, selected, selected_rows, table
@@ -82,6 +82,14 @@ def form_buttons(dialog, layout, title='确定'):
     controls.rejected.connect(dialog.reject)
     layout.addWidget(controls)
     return controls
+
+
+def display_status(value):
+    return {
+        'candidate': '待确认', 'confirmed': '已确认', 'rejected': '已撤销或拒绝',
+        'split': '已拆分', 'pending': '待处理', 'linked': '已关联',
+        'needs_review': '待复核', 'committed': '已导入', 'deleted': '已删除',
+    }.get(value, value)
 
 
 def save_form(dialog, layout, form, title, save):
@@ -308,11 +316,14 @@ class OverviewPage(Page):
             raise ValueError('只可在演示空间生成合成账单。')
         dialog, layout, form = fields(self, '生成演示账单')
         start = QLineEdit(month_shift(date.today(), -3))
-        months, count = QSpinBox(), QSpinBox()
-        months.setRange(1, 12)
-        months.setValue(3)
-        count.setRange(1, 500)
-        count.setValue(30)
+        months, count = QLineEdit('3'), QLineEdit('30')
+        for control, name, limit in ((months, 'demoMonths', 12), (count, 'demoCount', 500)):
+            control.setObjectName(name)
+            validator = QIntValidator(1, limit, control)
+            locale = QLocale.c()
+            locale.setNumberOptions(QLocale.NumberOption.RejectGroupSeparator)
+            validator.setLocale(locale)
+            control.setValidator(validator)
         minimum, maximum, income = QLineEdit('10'), QLineEdit('200'), QLineEdit('3000')
         income_kind = ComboBox()
         income_kind.addItems(('生活费', '工资'))
@@ -324,13 +335,22 @@ class OverviewPage(Page):
             ('收入分类', income_kind), ('生成转账', transfers), ('生成待处理退款', refunds), ('替换这些月份的演示记录', replace),
         ):
             form.addRow(title, control)
-        form_buttons(dialog, layout, '预览生成')
+        options = None
+
+        def validate_options():
+            nonlocal options
+            for field, name, limit in ((months, '月份数', 12), (count, '每月消费笔数', 500)):
+                if not field.hasAcceptableInput():
+                    raise FieldError(field, f'{name}须为 1–{limit} 的整数。')
+            options = DemoOptions(start.text().strip(), int(months.text()), int(count.text()),
+                                  money_to_cents(minimum.text()), money_to_cents(maximum.text()),
+                                  money_to_cents(income.text(), allow_zero=True), income_kind.currentText(),
+                                  transfers.isChecked(), refunds.isChecked(), replace.isChecked())
+            options.summary()
+
+        save_form(dialog, layout, form, '预览生成', validate_options)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        options = DemoOptions(start.text().strip(), months.value(), count.value(),
-                              money_to_cents(minimum.text()), money_to_cents(maximum.text()),
-                              money_to_cents(income.text(), allow_zero=True), income_kind.currentText(),
-                              transfers.isChecked(), refunds.isChecked(), replace.isChecked())
         summary = options.summary()
         message = f"{'、'.join(summary['months'])} · 合成 {summary['count']} 笔"
         if options.replace_months:
@@ -707,7 +727,7 @@ class LedgerPage(Page):
                                 ('删除原因', 'reason')), preview['deleted_rows'])
             tabs.addTab(deleted, '已删除记录')
         layout.addWidget(tabs, 1)
-        restore = QCheckBox('恢复预览中列出的已删除记录')
+        restore = QCheckBox('按原始账单恢复预览中列出的已删除记录')
         restore.setEnabled(bool(preview['deleted_rows']))
         layout.addWidget(restore)
         if parsed.issues:
@@ -737,7 +757,7 @@ class LedgerPage(Page):
         dialog.setWindowTitle('导入批次')
         dialog.resize(820, 540)
         layout = QVBoxLayout(dialog)
-        columns = (('文件', 'filename'), ('账户', 'account_label'), ('状态', 'status'), ('新增／恢复', 'added'),
+        columns = (('文件', 'filename'), ('账户', 'account_label'), ('状态', lambda row: display_status(row['status'])), ('新增／恢复', 'added'),
                    ('重复', 'duplicates'), ('冲突', 'conflicts'))
         view, model = table(columns, self.store.import_batches())
         layout.addWidget(view)
@@ -977,7 +997,7 @@ class ReviewPage(Page):
         self.layout.addWidget(self.tabs, 1)
         _, group_layout = self.tab(self.tabs, '跨源对账')
         self.groups_view, self.groups = table((
-            ('状态', 'status'), ('置信度', 'confidence'), ('类型', 'kind'),
+            ('状态', lambda row: display_status(row['status'])), ('置信度', 'confidence'), ('类型', 'kind'),
             ('成员数', lambda r: len(r['members'])), ('说明', 'reason'),
         ))
         group_layout.addWidget(self.groups_view, 1)
@@ -991,8 +1011,8 @@ class ReviewPage(Page):
 
         _, refund_layout = self.tab(self.tabs, '退款流水')
         self.refunds_view, self.refunds = table((
-            ('日期', 'date'), ('商户', 'merchant'), ('金额 / 元', lambda r: yuan(r['amount_cents'])),
-            ('关联状态', 'association_status'), ('来源数', lambda r: len(r['member_ids'])),
+            ('日期', lambda row: display_date(row['date'])), ('商户', 'merchant'), ('金额 / 元', lambda r: yuan(r['amount_cents'])),
+            ('关联状态', lambda row: display_status(row['association_status'])), ('来源数', lambda r: len(r['member_ids'])),
         ))
         refund_layout.addWidget(self.refunds_view, 1)
         row = toolbar(refund_layout)
@@ -1004,7 +1024,7 @@ class ReviewPage(Page):
 
         _, links_layout = self.tab(self.tabs, '退款关联')
         self.links_view, self.links = table((
-            ('状态', 'status'), ('抵扣 / 元', lambda r: yuan(r['amount_cents'])),
+            ('状态', lambda row: display_status(row['status'])), ('抵扣 / 元', lambda r: yuan(r['amount_cents'])),
             ('退款交易', 'refund_txn_id'), ('原消费', 'original_txn_id'), ('核对说明', 'reason'),
         ))
         links_layout.addWidget(self.links_view, 1)

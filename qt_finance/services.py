@@ -6,11 +6,27 @@ import re
 
 from finance.agent_runtime import plan_savings_agent
 from finance.agent_tools import confirmed_inputs
+from finance.analytics import yuan
 from finance.categories import category_in_question, category_options
 from finance.demo import initialize_demo
 from finance.importer import money_to_cents, parse_statement
 from finance.qa import answer_question, month_shift, parse_question
 from finance.storage import Store
+
+
+MONTH_NUMBERS = {name: number for number, name in enumerate('一 二 三 四 五 六 七 八 九 十 十一 十二'.split(), 1)}
+MONTH_TOKEN = r'(?:1[0-2]|0?[1-9]|十[一二]?|[一二三四五六七八九])'
+YEAR_TOKEN = r'(?:20[0-9]{2}|二[〇零][〇零一二三四五六七八九]{2})'
+YEAR_DIGITS = str.maketrans('〇零一二三四五六七八九', '00123456789')
+DINING_TOTAL = re.compile(
+    r'(?:我想知道|请问|把)?\s*(?P<period>20[0-9]{2}-[0-9]{2}|' + MONTH_TOKEN + r'\s*月(?:份)?)\s*'
+    r'(?:的)?\s*(?:(?:我)?花在吃饭上的钱累计是多少|吃饭一共花掉多少钱|吃饭相关的小票加在一起[，, ]*总共花了多少钱)'
+    r'[，,。？? ]*(?:(?:只告诉我金额|只要数字)[。？? ]*)?'
+)
+
+
+def month_number(token):
+    return MONTH_NUMBERS[token] if token in MONTH_NUMBERS else int(token)
 
 
 class Workspace:
@@ -34,14 +50,36 @@ def query_ledger(path, question, client, cancelled):
     frame = store.spending_view()
     today = date.today()
     months = set(frame.date.str[:7]) | set(frame.attrs.get('source_months', ()))
-    months.update(month_shift(today, offset) for offset in (-1, 0))
-    budgets = {month: store.budgets(month) for month in months}
+    budgets = {month: store.budgets(month) for month in months | {month_shift(today, i) for i in (-1, 0)}}
     if cancelled.is_set():
         return None
-    normalized = re.sub(r'(?<!\d)(20\d{2})\s*年\s*(0?[1-9]|1[0-2])\s*月(?!\s*\d)',
-                        lambda match: f'{match[1]}-{int(match[2]):02}', question)
-    intent = merchant_expense(normalized)
+    normalized = re.sub(rf'(?<!\d)({YEAR_TOKEN})\s*年\s*({MONTH_TOKEN})\s*月(?:份)?(?!\s*(?:\d|[一二三四五六七八九十]+\s*[日号]))',
+                        lambda match: f'{match[1].translate(YEAR_DIGITS)}-{month_number(match[2]):02}', question)
+    dining = DINING_TOTAL.fullmatch(normalized)
+    combined = re.fullmatch(r'(?:请问\s*)?(20[0-9]{2}-(?:0[1-9]|1[0-2]))\s*的?\s*收入(?:和|与|、)净支出分别(?:是)?多少(?:元)?[。？?]?', normalized)
+    if dining:
+        period = dining['period']
+        if '-' not in period:
+            number = month_number(re.match(MONTH_TOKEN, period)[0])
+            matches = sorted(month for month in months if month.endswith(f'-{number:02}'))
+            if len(matches) != 1:
+                details = '、'.join(matches)
+                message = f'账本中有多个 {number} 月（{details}），请补充年份。' if matches else f'尚无已导入的 {number} 月记录。请确认年份，或先导入该月账单。'
+                return dict(answer=message, evidence=[], status='unsupported', parser='本地解析',
+                            clarify=dict(period='', category='餐饮', merchant='', metric='expense'))
+            period = matches[0]
+        intent = dict(metric='expense', period=period, category='餐饮')
+    elif combined:
+        intent = dict(metric='balance', period=combined[1])
+    else:
+        intent = merchant_expense(normalized)
     result = answer_question(frame, normalized, today=today, budgets=budgets, model=client, local_intent=intent)
+    if combined and result['status'] == 'ok':
+        evidence = result['evidence']
+        income = sum(row['amount_cents'] for row in evidence if row['kind'] == '收入')
+        net = sum(row['amount_cents'] for row in evidence if row['kind'] == '支出')
+        result['display_answer'] = f'收入 {yuan(income)} 元，净支出 {yuan(net)} 元。\n结余 {yuan(income - net)} 元。'
+        result['details'] = result['answer'] = result['display_answer'] + '\n' + result['answer']
     executed = result.get('trace', {}).get('inputs', {})
     if executed:
         period = executed.get('period', '')
@@ -52,6 +90,7 @@ def query_ledger(path, question, client, cancelled):
     if result['status'] == 'unsupported':
         if result['parser'] == '模型理解 + 代码计算':
             result['parser'] = '模型未完成可计算的查询'
+        result['answer'] += ' 支持按月份或日期区间查询已导入收支、分类及商户。例如“2026-08 餐饮净支出多少？”'
         if not any(word in normalized for word in ('投资', '预测', '贷款', '退款', '下个月', '明年')):
             known = sorted({name for name in frame.merchant if name and name.casefold() in normalized.casefold()},
                            key=lambda name: (-len(name), name))

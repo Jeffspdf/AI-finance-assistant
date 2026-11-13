@@ -142,7 +142,10 @@ class Store(Refunds,Reconciliation,BackupManagement):
                 if len(matches)>1:return None,'同一原始行有多条已删除来源，请先核对，未自动恢复'
                 if matches:old=matches[0]
         if not old and row['id'] in by_id:return None,'原交易标识已被另一来源使用，请先核对，未覆盖'
-        if old and any(old[k]!=row[k] for k in ('date','amount_cents','kind','merchant','description','currency')):
+        # The same file hash and row identify the original import even after a local edit.
+        same_deleted_source=(old and old['status']=='deleted' and row.get('source_document_id')
+                             and all(old[k]==row[k] for k in ('source_document_id','source_row','channel','account_id')))
+        if old and not same_deleted_source and any(old[k]!=row[k] for k in ('date','amount_cents','kind','merchant','description','currency')):
             return None,'同一交易 ID 的内容不同，未覆盖原记录（含原始行冲突）'
         return old,None
 

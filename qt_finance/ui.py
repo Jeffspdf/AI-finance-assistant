@@ -54,10 +54,11 @@ QPushButton[nav="true"]:focus { border-color: $accent; }
 QPushButton[suggestion="true"] { background: $surface; text-align: left; padding: 11px 14px; }
 QPushButton[suggestion="true"]:hover { background: $muted_surface; }
 QLineEdit, QPlainTextEdit { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 6px; }
-QSpinBox { background: $surface; border: 1px solid $border; border-radius: 8px; min-height: 34px;
-           padding: 0 24px 0 8px; }
-QSpinBox QLineEdit { padding: 0; border: none; background: transparent; }
-QSpinBox::up-button, QSpinBox::down-button { width: 20px; }
+QLineEdit#demoMonths, QLineEdit#demoCount { min-height: 22px; }
+QPushButton#sessionHistory { text-align: left; }
+QListWidget#sessionList { background: $surface; border: 1px solid $border; border-radius: 8px; padding: 4px; }
+QListWidget#sessionList::item { min-height: 42px; padding: 6px 10px; }
+QListWidget#sessionList::item:selected { background: $selected; color: $primary; }
 QComboBox { background: $surface; border: 1px solid $border; border-radius: 10px;
             min-height: 19px; padding: 6px 30px 6px 10px; }
 QComboBox:hover { border-color: $accent; }

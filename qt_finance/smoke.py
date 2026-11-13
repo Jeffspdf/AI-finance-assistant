@@ -15,7 +15,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QTableView,
+    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit, QPushButton, QTableView,
 )
 import pandas as pd
 
@@ -64,15 +64,20 @@ def chat_and_plan(app, window, output):
     def inspect_demo_form():
         dialog = app.activeModalWidget()
         if dialog and dialog.windowTitle() == '生成演示账单':
-            for spin, expected in zip(dialog.findChildren(QSpinBox), (3, 30)):
-                editor = spin.findChild(QLineEdit)
-                spin_checks.append(spin.value() == expected and editor.height() >= editor.fontMetrics().height() + 4)
+            for name, expected in (('demoMonths', '3'), ('demoCount', '30')):
+                editor = dialog.findChild(QLineEdit, name)
+                spin_checks.append(editor.text() == expected and editor.height() >= editor.fontMetrics().height() + 4)
+            count = dialog.findChild(QLineEdit, 'demoCount')
+            count.setText('501')
+            click(dialog, '预览生成')
+            spin_checks.append(dialog.isVisible() and count.text() == '501' and not count.hasAcceptableInput())
+            count.setText('30')
             dialog.grab().save(str(output / 'qt-demo-form.png'))
             dialog.reject()
 
     QTimer.singleShot(40, inspect_demo_form)
     click(window.pages['overview'], '生成演示账单')
-    assert spin_checks == [True, True], spin_checks
+    assert spin_checks == [True, True, True], spin_checks
     window.navigate('chat')
     shown = []
 
@@ -101,7 +106,7 @@ def chat_and_plan(app, window, output):
     QTest.keyClick(chat.input, Qt.Key.Key_Return)
     wait(app, lambda: not chat.busy and chat.last_result is not None, 'ledger answer')
     assert not chat.snapshot.isVisible()
-    assert '\n' not in window.chat_sessions.currentText()
+    assert '\n' not in window.chat_sessions.text()
     assert '123.45 元，共 1 笔' in chat.last_result['answer']
     assert chat.last_result['evidence'][0]['merchant'] == 'Qt 合成食堂'
     click(chat, '查看依据')
@@ -182,21 +187,39 @@ def space_isolation(app, window):
                        for role, value in window.chat.active_history('demo'))
 
 
-def query_feedback(app, window, directory):
+def query_feedback(app, window, directory, output):
     window.navigate('chat')
     chat = window.chat
     assert '来源记录' in chat.coverage.text()
     existing = chat.last_result
     window.new_chat()
-    assert window.chat_sessions.count() == 2 and not chat.active_history()
-    window.chat_sessions.setCurrentIndex(0)
+    assert len(chat.sessions[window.workspace.mode]) == 2 and not chat.active_history()
+    picker_checks = []
+
+    def choose_previous():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '历史会话':
+            search = dialog.findChild(QLineEdit)
+            listing = dialog.findChild(QListWidget)
+            picker_checks.append(listing.count() == 2 and '当前会话' in listing.currentItem().text())
+            search.setText('无匹配的搜索关键词')
+            picker_checks.append(listing.count() == 0)
+            search.setText(chat.sessions[window.workspace.mode][0][0][1].split()[0])
+            picker_checks.append(listing.count() == 1)
+            assert dialog.grab().save(str(output / 'qt-chat-history.png'))
+            click(dialog, '打开会话')
+
+    QTimer.singleShot(40, choose_previous)
+    window.chat_sessions.click()
+    assert picker_checks == [True, True, True]
     assert chat.last_result == existing and chat.active_history()
-    window.chat_sessions.setCurrentIndex(1)
+    window.select_chat(1)
     assert not chat.active_history()
 
     fixture = Store(directory / 'query-feedback.sqlite3')
     fixture.add_manual_transaction('2026-10-26', '星巴克', 3200, '支出', '餐饮')
     fixture.add_manual_transaction('2026-08-15', '食堂', 1000, '支出', '餐饮')
+    fixture.add_manual_transaction('2026-08-16', '合成收入', 5000, '收入', '生活费')
     original = Path(fixture.path).read_bytes()
     cancel = Event()
     with patch.object(ModelClient, 'parse_question', side_effect=AssertionError('local intent must not call model')):
@@ -204,6 +227,14 @@ def query_feedback(app, window, directory):
         october = query_ledger(fixture.path, '2026年10月星巴克花了多少？', model, cancel)
         august = query_ledger(fixture.path, '2026-08-01到2026-08-31之间星巴克花了多少？', model, cancel)
         missing = query_ledger(fixture.path, '2026-09星巴克花了多少？', model, cancel)
+        for question, expected in (
+            ('2026年8月的收入和净支出分别是多少？', '收入 50.00 元，净支出 10.00 元'),
+            ('我想知道二〇二六年八月吃饭一共花掉多少钱，只告诉我金额。', '10.00 元'),
+            ('把十月份吃饭相关的小票加在一起，总共花了多少钱？', '32.00 元'),
+            ('请问十月份我花在吃饭上的钱累计是多少？只要数字。', '32.00 元'),
+        ):
+            answer = query_ledger(fixture.path, question, model, cancel)
+            assert answer['parser'] == '本地解析' and expected in answer['display_answer'], answer
     assert october['parser'] == '本地解析' and '32.00 元' in october['display_answer']
     assert october['scope'] == '2026-10' and october['evidence'][0]['merchant'] == '星巴克'
     assert august['status'] == 'no_match' and '没有符合条件' in august['answer']
@@ -215,6 +246,9 @@ def query_feedback(app, window, directory):
     assert failed['parser'] == '模型未完成条件解析'
     assert failed['clarify']['period'] == '2026-10' and failed['clarify']['merchant'] == '星巴克'
     assert Path(fixture.path).read_bytes() == original
+    fixture.add_manual_transaction('2025-10-05', '食堂', 2000, '支出', '餐饮')
+    ambiguous = query_ledger(fixture.path, '把十月份吃饭相关的小票加在一起，总共花了多少钱？', None, cancel)
+    assert ambiguous['status'] == 'unsupported' and '请补充年份' in ambiguous['answer'] and not ambiguous['evidence']
 
     window.navigate('ledger')
     seen = []
@@ -289,7 +323,7 @@ def session_persistence(app, directory, output):
     reopened = FinanceWindow(root)
     reopened.show()
     try:
-        assert reopened.save_chat_history.isChecked() and reopened.chat_sessions.count() == 2
+        assert reopened.save_chat_history.isChecked() and len(reopened.chat.sessions['demo']) == 2
         restored = reopened.chat.active_history()[-1][1]
         assert restored == {'answer': '合成演示金额 32 元', 'archived_text': True}
         reopened.space.setCurrentIndex(reopened.space.findData('personal'))
@@ -622,8 +656,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.7'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.7-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.8'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.8-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -758,6 +792,46 @@ def exercise_live_model(app, output, settings_directory):
     (output / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
+def reimport_after_edit(app, window, directory):
+    window.space.setCurrentIndex(window.space.findData('personal'))
+    window.navigate('ledger')
+    store = window.workspace.store
+    source = directory / 'repeat.csv'
+    with source.open('w', encoding='utf-8-sig', newline='') as stream:
+        csv.writer(stream).writerows([
+            ('交易ID', '日期', '商户', '描述', '金额', '类型', '平台', '币种'),
+            ('REPEAT-ONE', '2026-08-05 11:00:00', '星巴克', '咖啡', '32.00', '支出', '样例', 'CNY'),
+        ])
+    from .services import preview_statement
+    parsed, _ = preview_statement(store.path, source, 'generic', None)
+    assert len(parsed.rows) == 1, parsed.issues
+    store.import_statement(parsed)
+    row = parsed.rows[0]
+    store.edit_transaction(row['id'], dict(row, description='咖啡（复测）'))
+    store.soft_delete_transaction(row['id'], confirmed=True)
+    checks = []
+
+    def select_restore(restore):
+        dialog = app.activeModalWidget()
+        if not dialog or dialog.windowTitle() != '导入预览':
+            return
+        checkbox = dialog.findChild(QCheckBox)
+        checks.append(checkbox.isEnabled() and not checkbox.isChecked())
+        checkbox.setChecked(restore)
+        click(dialog, '确认导入')
+
+    ledger = window.pages['ledger']
+    for restore in (False, True):
+        result = preview_statement(store.path, source, 'generic', None)
+        QTimer.singleShot(30, lambda restore=restore: select_restore(restore))
+        ledger.finish_import(store.path, result, '')
+        assert f'保持删除 {int(not restore)} · 冲突 0' in ledger.import_summary.text()
+        record = store.transaction_source(row['id'])
+        assert record['description'] == ('咖啡' if restore else '咖啡（复测）')
+        assert record['status'] == ('normal' if restore else 'deleted')
+    assert checks == [True, True]
+
+
 def exercise(app, output, tk_backup=None, return_fixture=None):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -781,13 +855,14 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         try:
             assert window.current == 'chat'
             chat_and_plan(app, window, output)
-            query_feedback(app, window, root)
+            query_feedback(app, window, root, output)
             session_persistence(app, root, output)
             space_isolation(app, window)
             import_budget_backup(app, window, root)
             reconciliation(window, root)
             model_and_updates(app, window, root)
             pet_animation(app, window)
+            reimport_after_edit(app, window, root)
             for name, navigation in window.nav.items():
                 navigation.click()
                 app.processEvents()
@@ -819,8 +894,9 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
         'platform': app.platformName(), 'scale': app.primaryScreen().devicePixelRatio(),
         'pages': list(FinanceWindow.page_labels),
         'tk_migration': migration,
-        'checks': ['chat and sources, local snapshot, coverage disclosure', 'merchant dates, coverage and model fallback',
-                   'session switch and dialog F1',
+        'checks': ['chat and sources, local snapshot, coverage disclosure', 'merchant dates, Chinese month, combined net and model fallback',
+                   'searchable session list, session switch and dialog F1',
+                   'exact reimport after edit and delete, default skip and explicit restore',
                    'dropdown keyboard navigation and opt-in switch, history restart, isolation and recovery',
                    'read-only A/B/C', 'late result and space isolation', 'import preview and commit',
                    'budget save, evidence and ledger drill-down', 'overview month scope, chart and reminders',

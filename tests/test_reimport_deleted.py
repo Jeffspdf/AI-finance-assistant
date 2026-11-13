@@ -121,6 +121,32 @@ def test_conflicting_amount_does_not_restore_or_overwrite_deleted_record(tmp_pat
     assert source['status']=='deleted' and source['amount_cents']==1000
 
 
+def test_edited_and_deleted_source_is_recognized_on_exact_reimport(tmp_path):
+    store = Store(tmp_path / 'ledger.sqlite3')
+    parsed = statement()
+    store.import_statement(parsed)
+    identifier = parsed.rows[0]['id']
+    edited = dict(parsed.rows[0], description='午餐（复测）', amount_cents=1200)
+    store.edit_transaction(identifier, edited)
+    store.soft_delete_transaction(identifier, confirmed=True)
+
+    before = Path(store.path).read_bytes()
+    preview = store.preview_import(parsed)
+    assert [row['id'] for row in preview['deleted_rows']] == [identifier]
+    assert Path(store.path).read_bytes() == before
+    kept = store.import_statement(parsed)
+    assert kept == (0, 1, []) and kept.deleted_skipped == 1
+    assert store.transaction_source(identifier)['description'] == '午餐（复测）'
+    assert store.transaction_source(identifier)['status'] == 'deleted'
+
+    conflict = store.import_statement(statement(amount='99'), restore_deleted=True)
+    assert len(conflict[2]) == 1 and conflict.restored == 0
+    restored = store.import_statement(parsed, restore_deleted=True, restore_ids=[identifier])
+    assert restored == (1, 1, []) and restored.restored == 1
+    source = store.transaction_source(identifier)
+    assert (source['status'], source['description'], source['amount_cents']) == ('normal', '午餐', 1000)
+
+
 def test_restore_audit_failure_rolls_back_entire_import(tmp_path):
     store,parsed,_=deleted(tmp_path);before=Path(store.path).read_bytes()
     with patch('finance.storage.audit',side_effect=RuntimeError('synthetic audit failure')):

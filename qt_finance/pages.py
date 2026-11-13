@@ -11,7 +11,7 @@ import sqlite3
 from PySide6.QtCore import QLocale, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIntValidator
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLineEdit, QMenu,
+    QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLineEdit, QMenu,
     QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -593,16 +593,24 @@ class LedgerPage(Page):
         dialog, layout, form = fields(self, '编辑交易' if original else '手工记账')
         self.owner.install_dialog_help(dialog)
         inputs = {}
+        original_date = original.get('date', '')
+        shown_date = (original_date[:10] if original_date.endswith((' 00:00:00', 'T00:00:00'))
+                      else original_date.replace('T', ' ', 1))
         for key, title, default in (
-            ('date', '日期 / YYYY-MM-DD', date.today().isoformat()),
+            ('date', '本地日期或日期时间', date.today().isoformat()),
             ('merchant', '商户', ''), ('description', '摘要', ''),
             ('amount_cents', '金额 / 元', ''),
         ):
             initial = original.get(key, default)
+            if key == 'date' and original:
+                initial = shown_date
             if key == 'amount_cents' and original:
                 initial = yuan(initial)
             entry = inputs[key] = QLineEdit(str(initial))
             form.addRow(title, entry)
+            if key == 'date':
+                entry.setPlaceholderText('YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss')
+                form.addRow('', label('可只填日期。账单记录的具体时间可在来源详情查看。', 'muted'))
         kind, category = ComboBox(), ComboBox()
         kind.addItems(['支出', '收入', '转账'])
         kind.setCurrentText(original.get('kind', '支出'))
@@ -621,12 +629,17 @@ class LedgerPage(Page):
             form.addRow('', learn)
         def save():
             data = {key: entry.text().strip() for key, entry in inputs.items()}
+            unchanged_date = bool(original) and data['date'] == shown_date
+            if unchanged_date:
+                data['date'] = original_date
             try:
+                if not unchanged_date and not re.fullmatch(r'\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)?', data['date']):
+                    raise ValueError
                 when = datetime.fromisoformat(data['date'])
                 if not 2000 <= when.year <= 2100 or when.tzinfo:
                     raise ValueError
             except ValueError:
-                raise FieldError(inputs['date'], '请输入 2000 至 2100 年的有效本地日期，例如 2026-11-13。') from None
+                raise FieldError(inputs['date'], '请输入有效本地日期，例如 2026-11-13，或加上时分秒 12:30:00。') from None
             try:
                 data['amount_cents'] = money_to_cents(data['amount_cents'])
                 if data['amount_cents'] <= 0:
@@ -648,7 +661,8 @@ class LedgerPage(Page):
 
     def delete_selected(self):
         row = selected(self.view, self.model)
-        if confirm(self, '删除交易', f"从当前账本移除 {row['date']} · {row['merchant']} · ¥{yuan(row['amount_cents'])}？"):
+        if confirm(self, '删除交易', f"从当前账本移除 {row['date']} · {row['merchant']} · ¥{yuan(row['amount_cents'])}？",
+                   accept='确认删除', decline='暂不删除'):
             self.store.soft_delete_transaction(row['id'], confirmed=True)
             self.changed('交易已移除，来源和审计记录已保留。')
 
@@ -764,18 +778,60 @@ class LedgerPage(Page):
             affected = self.store.preview_import_undo(row['id'])
             message = (f"批次 {row['id']}\n文件 {row['filename']}\n将移除该批次新增或恢复的 {len(affected)} 笔当前交易。"
                        "\n跳过的重复交易、导入历史和原始记录会保留。受影响的对账或退款关系会失效。")
-            if confirm(dialog, '撤销选中导入', message):
+            if confirm(dialog, '撤销选中导入', message, accept='确认撤销', decline='保留批次'):
                 count = self.store.delete_import_batch(row['id'], expected_ids=affected)
                 model.replace(self.store.import_batches())
                 self.changed(f'已撤销选中导入，移除 {count} 笔交易。批次历史及审计已保留。')
 
         actions = toolbar(layout)
-        self.action(actions, '查看批次', lambda: details(dialog, '批次资料', selected(view, model)))
+        self.action(actions, '查看批次', lambda: self.show_batch_details(dialog, selected(view, model)))
         self.action(actions, '导出异常与冲突 CSV',
                     lambda: export_issues(dialog, json.loads(selected(view, model)['issues_json'])))
         self.action(actions, '撤销选中导入', remove)
         actions.addStretch(1)
         actions.addWidget(button('关闭', dialog.close))
+        dialog.exec()
+
+    def show_batch_details(self, parent, batch):
+        audit = self.store.import_batch_audit(batch['id'])
+        issues = json.loads(batch['issues_json'])
+        conflicts = batch['conflicts']
+        problem_count = max(0, len(issues) - conflicts)
+        status = {'deleted': '已撤销', 'committed': '已导入', 'committing': '处理中',
+                  'failed': '导入失败'}.get(batch['status'], '未知状态')
+        if batch['status'] == 'committed' and issues:
+            status = '部分导入' if batch['added'] else '已完成，有异常'
+        restored, kept = audit.get('restored'), audit.get('deleted_skipped')
+        new = batch['added'] - restored if restored is not None else None
+        summary = [
+            ('文件', batch['filename']),
+            ('导入结果', status),
+            ('导入时间（UTC）', batch['finished_at'] or batch['started_at'] or '未记录'),
+            ('来源账户', batch['account_label'] or '未声明'),
+            ('新增', f'{new} 行' if new is not None else f"未单独记录（新增与恢复共 {batch['added']} 行）"),
+            ('恢复', f'{restored} 行' if restored is not None else '未记录'),
+            ('重复', f"{batch['duplicates']} 行"),
+            ('保持删除', f'{kept} 行' if kept is not None else '未记录'),
+            ('冲突', f'{conflicts} 行'),
+            ('解析问题', f'{problem_count} 项'),
+        ]
+        dialog, layout, form = fields(parent, '批次资料')
+        dialog.resize(600, 440 if issues else 365)
+        for title, value in summary:
+            form.addRow(title, label(value))
+        if issues:
+            layout.addWidget(label('异常与冲突'))
+            columns = (('行号', '行号'), ('原因', '原因'), ('商户', '商户'), ('日期', '日期'), ('金额', '金额'))
+            view, _ = table(columns, issues)
+            layout.addWidget(view, 1)
+        actions = toolbar(layout)
+        clipboard_text = '\n'.join(f'{title}：{value}' for title, value in summary)
+        self.action(actions, '复制可读摘要', lambda: QApplication.clipboard().setText(clipboard_text))
+        self.action(actions, '高级审计信息', lambda: details(dialog, '高级审计信息', {'批次': batch, '导入审计': audit}))
+        actions.addStretch(1)
+        controls = dialog_buttons(QDialogButtonBox.StandardButton.Close)
+        controls.rejected.connect(dialog.reject)
+        layout.addWidget(controls)
         dialog.exec()
 
     def export(self):

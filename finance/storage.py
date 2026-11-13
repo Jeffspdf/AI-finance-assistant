@@ -253,6 +253,14 @@ class Store(Refunds,Reconciliation,BackupManagement):
         with self.connect(read_only=True) as db:
             return [dict(r) for r in db.execute('SELECT b.*,d.filename,d.sha256,a.label AS account_label,a.archived_at AS account_archived_at FROM import_batches b JOIN source_documents d ON d.id=b.document_id LEFT JOIN accounts a ON a.id=b.account_id ORDER BY b.started_at DESC,b.id')]
 
+    def import_batch_audit(self, identifier):
+        """Return the original import counters, including for an undone batch."""
+        import json
+        with self.connect(read_only=True) as db:
+            event = db.execute("SELECT detail FROM audit_events WHERE event='batch_imported' AND entity_id=? ORDER BY id DESC LIMIT 1",
+                               (identifier,)).fetchone()
+        return json.loads(event['detail']) if event else {}
+
     @staticmethod
     def _active_batch_transactions(db,identifier):
         return tuple(row[0] for row in db.execute(

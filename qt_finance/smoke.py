@@ -15,7 +15,8 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit, QPushButton, QTableView,
+    QApplication, QCheckBox, QComboBox, QDialogButtonBox, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
+    QPushButton, QTableView,
 )
 import pandas as pd
 
@@ -347,7 +348,7 @@ def session_persistence(app, directory, output):
         broken.close()
 
 
-def import_budget_backup(app, window, directory):
+def import_budget_backup(app, window, directory, output):
     ledger = window.pages['ledger']
     source = directory / 'synthetic.csv'
     when = date.today().replace(day=1)
@@ -531,17 +532,34 @@ def import_budget_backup(app, window, directory):
     assert store.preview_import_undo(batch['id']) == (imported['id'],)
     window.navigate('ledger')
 
+    batch_checks = []
+
+    def inspect_batch():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '批次资料':
+            values = {widget.text() for widget in dialog.findChildren(QLabel)}
+            close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
+            batch_checks.append({source.name, '部分导入', '导入时间（UTC）', '保持删除', '解析问题'} <= values
+                                and not dialog.findChildren(QPlainTextEdit) and close.text() == '关闭')
+            batch_checks.append(dialog.grab().save(str(output / 'qt-import-batch.png')))
+            close.click()
+
     def undo_import():
         dialog = app.activeModalWidget()
         if dialog and dialog.windowTitle() == '导入批次':
             view = dialog.findChild(QTableView)
             view.selectRow(next(i for i, row in enumerate(view.model().records) if row['id'] == batch['id']))
+            before = path.read_bytes()
+            QTimer.singleShot(40, inspect_batch)
+            click(dialog, '查看批次')
+            batch_checks.append(before == path.read_bytes())
             click(dialog, '撤销选中导入')
             dialog.accept()
 
     QTimer.singleShot(40, undo_import)
     with patch('qt_finance.pages.confirm', return_value=True) as undo_prompt:
         click(ledger, '导入批次')
+    assert batch_checks == [True, True, True], batch_checks
     assert '1 笔' in undo_prompt.call_args.args[-1] and batch['id'] in undo_prompt.call_args.args[-1]
     assert store.transaction_source(imported['id'])['status'] == 'deleted'
     assert any(row['id'] == batch['id'] and row['status'] == 'deleted' for row in store.import_batches())
@@ -680,8 +698,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.9'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.9-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.10'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.10-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None
@@ -836,7 +854,21 @@ def reimport_after_edit(app, window, directory):
     assert EVIDENCE_COLUMNS[0][1](parsed.rows[0]) == '2026-08-05'
     store.import_statement(parsed)
     row = parsed.rows[0]
-    store.edit_transaction(row['id'], dict(row, description='咖啡（复测）'))
+    ledger = window.pages['ledger']
+    dates = []
+
+    def edit_description():
+        dialog = app.activeModalWidget()
+        if dialog and dialog.windowTitle() == '编辑交易':
+            entries = dialog.findChildren(QLineEdit)
+            dates.append((entries[0].text(), any(w.text() == '本地日期或日期时间' for w in dialog.findChildren(QLabel))))
+            entries[2].setText('咖啡（复测）')
+            click(dialog, '保存交易')
+
+    QTimer.singleShot(40, edit_description)
+    ledger.edit(row)
+    assert dates == [('2026-08-05 11:00:00', True)]
+    assert store.transaction_source(row['id'])['date'] == row['date']
     store.soft_delete_transaction(row['id'], confirmed=True)
     checks = []
 
@@ -849,7 +881,6 @@ def reimport_after_edit(app, window, directory):
         checkbox.setChecked(restore)
         click(dialog, '确认导入')
 
-    ledger = window.pages['ledger']
     for restore in (False, True):
         result = preview_statement(store.path, source, 'generic', None)
         QTimer.singleShot(30, lambda restore=restore: select_restore(restore))
@@ -887,7 +918,7 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
             query_feedback(app, window, root, output)
             session_persistence(app, root, output)
             space_isolation(app, window)
-            import_budget_backup(app, window, root)
+            import_budget_backup(app, window, root, output)
             reconciliation(window, root)
             model_and_updates(app, window, root)
             pet_animation(app, window)
@@ -914,6 +945,11 @@ def exercise(app, output, tk_backup=None, return_fixture=None):
             assert window.chat.input.isVisible() and window.chat.send.isVisible()
             assert window.chat.send.width() == window.chat.send.height() == 38
             assert window.chat.send.mapTo(window, window.chat.send.rect().bottomRight()).y() < window.height()
+            assert not window.mascot.isVisible()
+            for key in ('plan', 'accounts', 'review'):
+                control = window.nav[key]
+                point = control.mapTo(window, control.rect().center())
+                assert control.isVisible() and window.rect().contains(point) and window.childAt(point) == control
         finally:
             window.close()
             window.jobs.pool.waitForDone()

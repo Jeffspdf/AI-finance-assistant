@@ -6,7 +6,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QDialog, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QDialog, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea,
+    QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from finance.llm import ModelClient
@@ -127,36 +128,22 @@ class FinanceWindow(QMainWindow):
         self.save_chat_history.setToolTip('每个账本空间可独立启用，默认关闭。')
         layout.addWidget(self.save_chat_history)
         layout.addSpacing(4)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        content = QWidget()
-        content.setObjectName('navContent')
-        nav = QVBoxLayout(content)
-        nav.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(label('账本工具', 'muted'))
+        nav = QGridLayout()
         nav.setSpacing(4)
-        app_tools = QHBoxLayout()
-        app_tools.setSpacing(4)
+        nav.setColumnStretch(0, 1)
+        nav.setColumnStretch(1, 1)
         self.nav_group = QButtonGroup(self)
         self.nav = {}
-        for key, title in self.page_labels.items():
-            if key == 'ledger':
-                nav.addSpacing(7)
-                nav.addWidget(label('账本工具', 'muted'))
+        for index, (key, title) in enumerate(self.page_labels.items()):
             item = button(title, lambda checked=False, target=key: self.navigate(target))
             item.setProperty('nav', True)
             item.setCheckable(True)
             self.nav_group.addButton(item)
             self.nav[key] = item
-            if key in ('settings', 'help'):
-                app_tools.addWidget(item, 1)
-            elif key != 'backup':
-                nav.addWidget(item)
-        nav.addStretch(1)
-        scroll.setWidget(content)
-        layout.addWidget(scroll, 1)
-        layout.addWidget(self.nav['backup'])
-        layout.addLayout(app_tools)
+            nav.addWidget(item, index // 2, index % 2)
+        layout.addLayout(nav)
+        layout.addStretch(1)
         self.mascot = None
         portrait = QPixmap(str(ASSETS / 'campus_heroine.png'))
         if not portrait.isNull():
@@ -182,7 +169,7 @@ class FinanceWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if getattr(self, 'mascot', None) is not None:
-            self.mascot.setVisible(event.size().height() >= 620)
+            self.mascot.setVisible(event.size().height() >= 590)
 
     def toggle_pet(self):
         if self.pet is None:

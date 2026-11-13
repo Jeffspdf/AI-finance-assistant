@@ -49,7 +49,7 @@ QPushButton[primary="true"]:hover { background: $hover; }
 QPushButton:disabled { background: #edf1ed; color: #7a8b82; border-color: #e4ebe6; }
 QPushButton[primary="true"]:disabled { background: #e3ebe5; color: #6c8275; border-color: #e3ebe5; }
 QPushButton#send { border-radius: 19px; padding: 0; font-size: 22px; }
-QPushButton[nav="true"] { background: transparent; border: 1px solid transparent; text-align: left; padding: 5px 12px; }
+QPushButton[nav="true"] { background: transparent; border: 1px solid transparent; text-align: left; padding: 6px 7px; }
 QPushButton[nav="true"]:checked, QPushButton[nav="true"]:hover { background: $selected; color: $primary; }
 QPushButton[nav="true"]:focus { border-color: $accent; }
 QPushButton[suggestion="true"] { background: $surface; text-align: left; padding: 11px 14px; }
@@ -81,7 +81,6 @@ QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
 QScrollBar::handle:vertical { background: #bfcec4; min-height: 28px; border-radius: 4px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QWidget#navContent { background: $surface; }
 QWidget#messageContent, QWidget#workArea { background: $bg; }
 QTableView { background: $surface; border: 1px solid $border; border-radius: 9px;
              selection-background-color: $selected; selection-color: $ink; }
@@ -160,11 +159,13 @@ def card():
     return frame, layout
 
 
-def dialog_buttons(standard=QDialogButtonBox.StandardButton.Ok, *, action='确定'):
+def dialog_buttons(standard=QDialogButtonBox.StandardButton.Ok, *, action=None):
     cancel = QDialogButtonBox.StandardButton.Cancel
-    controls = QDialogButtonBox(standard | cancel)
-    controls.button(standard).setText(action)
-    controls.button(cancel).setText('取消')
+    close = QDialogButtonBox.StandardButton.Close
+    controls = QDialogButtonBox(standard if standard == close else standard | cancel)
+    controls.button(standard).setText(action or ('关闭' if standard == close else '确定'))
+    if standard != close:
+        controls.button(cancel).setText('取消')
     return controls
 
 
@@ -259,7 +260,7 @@ def details(parent, title, content):
     window.resize(800, 550)
     layout = QVBoxLayout(window)
     layout.addWidget(readonly_text(content))
-    controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+    controls = dialog_buttons(QDialogButtonBox.StandardButton.Close)
     controls.rejected.connect(window.reject)
     layout.addWidget(controls)
     window.exec()

@@ -20,13 +20,18 @@ try {
     & $Python scripts/verify_qt_native.py .test_qt/packaged200 --exe $exe --scale 2 --tk-migration
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Qt smoke test failed at 200% DPI.' }
     New-Item -ItemType Directory -Force -Path release | Out-Null
+    $assets = @()
     if ($Iscc) {
         & $Iscc "/DAppVersion=$version" packaging/installer_qt.iss
         if ($LASTEXITCODE -ne 0) { throw 'Qt installer build failed.' }
-        Get-FileHash -Algorithm SHA256 -LiteralPath "release/AIFinanceHelperQt-$version-Setup-x64.exe"
+        $assets += "release/AIFinanceHelperQt-$version-Setup-x64.exe"
     }
-    Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath "release/AIFinanceHelperQt-$version-Windows-x64.zip" -Force
-    Get-FileHash -Algorithm SHA256 -LiteralPath "release/AIFinanceHelperQt-$version-Windows-x64.zip"
+    $portable = "release/AIFinanceHelperQt-$version-Windows-x64.zip"
+    Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath $portable -Force
+    $assets += $portable
+    Get-FileHash -Algorithm SHA256 -LiteralPath $assets | ForEach-Object {
+        "$($_.Hash.ToLowerInvariant())  $(Split-Path -Leaf $_.Path)"
+    } | Set-Content -LiteralPath "release/SHA256SUMS-qt-$version.txt" -Encoding ascii
 }
 finally {
     Pop-Location

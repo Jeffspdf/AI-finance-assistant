@@ -12,6 +12,7 @@ from finance.demo import initialize_demo
 from finance.importer import money_to_cents, parse_statement
 from finance.qa import answer_question, month_shift, parse_question
 from finance.storage import Store
+from .monthly_savings import monthly_savings
 
 
 MONTH_NUMBERS = {name: number for number, name in enumerate('一 二 三 四 五 六 七 八 九 十 十一 十二'.split(), 1)}
@@ -55,6 +56,11 @@ def query_ledger(path, question, client, cancelled):
     store = Store(path, read_only=True)
     frame = store.spending_view()
     today = date.today()
+    if cancelled.is_set():
+        return None
+    plan = monthly_savings(frame, question, today)
+    if plan:
+        return plan
     months = set(frame.date.str[:7]) | set(frame.attrs.get('source_months', ()))
     budgets = {month: store.budgets(month) for month in months | {month_shift(today, i) for i in (-1, 0)}}
     if cancelled.is_set():

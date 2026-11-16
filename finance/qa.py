@@ -293,6 +293,8 @@ def answer_question(frame, question, today=None, budgets=None, model=None, *, lo
     denominator=int(expenses.amount_cents.sum())
     if category and metric=='expense':
         insight=f'占本期{spend_title}的 {total/denominator*100:.2f}%。' if denominator>0 else f'本期{spend_title}不大于零，占比不适用。'
+    elif metric=='balance':
+        insight=f'收入 {yuan(income)} 元 − {spend_title} {yuan(expense)} 元。'
     elif not tx.empty:
         grouped=tx.groupby('merchant').amount_cents.sum()
         if not grouped.empty and int(grouped.max())>0:

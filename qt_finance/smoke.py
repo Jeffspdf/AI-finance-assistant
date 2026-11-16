@@ -263,6 +263,19 @@ def query_feedback(app, window, directory, output):
     ambiguous = query_ledger(fixture.path, '把十月份吃饭相关的小票加在一起，总共花了多少钱？', None, cancel)
     assert ambiguous['status'] == 'unsupported' and '请补充年份' in ambiguous['answer'] and not ambiguous['evidence']
 
+    before_plan = Path(window.workspace.store.path).read_bytes()
+    last_month = month_shift(date.today(), -1)
+    goal_month = month_shift(date.today(), 0)
+    target_year, target_number = goal_month.split('-')
+    base_year, base_number = last_month.split('-')
+    chat.submit(f'我计划在{target_year}年{int(target_number)}月比{base_year}年{int(base_number)}月多存1000元，收入不变的情况下，我的开支里面有哪些部分可以再优化')
+    wait(app, lambda: not chat.busy, 'monthly savings answer')
+    assert chat.last_result['parser'] == '本地储蓄试算', chat.last_result
+    assert chat.last_result['route'] == 'plan' and chat.last_result['scope'] == f'{last_month} → {goal_month}'
+    assert chat.last_result['trace']['inputs']['extra_cents'] == 100000
+    assert Path(window.workspace.store.path).read_bytes() == before_plan
+    assert chat.grab().save(str(output / 'qt-monthly-savings.png'))
+
     window.navigate('ledger')
     seen = []
 
@@ -743,8 +756,8 @@ def model_and_updates(app, window, directory):
     release = dict(tag_name=tag, draft=False, prerelease=False, assets=[asset, stable_setup_asset])
     assert updates.select_release([dict(release, tag_name='v0.10.1')]) is None
     assert updates.select_release([dict(release, prerelease=True)]) is None
-    preview_tag = 'qt-v0.10.0-preview.13'
-    setup_name = 'AIFinanceHelperQt-0.10.0-preview.13-Setup-x64.exe'
+    preview_tag = 'qt-v0.10.0-preview.14'
+    setup_name = 'AIFinanceHelperQt-0.10.0-preview.14-Setup-x64.exe'
     setup_asset = dict(asset, name=setup_name, browser_download_url=f'{updates.RELEASES}/download/{preview_tag}/{setup_name}')
     preview = dict(tag_name=preview_tag, draft=False, prerelease=True, assets=[setup_asset])
     assert updates.select_release([preview]) is None

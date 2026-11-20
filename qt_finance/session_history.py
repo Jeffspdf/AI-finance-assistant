@@ -15,6 +15,19 @@ MAX_TITLE = 60
 MAX_FILE = 8 * 1024 * 1024
 
 
+def history_text(payload):
+    text = payload.get('display_answer', payload['answer'])
+    if payload.get('query_state'):
+        state = payload['query_state']
+        metadata = '\n查询范围：' + payload.get('scope_display', payload.get('scope', ''))
+        metadata += ' · ' + (state.get('category') or '、'.join(state.get('categories') or state.get('compare_categories') or []) or '全部分类')
+        metadata += ' · ' + (state.get('merchant') or '全部商户')
+        metadata += '\n' + payload.get('basis', '') + ' · ' + payload.get('calculated_at', '')
+        # Metadata remains plain text, never executable query context or source evidence.
+        text = text[:MAX_TEXT - len(metadata)] + metadata
+    return text
+
+
 class SessionHistory:
     def __init__(self, directory, mode):
         self.path = Path(directory) / f'chat-history-{mode}.json'
@@ -62,7 +75,7 @@ class SessionHistory:
             raise ValueError('本机对话历史无法读取，原文件已保留。可关闭本机保存并确认删除。') from None
 
     def save(self, sessions, active, titles=None):
-        rows = [[(role, (payload if role == 'user' else payload.get('display_answer', payload['answer']))[:MAX_TEXT])
+        rows = [[(role, (payload if role == 'user' else history_text(payload))[:MAX_TEXT])
                  for role, payload in messages] for messages in sessions]
         content = dict(version=1, active=active, sessions=rows)
         if titles is not None:

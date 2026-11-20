@@ -20,10 +20,14 @@ REQUEST = re.compile(
 )
 
 
+def matched_savings_request(question):
+    return REQUEST.fullmatch(re.sub(r'\s+', '', question))
+
+
 def monthly_savings(frame, question, today):
-    query = re.sub(r'\s+', '', question)
-    request = REQUEST.fullmatch(query)
+    request = matched_savings_request(question)
     if not request:
+        query = re.sub(r'\s+', '', question)
         if re.search(r'多(?:存|攒|储蓄)|提高储蓄|减少开支', query) and re.search(r'开支|支出|消费|收入', query):
             return dict(answer='这是储蓄规划问题。请说明基准月份、目标月份、希望多存的金额和收入是否变化。'
                         '例如：“我想在11月比10月多存1000元，收入不变的情况下，怎么省？”',

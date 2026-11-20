@@ -1,0 +1,5 @@
+Generated with the built-in image_gen tool, transparent background.
+Asset: piggy_bank.png. Coins are drawn and animated locally by qt_finance/piggy.py.
+
+Final prompt:
+Create a production-ready transparent PNG mascot asset for a Chinese personal finance desktop app. One adorable plump pink ceramic piggy bank, friendly small black eyes, rounded snout, short legs, slight three-quarter view, polished soft 3D illustration, restrained highlights, readable at 160 pixels. A clearly visible horizontal coin slot on the top of its back, approximately centered horizontally. Full pig body contained in lower two-thirds of square canvas, ample transparent empty space above for coins that the application will animate separately falling into the slot. No coins baked into this image, no text, no symbols, no scenery, no floor, no background. Transparent background, clean alpha silhouette. Pig is welcoming and tasteful, not humanoid.

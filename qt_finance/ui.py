@@ -27,6 +27,9 @@ QFrame#sidebar { background: $surface; border-right: 1px solid $border; }
 QFrame#card, QFrame#composer { background: $surface; border: 1px solid $border; border-radius: 14px; }
 QFrame#userBubble { background: $muted_surface; border-radius: 15px; }
 QFrame#assistantBubble { background: $surface; border: 1px solid $border; border-radius: 15px; }
+QFrame#savingsReply { background: $surface; border: 1px solid #c9ddd2; border-radius: 15px; }
+QLabel#savingsTitle { color: $primary; font-size: 19px; font-weight: 700; }
+QLabel#savingsEstimate { color: $primary; background: $selected; border-radius: 8px; padding: 7px 9px; }
 QFrame#headerRule { background: $border; border: none; }
 QLabel#title { font-size: 24px; font-weight: 700; }
 QLabel#hero { font-size: 30px; font-weight: 700; }
@@ -138,6 +141,7 @@ def label(text, role=None):
     widget = QLabel(str(text))
     widget.setTextFormat(Qt.TextFormat.PlainText)
     widget.setWordWrap(True)
+    widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     if role:
         widget.setObjectName(role)
     return widget

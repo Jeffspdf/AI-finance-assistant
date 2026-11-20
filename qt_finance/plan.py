@@ -97,8 +97,11 @@ class ManualPlan(QDialog):
         scenario = self.scenario.currentText()
         self.calculate(values, scenario)
         values['budget_cents'] = values[scenario]
-        if GoalsDialog(self.owner).edit({}, prefilled=values):
+        values['name'] = f"手动方案 {scenario} · ¥{yuan(values['target_cents'])}"
+        dialog = GoalsDialog(self.owner)
+        if dialog.edit({}, prefilled=values):
             self.owner.ledger_changed('储蓄目标已保存。')
+            dialog.exec()
             self.accept()
 
 
@@ -111,6 +114,11 @@ class PlanPage(QWidget):
         self.consent = None
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
+        goal_actions = QHBoxLayout()
+        goal_actions.addWidget(button('储蓄目标与实际存款', lambda: self.open_goals(), primary=True))
+        goal_actions.addWidget(label('查看已保存的方案、到期预测和存款记录。', 'muted'))
+        goal_actions.addStretch(1)
+        layout.addLayout(goal_actions)
         layout.addWidget(label('A/B/C 方案比较'))
         layout.addWidget(label('比较按现状、压缩部分开支和按目标反推三种情景。', 'muted'))
         frame, panel = card()
@@ -148,7 +156,6 @@ class PlanPage(QWidget):
         actions.addWidget(self.stop_button)
         actions.addWidget(self.evidence)
         actions.addStretch(1)
-        actions.addWidget(button('目标与存款', lambda: GoalsDialog(self.owner).exec()))
         panel.addLayout(actions)
         layout.addWidget(frame)
         self.status = label('规划为本次模拟，金额由本地服务计算。', 'muted')
@@ -230,6 +237,7 @@ class PlanPage(QWidget):
             breakdown.setText('等待规划')
 
     def reset_workspace(self):
+        self.protected_categories = ()
         self.invalidate()
         self.authorized.setChecked(False)
         self.authorized.setEnabled(self.owner.client is not None)
@@ -257,7 +265,8 @@ class PlanPage(QWidget):
         self.scenario.setEnabled(False)
         self.prefill.setEnabled(False)
         self.status.setText('正在生成本次规划…')
-        self.owner.jobs.start('plan', lambda event: savings_plan(path, mode, inputs, client, consent, event), self.finish)
+        self.owner.jobs.start('plan', lambda event: savings_plan(path, mode, inputs, client, consent, event,
+                protected_categories=getattr(self, 'protected_categories', ())), self.finish)
 
     def finish(self, result, error):
         self.consent = None
@@ -291,13 +300,35 @@ class PlanPage(QWidget):
                     text += '\n存在负现金流，方案不可直接执行。'
                 breakdown.setText(text)
 
+    def load_chat_plan(self, values, result):
+        self.protected_categories = tuple(values.get('protected_categories', ()))
+        self.invalidate()
+        mode = 'assumption' if 'income_cents' in values else 'historical'
+        self.mode.setCurrentIndex(self.mode.findData(mode))
+        for name, field in self.inputs.items():
+            if name in values:
+                field.setText(values[name])
+        if self.protected_categories:
+            self.coverage_hint.setText('沿用对话保护分类：' + '、'.join(self.protected_categories) + '；可返回对话修改。')
+        if result:
+            self.finish(result, '')
+        else:
+            self.status.setText('账本已更新，请确认输入后重新生成。')
+
     def prefill_goal(self):
         if self.result is None:
             return
-        values = scenario_goal_values(self.result, self.scenario.currentText())
+        scenario = self.scenario.currentText()
+        title = {'A': '按现状', 'B': '压缩部分开支', 'C': '按目标反推'}[scenario]
+        values = scenario_goal_values(self.result, scenario)
+        values['name'] = f"方案 {scenario} · {title} · ¥{yuan(values['target_cents'])}"
         dialog = GoalsDialog(self.owner)
         if dialog.edit({}, prefilled=values):
             self.owner.ledger_changed('储蓄目标已保存。')
+            dialog.exec()
+
+    def open_goals(self, goal_id=None):
+        GoalsDialog(self.owner, goal_id).exec()
 
     def trace(self):
         if self.result:

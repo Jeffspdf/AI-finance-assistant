@@ -29,6 +29,9 @@ try {
     $portable = "release/AIFinanceHelperQt-$version-Windows-x64.zip"
     Compress-Archive -Path dist/AIFinanceHelperQt -DestinationPath $portable -Force
     $assets += $portable
+    & $Python packaging/qt_source_archive.py $version
+    if ($LASTEXITCODE -ne 0) { throw 'Qt source archive verification failed.' }
+    $assets += "release/AIFinanceHelperQt-$version-Source.zip"
     Get-FileHash -Algorithm SHA256 -LiteralPath $assets | ForEach-Object {
         "$($_.Hash.ToLowerInvariant())  $(Split-Path -Leaf $_.Path)"
     } | Set-Content -LiteralPath "release/SHA256SUMS-qt-$version.txt" -Encoding ascii

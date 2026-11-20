@@ -31,6 +31,7 @@ from finance.updates import update_error_message
 from finance.spending_presenter import basis_label, net_export_csv, spending_totals
 
 from .chat import EVIDENCE_COLUMNS, Evidence, display_date
+from .expense_draft import CHANNELS, duplicate_expenses
 from .overview_chart import SpendingChart
 from .services import preview_statement
 from .ui import ComboBox, button, card, confirm, details, dialog_buttons, label, readonly_text, selected, selected_rows, table
@@ -43,8 +44,24 @@ def toolbar(layout):
     return row
 
 
-def select_month(frame, month):
-    return frame.loc[frame.date.str.startswith(month)].copy() if month else frame
+def includes_month(period, month):
+    if isinstance(period, tuple):
+        return period[0] <= month <= period[1]
+    return not period or month == period
+
+
+def select_month(frame, period):
+    return frame.loc[frame.date.str[:7].map(lambda month: includes_month(period, month))].copy() if period else frame
+
+
+def period_label(period):
+    return ' 至 '.join(period) if isinstance(period, tuple) else period or '全部月份'
+
+
+def range_months(start, end):
+    first = date.fromisoformat(start + '-01')
+    last = date.fromisoformat(end + '-01')
+    return [month_shift(first, i) for i in range((last.year - first.year) * 12 + last.month - first.month + 1)]
 
 
 def periods_with_records(frame):
@@ -99,8 +116,12 @@ def save_form(dialog, layout, form, title, save):
     controls.accepted.disconnect(dialog.accept)
 
     def submit():
+        if not controls.isEnabled():
+            return
+        controls.setEnabled(False)
         try:
-            save()
+            if save() is False:
+                return
         except (ValueError, OSError, sqlite3.Error) as exc:
             field = getattr(exc, 'field', None)
             if form.getWidgetPosition(error)[0] >= 0:
@@ -117,6 +138,8 @@ def save_form(dialog, layout, form, title, save):
             error.show()
         else:
             dialog.accept()
+        finally:
+            controls.setEnabled(True)
 
     controls.accepted.connect(submit)
 
@@ -172,8 +195,10 @@ class OverviewPage(Page):
         self.layout.addWidget(self.basis)
         row = toolbar(self.layout)
         self.month = ComboBox()
-        self.month.setAccessibleName('统计月份')
+        self.custom_period = None
+        self.month.setAccessibleName('统计范围')
         row.addWidget(self.month)
+        self.action(row, '自定义范围…', self.choose_period)
         self.action(row, '查看洞察', self.insights)
         self.demo_button = self.action(row, '生成演示账单', self.demo)
         self.six_demo_button = self.action(row, '加载六笔对账示例', self.six_demo)
@@ -200,7 +225,7 @@ class OverviewPage(Page):
         reminder_layout = QVBoxLayout(reminder_page)
         self.reminder_caption = label('', 'muted')
         reminder_layout.addWidget(self.reminder_caption)
-        self.reminder_view, self.reminders = table((('类型', 'type'), ('项目', 'title'), ('提醒', 'message')))
+        self.reminder_view, self.reminders = table((('类型', 'type'), ('范围', 'period'), ('项目', 'title'), ('提醒', 'message')))
         reminder_layout.addWidget(self.reminder_view, 1)
         reminder_actions = toolbar(reminder_layout)
         self.action(reminder_actions, '查看选中提醒', self.open_reminder)
@@ -218,27 +243,71 @@ class OverviewPage(Page):
         self.month.blockSignals(True)
         self.month.clear()
         self.month.addItem('全部月份', '')
+        self.month.addItem('最近 3 个完整月', 'last3')
+        self.month.addItem('最近 6 个完整月', 'last6')
+        if self.custom_period:
+            self.month.addItem(period_label(self.custom_period), self.custom_period)
         for period in periods:
             self.month.addItem(period, period)
         self.month.setCurrentIndex(max(0, self.month.findData(previous)))
         self.month.blockSignals(False)
-        period = self.month.currentData()
+        period = self.selected_period()
+        covered = sorted(month for month in recorded if includes_month(period, month))
+        requested = range_months(*period) if isinstance(period, tuple) else [period] if period else (
+            range_months(min(recorded), max(recorded)) if recorded else [])
+        missing = [month for month in requested if month not in recorded]
         scoped = select_month(frame, period)
         totals = spending_totals(scoped)
         for name, label_widget in self.metrics.items():
-            label_widget.setText('¥' + yuan(totals[name]))
-        coverage = ' · 本期暂无已导入账单' if period and period not in recorded else ''
-        self.basis.setText(f"{basis_label(totals['basis'])} · {self.month.currentText()}{coverage}")
+            label_widget.setText('¥' + yuan(totals[name]) if covered else '—')
+        coverage = f'{len(covered)} 个月有记录' if covered else '本期暂无账单记录'
+        if missing:
+            coverage += ' · 缺月：' + '、'.join(missing[:4])
+            if len(missing) > 4:
+                coverage += f' 等 {len(missing)} 个月'
+        self.basis.setText(f"{basis_label(totals['basis'])} · {period_label(period)} · {coverage}")
         monthly, categories = overview(scoped)
         self.monthly.replace(monthly.to_dict('records'))
         self.categories.replace(categories.to_dict('records'))
-        trend, _ = overview(frame.loc[frame.date.str[:7] <= period].copy() if period else frame)
-        self.trend_chart.show_values(zip(trend['月份'].tail(12), trend['支出'].tail(12)))
+        self.trend_chart.show_values(zip(monthly['月份'], monthly['支出']))
         top = categories.head(5)
         self.category_chart.show_values(zip(top.get('分类', ()), top.get('支出', ())))
-        self.refresh_reminders(frame, period or date.today().strftime('%Y-%m'))
+        self.refresh_reminders(frame, period, covered)
         for control in (self.demo_button, self.six_demo_button):
             control.setVisible(self.owner.workspace.mode == 'demo')
+
+    def selected_period(self):
+        period = self.month.currentData()
+        if period in ('last3', 'last6'):
+            today = date.today()
+            return month_shift(today, -int(period[-1])), month_shift(today, -1)
+        return period
+
+    def choose_period(self):
+        dialog, layout, form = fields(self, '自定义统计范围')
+        today = date.today()
+        period = self.selected_period() or (month_shift(today, -3), month_shift(today, -1))
+        start, end = period if isinstance(period, tuple) else (period, period)
+        first, last = BudgetMonthPicker(), BudgetMonthPicker()
+        first.setAccessibleName('开始月份')
+        last.setAccessibleName('结束月份')
+        first.setCurrentText(start if 2000 <= int(start[:4]) <= 2099 else '2000-01')
+        last.setCurrentText(end if 2000 <= int(end[:4]) <= 2099 else '2099-12')
+        form.addRow('开始月份', first)
+        form.addRow('结束月份', last)
+
+        def save():
+            if first.currentText() > last.currentText():
+                raise FieldError(last, '结束月份须等于或晚于开始月份。')
+            self.custom_period = first.currentText(), last.currentText()
+
+        save_form(dialog, layout, form, '应用范围', save)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            index = self.month.findData(self.custom_period)
+            if index < 0:
+                self.month.addItem(period_label(self.custom_period), self.custom_period)
+                index = self.month.count() - 1
+            self.month.setCurrentIndex(index)
 
     def six_demo(self):
         if self.owner.workspace.mode != 'demo' or not self.store.source_transactions().empty:
@@ -248,28 +317,28 @@ class OverviewPage(Page):
             self.changed('示例已加载。前往退款与对账生成候选。')
 
     def insights(self):
-        month = self.month.currentData() or date.today().strftime('%Y-%m')
-        goals = self.store.goals().to_dict('records')
-        contributions = {goal['id']: self.store.contributions(goal['id']) for goal in goals}
-        observations = make_insights(self.store.spending_view(), month, goals, contributions)
+        period = self.selected_period()
+        frame = select_month(self.store.spending_view(), period)
+        months = sorted(month for month in periods_with_records(frame) if includes_month(period, month))
+        observations = [item for month in months for item in make_insights(frame, month)]
         if not observations:
-            self.owner.notice(f'{month} 的已导入数据暂未生成洞察。')
+            self.owner.notice(f'{period_label(period)}的已导入数据暂未生成跨月变化洞察。')
             return
-        details(self, f'{month} 财务洞察', observations)
+        details(self, f'{period_label(period)}财务洞察', observations)
 
     def open_category(self):
         category = selected(self.category_view, self.categories)['分类']
-        self.owner.open_ledger(self.month.currentData(), category)
+        self.owner.open_ledger(self.selected_period(), category)
 
-    def refresh_reminders(self, frame, month):
+    def refresh_reminders(self, frame, period, covered):
         rows = []
-        if month in periods_with_records(frame):
+        for month in covered:
             budgets = budget_report(frame, month, self.store.budgets(month))
             for budget in budgets.to_dict('records'):
                 if budget['超支'] <= 0:
                     continue
                 category = budget['分类']
-                rows.append(dict(type='预算超支', title=category, month=month,
+                rows.append(dict(type='预算超支', title=category, month=month, period=month,
                                  message=f"净支出 ¥{budget['已支出']:,.2f}，超支 ¥{budget['超支']:,.2f}",
                                  key=(str(self.store.path), month, category, budget['预算'], budget['已支出'])))
         for goal in self.store.goals().to_dict('records'):
@@ -280,14 +349,19 @@ class OverviewPage(Page):
             if not progress['remaining']:
                 continue
             behind = progress['behind_cents']
-            deficit = progress['plan']['deficit']
+            deficit = progress['current_deficit']
             if behind or deficit:
-                message = f'实际进度落后 ¥{yuan(behind)}' if behind else f'计划到期缺口 ¥{yuan(deficit)}'
+                message = (f"当前到期缺口 ¥{yuan(deficit)} · 已存 ¥{yuan(progress['actual_saved'])}"
+                           f" · 剩余 {len(progress['future_dates'])} 次")
+                if behind:
+                    message += f' · 实际进度落后 ¥{yuan(behind)}'
                 rows.append(dict(type='储蓄目标', title=goal['name'], message=message,
-                                 key=(str(self.store.path), goal['id'], behind, deficit)))
+                                 goal_id=goal['id'], period='当前进度',
+                                 key=(str(self.store.path), goal['id'], behind, deficit, progress['actual_saved'])))
         visible = [row for row in rows if row['key'] not in self.dismissed]
         self.reminders.replace(visible)
-        self.reminder_caption.setText(f'{month} 预算超支 · 储蓄目标按当前进度' if visible else f'{month} · 暂无需要查看的提醒')
+        scope = f'{period_label(period)}预算 · 储蓄目标按当前日期'
+        self.reminder_caption.setText(scope if visible else scope + ' · 暂无需要查看的提醒')
         self.tabs.setTabText(self.reminder_tab, f'提醒 ({len(visible)})' if visible else '提醒')
 
     def dismiss_reminder(self):
@@ -307,6 +381,7 @@ class OverviewPage(Page):
                 budget.show_evidence()
         else:
             self.owner.navigate('plan')
+            self.owner.plan.open_goals(row['goal_id'])
 
     def demo(self):
         if self.owner.workspace.mode != 'demo':
@@ -372,8 +447,9 @@ class LedgerPage(Page):
         self.action(row, '记一笔', self.edit_new)
         actions = toolbar(self.layout)
         self.selected_actions = [self.action(actions, title, callback) for title, callback in (
-            ('查看来源', self.source), ('编辑选中', self.edit_selected), ('删除选中', self.delete_selected),
+            ('查看来源', self.source), ('编辑选中', self.edit_selected),
         )]
+        self.delete_action = self.action(actions, '删除选中', self.delete_selected)
         self.action(actions, '导入批次', self.import_history)
         self.action(actions, '导出净额', self.export)
         category_button = button('分类', lambda: None)
@@ -416,15 +492,24 @@ class LedgerPage(Page):
         self.import_result.hide()
 
     def update_selection(self, *_):
-        single = len(self.view.selectionModel().selectedRows()) == 1
+        count = len(self.view.selectionModel().selectedRows())
         for control in self.selected_actions:
-            control.setEnabled(single)
+            control.setEnabled(count == 1)
+        self.delete_action.setEnabled(count > 0)
 
     def refresh(self):
         frame = self.store.source_transactions().sort_values('date', ascending=False)
         self.records = frame.to_dict('records')
-        options = ((self.month_filter, '全部月份', sorted(periods_with_records(frame), reverse=True)),
-                   (self.category_filter, '全部分类', sorted(set(frame.category) | set(category_options('支出')))))
+        months = sorted(periods_with_records(frame), reverse=True)
+        self.month_filter.blockSignals(True)
+        current_period = self.month_filter.currentData()
+        self.month_filter.clear()
+        self.month_filter.addItem('全部月份', '')
+        for month in months:
+            self.month_filter.addItem(month, month)
+        self.set_period(current_period)
+        self.month_filter.blockSignals(False)
+        options = ((self.category_filter, '全部分类', sorted(set(frame.category) | set(category_options('支出')))),)
         for control, first, values in options:
             current = control.currentText()
             control.blockSignals(True)
@@ -434,6 +519,13 @@ class LedgerPage(Page):
                 control.setCurrentText(current)
             control.blockSignals(False)
         self.filter()
+
+    def set_period(self, period):
+        index = self.month_filter.findData(period or '')
+        if index < 0:
+            self.month_filter.addItem(period_label(period), period)
+            index = self.month_filter.count() - 1
+        self.month_filter.setCurrentIndex(index)
 
     def filter(self, *_):
         query = self.search.text().strip().casefold()
@@ -450,10 +542,10 @@ class LedgerPage(Page):
         else:
             matches = lambda row: not query or any(query in str(row.get(key, '')).casefold()
                                                   for key in ('date', 'merchant', 'category', 'description', 'external_id'))
-        month = self.month_filter.currentText() if self.month_filter.currentIndex() > 0 else ''
+        period = self.month_filter.currentData()
         category = self.category_filter.currentText() if self.category_filter.currentIndex() > 0 else ''
         self.model.replace(row for row in self.records
-                           if (not month or row['date'].startswith(month))
+                           if includes_month(period, row['date'][:7])
                            and (not category or row['category'] == category)
                            and matches(row))
 
@@ -587,10 +679,10 @@ class LedgerPage(Page):
     def edit_selected(self):
         self.edit(selected(self.view, self.model))
 
-    def edit(self, original):
+    def edit(self, original, *, draft=None):
         if original and (original.get('status') == 'refund_pending' or original['kind'] == '退款'):
             raise ValueError('请在退款与对账页核对独立退款流水。')
-        dialog, layout, form = fields(self, '编辑交易' if original else '手工记账')
+        dialog, layout, form = fields(self, '确认消费记录' if draft else ('编辑交易' if original else '手工记账'))
         self.owner.install_dialog_help(dialog)
         inputs = {}
         original_date = original.get('date', '')
@@ -601,7 +693,7 @@ class LedgerPage(Page):
             ('merchant', '商户', ''), ('description', '摘要', ''),
             ('amount_cents', '金额 / 元', ''),
         ):
-            initial = original.get(key, default)
+            initial = (draft or original).get(key, default)
             if key == 'date' and original:
                 initial = shown_date
             if key == 'amount_cents' and original:
@@ -621,13 +713,27 @@ class LedgerPage(Page):
 
         kind.currentTextChanged.connect(sync)
         sync()
-        category.setCurrentText(original.get('category', category.currentText()))
+        category.setCurrentText((draft or original).get('category', category.currentText()))
         form.addRow('类型', kind)
         form.addRow('分类', category)
+        channel = None
+        if draft:
+            kind.setEnabled(False)
+            channel = ComboBox()
+            channel.setObjectName('expenseChannel')
+            channel.addItems(['请选择支付方式', *CHANNELS])
+            if draft['channel']:
+                channel.setCurrentText(draft['channel'])
+            form.addRow('支付方式', channel)
+            space = '演示空间' if self.owner.workspace.mode == 'demo' else '我的账本'
+            form.addRow('', label(f'将保存到「{space}」。请核对金额和支付方式。', 'muted'))
+        saved = {}
         learn = QCheckBox('记住此商户的分类')
         if original:
             form.addRow('', learn)
         def save():
+            if saved:
+                return True
             data = {key: entry.text().strip() for key, entry in inputs.items()}
             unchanged_date = bool(original) and data['date'] == shown_date
             if unchanged_date:
@@ -652,19 +758,37 @@ class LedgerPage(Page):
             if original:
                 self.store.edit_transaction(original['id'], data, learn=learn.isChecked())
             else:
-                self.store.add_manual_transaction(data['date'], data['merchant'], data['amount_cents'],
-                                                  data['kind'], data['category'], data['description'])
+                if channel is not None and channel.currentIndex() == 0:
+                    raise FieldError(channel, '请选择这笔消费的支付方式。')
+                payment = channel.currentText() if channel is not None else '手动'
+                if draft:
+                    duplicates = duplicate_expenses(self.store, data, payment)
+                    if duplicates:
+                        items = '、'.join(f"{row['date'][:10]} {row['merchant']} ¥{yuan(row['amount_cents'])}"
+                                         for row in duplicates[:3])
+                        if not confirm(dialog, '可能重复记账', f'找到 {len(duplicates)} 笔相似支出：{items}。仍要新增一笔吗？',
+                                       accept='仍然记账', decline='返回修改'):
+                            return False
+                identifier = self.store.add_manual_transaction(data['date'], data['merchant'], data['amount_cents'],
+                                                               data['kind'], data['category'], data['description'], channel=payment)
+                saved.update(data, channel=payment, id=identifier)
 
-        save_form(dialog, layout, form, '保存交易', save)
+        save_form(dialog, layout, form, '确认记账' if draft else '保存交易', save)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.changed('交易已保存。')
+            return saved
 
     def delete_selected(self):
-        row = selected(self.view, self.model)
-        if confirm(self, '删除交易', f"从当前账本移除 {row['date']} · {row['merchant']} · ¥{yuan(row['amount_cents'])}？",
+        rows = selected_rows(self.view, self.model)
+        if not rows:
+            return
+        preview = '\n'.join(f"{row['date'][:10]} · {row['merchant']} · ¥{yuan(row['amount_cents'])}" for row in rows[:6])
+        if len(rows) > 6:
+            preview += f'\n另有 {len(rows) - 6} 笔。'
+        if confirm(self, '删除交易', f'从当前账本移除选中的 {len(rows)} 笔交易？\n交易将退出统计，原始来源和审计记录会保留。\n\n{preview}',
                    accept='确认删除', decline='暂不删除'):
-            self.store.soft_delete_transaction(row['id'], confirmed=True)
-            self.changed('交易已移除，来源和审计记录已保留。')
+            count = self.store.soft_delete_transactions((row['id'] for row in rows), confirmed=True)
+            self.changed(f'已移除 {count} 笔交易，来源和审计记录已保留。')
 
     def choose_import(self):
         source, _ = QFileDialog.getOpenFileName(self, '选择账单', '', '账单 (*.csv *.xlsx)')
@@ -845,15 +969,16 @@ class LedgerPage(Page):
         dialog.exec()
 
     def export(self):
-        period = self.month_filter.currentText() if self.month_filter.currentIndex() > 0 else ''
+        period = self.month_filter.currentData()
+        title = period_label(period)
         filename, _ = QFileDialog.getSaveFileName(
-            self, '导出净额 · ' + (period or '全部月份'), f'净额投影-{period or "全部月份"}.csv', 'CSV (*.csv)')
+            self, '导出净额 · ' + title, f'净额投影-{title}.csv', 'CSV (*.csv)')
         if filename:
             destination = Path(filename).resolve()
             if destination.suffix.lower() != '.csv':
                 raise ValueError('请将净额导出保存为 .csv 文件。')
             destination.write_bytes(net_export_csv(select_month(self.store.spending_view(), period)))
-            self.owner.notice(f'已导出{period or "全部月份"}的净额投影。')
+            self.owner.notice(f'已导出{title}的净额投影。')
 
 
 class BudgetMonthPicker(QPushButton):
@@ -1423,6 +1548,7 @@ class HelpPage(Page):
         super().__init__(owner, '使用帮助', '本地帮助按主题查看。')
         topics = {name: text.replace('设置与连接 → 管理账户与绑定', '侧栏 → 资金账户')
                   for name, text in load_help(asset_root / 'help.md').items()}
+        topics['对话记账'] = '例如输入「今天我花了100元喝星巴克」。核对日期、金额和分类，选微信、支付宝、银行卡、现金或其他，然后确认记账。取消可放弃草稿。开启本次会话联网理解后，模型可以理解复杂的单笔人民币消费表达，例如「昨晚去星巴克，用微信结的」。可继续回复金额或改支付方式，再确认入账。'
         chapters = ComboBox()
         chapters.addItems(topics)
         self.layout.addWidget(chapters)
@@ -1641,3 +1767,4 @@ class SettingsPage(Page):
         if confirm(self, '退出并升级 Qt', '确认关闭 Qt 并启动已校验的安装包？升级会使用当前程序目录。'):
             updates.launch_installer(*self.pending_install, self.install_directory, self.install_mode)
             self.owner.close()
+

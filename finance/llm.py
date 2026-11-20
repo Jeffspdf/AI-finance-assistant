@@ -121,6 +121,61 @@ class ModelClient:
         except (ValueError,KeyError,IndexError,TypeError):
             raise ModelResponseError('接口已响应，但返回格式不是有效的 Chat Completions JSON。') from None
 
+    def analyze_finances(self, payload):
+        return self._json(
+            'You are 小财灵, a Chinese personal finance assistant specializing in budgeting, '
+            'spending habits, cash flow and savings. Return exactly '
+            '{"analysis":"Chinese prose","follow_up_question":"one concise question or empty string"}. '
+            'Answer the actual question in natural conversational Chinese. Start with an assessment '
+            'tied to the supplied summary and the user goal. Explain what drives that assessment '
+            'and offer one or two concrete measures relevant to the question. Put at most one '
+            'targeted question in follow_up_question, and only when a missing budget, goal, or '
+            'coverage gap materially affects the judgment. Never put that question in analysis. '
+            'If previous_follow_up_question and follow_up_answer are present, treat question as '
+            'the answer to that prior question and continue the same analysis rather than asking '
+            'the user to restate a category or month. '
+            'The app can calculate category rankings itself. When highest_expense_categories is present, name those categories and do not ask the user to find them. Imported records do not establish complete coverage. '
+            'Use recent user answers in analysis_history when relevant. Keep their constraints across turns. '
+            'Use the summary as the source of truth. Exact figures are already shown by the app to the user. Do not claim that figures are missing just because you receive only qualitative comparisons. Distinguish no imported records from zero '
+            'spending. Do not assume complete records, typical spending standards, reasons for '
+            'changes, or any amounts or facts not given. Monthly comparisons cannot establish spending immediately after payday, '
+            'payment-channel patterns, or causes. Mark any explanation not supported by the summary '
+            'as a possibility to check, never as a finding about the user. Mention a category or month only when '
+            'supported. Refer to periods in words. Do not include numerical amounts, percentages, '
+            'numbers, or numbered lists because the app separately displays verified figures. '
+            'When no ledger summary is provided, offer conceptual personal finance guidance only. '
+            'For out-of-domain questions, briefly guide the user back to personal finance. '
+            'No stock picks or claims of writing records. Use short paragraphs, no Markdown.',
+            payload, timeout=20)
+
+    def understand_expense(self, text):
+        return self._json(
+            'Classify this Chinese message. The exact JSON keys are intent, amount_text, merchant, multiple. '
+            'Return intent as expense only for a completed single RMB '
+            'expense the user reports or wants to record. Use query for questions about past records '
+            'and unsupported for other tasks. For expense, return amount_text as an exact contiguous '
+            'quote of the explicitly paid amount (including spoken Chinese numerals), or an empty '
+            'string when missing. Return merchant as an exact quote of the store or brand, skipping '
+            'verbs and quantities. For 今天花了100元喝了杯星巴克 use 星巴克, not 杯星巴克. '
+            'If the store is absent, return an empty string. Return multiple '
+            'as a boolean; use true for competing amounts, fees, or several purchases. '
+            'Never infer an amount from context, calculate a sum, or rewrite a quote.',
+            {'text': text}, timeout=15)
+
+    def understand_savings(self, payload, *, timeout=15):
+        return self._json(
+            'Extract a savings request or revision, not a financial answer. Return only a JSON object. '
+            'Optional fields: target_cents, months, saved_cents, income_cents, budget_cents, '
+            'protected_categories, clarification. Despite legacy field names, all money strings are YUAN, '
+            'not cents. months is an integer string. Only extract explicitly stated inputs or retain previous '
+            'values; never invent missing values. Resolve relative horizon changes against previous months. '
+            'Protected categories must be among 餐饮,交通,购物,居住,生活缴费,教育,医疗,娱乐,其他支出. '
+            'Do not silently drop previous protections. If a constraint is narrower than a category, '
+            'propose protecting the whole category and ask confirmation in clarification (Chinese). '
+            'For unsupported or ambiguous requests ask clarification. No calculations or recommendations. '
+            'This is an unconfirmed draft; the user will verify it before any calculation.',
+            payload, timeout=timeout)
+
     def plan_savings_action(self, payload, *, timeout=15):
         from .agent_protocol import ACTION_INSTRUCTION
         return self._json(ACTION_INSTRUCTION, payload, timeout=timeout)
@@ -136,6 +191,38 @@ class ModelClient:
         category=result.get('category')
         if category not in permitted: raise ValueError('模型返回了无效分类')
         return category
+
+    def interpret_finance_turn(self, payload):
+        return self._json(
+            '识别理财对话的意图。只返回 JSON {"action":"analysis|expense|query|clarify",'
+            '"reference":"current|none","missing":"intent|period|object|amount|none"}。'
+            '消费习惯、钱去了哪里、如何少花属于 analysis；查询实际账单数值、记录、分类属于 query；已发生消费且确有记账意图才选 expense；'
+            '描述工资发放后很快没钱、入不敷出或担心撑不到月底，即使没有问号，也属于收支和现金流 analysis。'
+            '如果没有明确指定月份而可按最近完整月份查看，analysis 的 missing 为 none，时间由本地按账本覆盖确定。'
+            '普通感叹或无法确认目标时选 clarify。current 仅用于明确指向刚展示结果或回答待答问题。'
+            '不要补写金额、时间、商户或其他事实，不要执行任何操作。',
+            payload, timeout=15,
+        )
+
+    def parse_ledger_patch(self, payload):
+        return self._json(
+            'Interpret a read-only ledger follow-up. Return JSON {"action":"patch","set":{FIELD:VALUE},'
+            '"clear":[],"clarification":null}. Allowed FIELD is period, category or merchant. '
+            'VALUE must be the exact literal from the question, including Chinese month wording. '
+            'Only one explicit field change is supported here. For unclear or compound requests '
+            'return {"action":"clarify","set":{},"clear":[],"clarification":{"field":"condition"}}. '
+            'Never supply calculations, SQL, amounts or write actions.', payload, timeout=12)
+
+    def plan_ledger_follow_up(self, payload):
+        patch = self.parse_ledger_patch(payload)
+        if (not isinstance(patch, dict) or set(patch) != {'action', 'set', 'clear', 'clarification'}
+                or patch['action'] != 'patch' or patch['clear'] != [] or patch['clarification'] is not None
+                or not isinstance(patch['set'], dict) or len(patch['set']) != 1):
+            return None
+        field, value = next(iter(patch['set'].items()))
+        if field not in ('period', 'category', 'merchant') or not isinstance(value, str) or not value or value not in payload['question']:
+            return None
+        return {'action': 'month' if field == 'period' else field, 'value': value}
 
     def parse_question(self, question):
         result=self._json('Understand a Chinese transaction query, NEVER calculate. Return JSON fields metric (expense,income,balance,count,top,share,budget,compare,average_expense,average_income), category (null or allowed label), period (this_month,last_month,all,YYYY-MM,last_3_complete_months). Optional merchant must be literal text from user. Optional date_from/date_to must both be exact YYYY-MM-DD from user; use period all with dates. Optional compare_categories contains exactly two labels; use metric compare and category null. Preserve EVERY condition, never broaden. For ambiguous/unsupported/future/investment/refund questions return {"unsupported":true}. Allowed categories: '+json.dumps(CATEGORIES,ensure_ascii=False),{'question':question})

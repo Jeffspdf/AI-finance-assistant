@@ -53,9 +53,13 @@ class AgentTools:
     TOOLS = {'data_coverage', 'spending_overview', 'scenario_simulate_batch'}
     MAX_CALLS = 6
 
-    def __init__(self, store=None, *, inputs=(), today=None, mode='historical'):
+    def __init__(self, store=None, *, inputs=(), today=None, mode='historical', protected_categories=()):
         if mode not in ('historical', 'assumption'):
             raise ToolValidationError('未知规划模式')
+        from .categories import category_options
+        if any(c not in category_options('支出') for c in protected_categories):
+            raise ToolValidationError('无效的保护分类')
+        self.protected_categories = tuple(sorted(set(protected_categories)))
         self.mode = mode
         self.today = today or date.today()
         self.inputs = {}
@@ -89,7 +93,7 @@ class AgentTools:
 
     def fresh_session(self, *, share_cache=False):
         """A new execution state on the SAME snapshot, used for local fallback."""
-        fresh = AgentTools(inputs=self.inputs.values(), today=self.today, mode='assumption')
+        fresh = AgentTools(inputs=self.inputs.values(), today=self.today, mode='assumption', protected_categories=self.protected_categories)
         fresh.mode, fresh.basis = self.mode, self.basis
         fresh._frame = self._frame.copy(deep=True) if self._frame is not None else None
         if share_cache:
@@ -256,6 +260,13 @@ class AgentTools:
         remaining = max(0, target_cents - saved_cents)
         required = (remaining + months - 1) // months
         available = base_income_cents - base_spending_cents
+        adjustable = base_spending_cents
+        if self.protected_categories:
+            if category_spending_cents is None:
+                adjustable = 0  # No category evidence: never assume protected spending is zero.
+            else:
+                protected = sum(max(0, category_spending_cents.get(c, 0)) for c in self.protected_categories)
+                adjustable = max(0, base_spending_cents - protected)
         results = []
         labels = set()
         for scenario in scenarios:
@@ -271,8 +282,10 @@ class AgentTools:
             requested = cut = 0
             if strategy == 'cut_categories':
                 cats = scenario['categories']
-                if not isinstance(cats, list) or not cats or any(not isinstance(c, str) for c in cats) or len(set(cats)) != len(cats):
+                if not isinstance(cats, list) or (not cats and not self.protected_categories) or any(not isinstance(c, str) for c in cats) or len(set(cats)) != len(cats):
                     raise ToolValidationError('分类必须唯一且非空')
+                if set(cats) & set(self.protected_categories):
+                    raise ToolValidationError('方案不能削减用户保护的分类')
                 pct = integer(scenario['cut_pct'], '压缩比例', 0, 100)
                 if category_spending_cents is None or any(c not in category_spending_cents for c in cats):
                     results.append(dict(label=label, strategy=strategy, status='insufficient_data',
@@ -280,16 +293,18 @@ class AgentTools:
                     continue
                 requested = sum(int((Decimal(max(0, category_spending_cents[c])) * pct / 100)
                                     .quantize(Decimal('1'), rounding=ROUND_HALF_UP)) for c in cats)
-                cut = min(requested, base_spending_cents)
+                cut = min(requested, adjustable)
             elif strategy == 'required_cut':
                 requested = max(0, required - available)
-                cut = min(requested, base_spending_cents)
+                cut = min(requested, adjustable)
             elif strategy != 'current':
                 raise ToolValidationError('未知模拟策略')
             monthly = available + cut
             projected = saved_cents + months * monthly
             results.append(dict(label=label, strategy=strategy, status='ok',
                                 spending_cut_cents=cut, requested_cut_cents=requested,
+                                protected_categories=list(self.protected_categories),
+                                adjustable_cents=adjustable,
                                 monthly_available_cents=monthly, projected_cents=projected,
                                 gap_cents=max(0, target_cents - projected),
                                 goal_met=projected >= target_cents,

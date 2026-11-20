@@ -192,9 +192,9 @@ def answer_question(frame, question, today=None, budgets=None, model=None, *, lo
     known_net_scope=(frame.attrs.get('projection')=='spending_view' and
         (scoped_coverage and metric in ('expense','income','count') if explicit_detail else
          month in frame.attrs.get('source_months',[]) or month=='all' and bool(frame.attrs.get('source_months'))))
-    if tx.empty and not known_net_scope:
+    if tx.empty and not (known_net_scope or metric=='breakdown' and scoped_coverage):
         return {'answer':f'没有 {label}，无法给出金额。请先导入对应账单；没有记录不代表没有消费。','evidence':[],'status':'missing','parser':source}
-    if metric in ['expense','share','top','budget','compare','average_expense']: tx=tx[tx.kind=='支出']
+    if metric in ['expense','share','top','budget','compare','breakdown','average_expense']: tx=tx[tx.kind=='支出']
     elif metric in ['income','average_income']: tx=tx[tx.kind=='收入']
     elif metric=='balance': tx=tx[tx.kind!='转账']
     if category: tx=tx[tx.category==category]
@@ -206,16 +206,31 @@ def answer_question(frame, question, today=None, budgets=None, model=None, *, lo
                    requested_months=sorted(requested_months)))]
         return dict(answer=text,evidence=[],status='no_match',parser=source,
                     trace=calculation('answer','query.no_match',tx,inputs=intent,extra=extra))
-    if tx.empty and not known_net_scope:
+    if tx.empty and not (known_net_scope or metric=='breakdown' and scoped_coverage):
         return {'answer':f'{label}中没有符合条件的{category or "相关"}记录，无法提供有源记录支持的金额。','evidence':[],'status':'missing','parser':source}
     total=int(tx.amount_cents.sum()); item=category or ''
     if tx.empty and metric in ('top','compare','average_expense','average_income'):
         return dict(answer='该口径下没有足够计入记录进行排名、比较或均值计算。',evidence=[],status='missing',parser=source)
-    if metric=='compare':
+    if metric=='breakdown':
+        names=intent['categories']
+        denominator=int(full.loc[full.kind=='支出','amount_cents'].sum())
+        tx=tx[tx.category.isin(names)]
+        breakdown=[]
+        for name in names:
+            rows=tx[tx.category==name]
+            cents=int(rows.amount_cents.sum())
+            breakdown.append(dict(category=name, cents=cents, count=count_records(rows),
+                                  share=f'{cents/denominator:.1%}' if denominator>0 else '不适用'))
+        breakdown_note='仅汇总已导入记录。0 元表示本次范围内匹配记录的净额为零。'
+        answer=f'{label}的分类净支出：'+'；'.join(
+            f"{row['category']} {yuan(row['cents'])} 元，{row['count']} 笔，占比 {row['share']}"
+            for row in breakdown)+'。'+breakdown_note
+    elif metric=='compare':
         names=intent['compare_categories'];tx=tx[tx.category.isin(names)]
         if tx.empty:return {'answer':'所比较分类没有可追溯的记录，无法提供金额，请先导入对应账单。','evidence':[],'status':'missing','parser':source}
         totals={c:int(tx.loc[tx.category==c,'amount_cents'].sum()) for c in names}
-        answer=f'{label}：'+ '；'.join(c+' '+yuan(totals[c])+' 元' for c in names)+f'。差额（{names[0]} − {names[1]}）为 {yuan(totals[names[0]]-totals[names[1]])} 元。计算方式：分别逐笔汇总再相减；零值仅代表已导入匹配记录的汇总。'
+        difference=f'差额（{names[0]} − {names[1]}）为 {yuan(totals[names[0]]-totals[names[1]])} 元。'
+        answer=f'{label}：'+ '；'.join(c+' '+yuan(totals[c])+' 元' for c in names)+'。'+difference+'计算方式：分别逐笔汇总再相减；零值仅代表已导入匹配记录的汇总。'
     elif metric in ['average_expense','average_income']:
         if period!='last_3_complete_months':return {'answer':'平均问题请指定“近三个月”。例如“近三个月月均支出是多少？”','evidence':[],'status':'unsupported','parser':source}
         observed=sorted(full.date.str[:7].unique());n=len(observed)
@@ -231,7 +246,7 @@ def answer_question(frame, question, today=None, budgets=None, model=None, *, lo
     elif metric=='top':
         grouped=tx.groupby('category').amount_cents.sum(); winners=grouped[grouped==grouped.max()]
         names='、'.join(winners.index)
-        answer=f'{label}中支出最高的分类为 {names}，每类 {yuan(int(grouped.max()))} 元。计算方式：按分类汇总并比较。'
+        answer=f'{label}中支出最高的分类为 {names}，{yuan(int(grouped.max()))} 元。计算方式：按分类汇总并比较。'
         # Include all compared expense rows so the ranking can be verified.
     elif metric=='share':
         if not category:
@@ -282,10 +297,11 @@ def answer_question(frame, question, today=None, budgets=None, model=None, *, lo
         headline=f'{item}{description}合计 {yuan(total)} 元，共 {count_records(tx)} 笔。'
     elif metric=='balance':headline=f'{item}结余为 {yuan(income-expense)} 元。'
     elif metric=='count':headline=f'{item}交易共 {count_records(tx)} 笔。'
-    elif metric=='top':headline=f'{spend_title}最高的分类：{names}，每类 {yuan(int(grouped.max()))} 元。'
+    elif metric=='top':headline=f'{spend_title}最高的分类：{names}，{yuan(int(grouped.max()))} 元。'
     elif metric=='share':
         headline=(f'{category}占比 {total/denominator*100:.2f}%（{yuan(total)} 元）。' if denominator>0 else f'{category}金额 {yuan(total)} 元；本期{spend_title}不大于零，占比不适用。')
     elif metric=='budget':headline=f'{category}{spend_title} {yuan(total)} 元，预算剩余 {yuan(budget-total)} 元，超支 {yuan(over)} 元。'
+    elif metric=='breakdown':headline='分类净支出'
     elif metric=='compare':headline='；'.join(c+' '+yuan(totals[c])+' 元' for c in names)+'。'
     elif metric in ('average_expense','average_income'):headline=f'月均'+(spend_title if metric=='average_expense' else '收入')+f' {total/100/n:,.2f} 元。'
     insight=''
@@ -302,4 +318,9 @@ def answer_question(frame, question, today=None, budgets=None, model=None, *, lo
     if not insight:insight=f'本次交易计数 {count_records(tx)} 笔；退款调整不增加消费笔数。'
     if requested_months - covered_months:
         insight+=' 尚无已导入记录的月份：'+'、'.join(sorted(requested_months - covered_months))+'。'
-    return {'answer':answer,'display_answer':headline.strip()+'\n'+insight,'details':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}
+    result={'answer':answer,'display_answer':headline.strip()+'\n'+insight,'details':answer,'evidence':evidence,'trace':trace,'status':'ok','parser':source}
+    if metric=='breakdown':
+        result.update(breakdown=breakdown, amount_note=breakdown_note, display_answer=headline)
+    if metric=='compare':
+        result.update(amounts=[(name, totals[name]) for name in names], amount_note=difference)
+    return result

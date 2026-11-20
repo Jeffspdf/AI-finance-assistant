@@ -316,17 +316,24 @@ class Store(Refunds,Reconciliation,BackupManagement):
         return len(ids)
 
     def soft_delete_transaction(self,txid,*,confirmed=False):
+        return bool(self.soft_delete_transactions([txid], confirmed=confirmed))
+
+    def soft_delete_transactions(self, identifiers, *, confirmed=False):
         if self.read_only:raise ValueError('只读账本不能删除交易')
         if confirmed is not True:raise ValueError('请先明确确认删除交易')
+        identifiers = tuple(dict.fromkeys(identifiers))
+        removed = 0
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
-            if old is None:raise ValueError('交易不存在')
-            if old['status']=='deleted':return False
-            self.invalidate_groups(db,txid,'单笔交易已删除，请重新核对关联')
-            db.execute("UPDATE transactions SET status='deleted' WHERE id=?",(txid,))
-            audit(db,'transaction_soft_deleted',txid,dict(old_status=old['status'],date=old['date'],merchant=old['merchant'],amount_cents=old['amount_cents'],category=old['category'],kind=old['kind'],raw_source_retained=True))
-        return True
+            for txid in identifiers:
+                old=db.execute('SELECT * FROM transactions WHERE id=?',(txid,)).fetchone()
+                if old is None:raise ValueError('交易不存在，请刷新后重试')
+                if old['status']=='deleted':continue
+                self.invalidate_groups(db,txid,'交易已删除，请重新核对关联')
+                db.execute("UPDATE transactions SET status='deleted' WHERE id=?",(txid,))
+                audit(db,'transaction_soft_deleted',txid,dict(old_status=old['status'],date=old['date'],merchant=old['merchant'],amount_cents=old['amount_cents'],category=old['category'],kind=old['kind'],raw_source_retained=True))
+                removed += 1
+        return removed
 
     def transaction_source(self,identifier):
         with self.connect(read_only=True) as db:
@@ -412,7 +419,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
     def save_goal(self, plan):
         fields = ['name','target_cents','saved_cents','start_date','deadline','income_cents','budget_cents']
         with self.connect() as db:
-            db.execute(f"INSERT INTO goals ({','.join(fields)}) VALUES ({','.join('?' for _ in fields)})", [plan[k] for k in fields])
+            return db.execute(f"INSERT INTO goals ({','.join(fields)}) VALUES ({','.join('?' for _ in fields)})", [plan[k] for k in fields]).lastrowid
 
     def goals(self):
         with self.connect(read_only=True) as db:
@@ -485,7 +492,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
             self.repair_invalid_groups(db=db,source='model_category')
             return True
 
-    def add_manual_transaction(self,when,merchant,amount_cents,kind,category,description=''):
+    def add_manual_transaction(self,when,merchant,amount_cents,kind,category,description='', *, channel='手动'):
         from .importer import parse_statement
         from .categories import CATEGORIES
         import csv,io,uuid
@@ -494,7 +501,7 @@ class Store(Refunds,Reconciliation,BackupManagement):
         validate_kind_category(kind,category)
         external='MANUAL-'+uuid.uuid4().hex
         stream=io.StringIO();writer=csv.writer(stream);writer.writerow(['交易ID','日期','商户','描述','金额','类型','平台','币种'])
-        writer.writerow([external,when,merchant,description,f'{amount_cents//100}.{amount_cents%100:02d}',kind,'手动','CNY'])
+        writer.writerow([external,when,merchant,description,f'{amount_cents//100}.{amount_cents%100:02d}',kind,channel,'CNY'])
         result=parse_statement(stream.getvalue().encode('utf-8-sig'),'manual.csv')
         if not result.rows:raise ValueError(result.issues[0]['原因'] if result.issues else '无效交易')
         row=result.rows[0];row.update(category=category,category_source='用户修正',source_file='手动记账')

@@ -81,8 +81,12 @@ def goal_progress(goal,contributions,today=None):
     today=today or date.today()
     plan=plan_savings(goal['target_cents'],goal['saved_cents'],goal['start_date'],goal['deadline'],goal['income_cents'],goal['budget_cents'])
     actual=goal['saved_cents']+int(contributions.loc[contributions.date<=today.isoformat(),'amount_cents'].sum())
-    elapsed=sum(d<=today.isoformat() for d in plan['contribution_dates'])
+    future_dates=[d for d in plan['contribution_dates'] if d>today.isoformat()]
+    elapsed=plan['months']-len(future_dates)
+    current_projected=actual+len(future_dates)*plan['monthly_available']
     required=plan['required_monthly'] or 0
     expected=min(goal['target_cents'],goal['saved_cents']+elapsed*required)
     return dict(actual_saved=actual,expected_saved=expected,behind_cents=max(0,expected-actual),remaining=max(0,goal['target_cents']-actual),
-                ratio=min(100,actual/goal['target_cents']*100),contribution_count=len(contributions),plan=plan)
+                ratio=min(100,actual/goal['target_cents']*100),contribution_count=len(contributions),plan=plan,
+                future_dates=future_dates,current_projected=current_projected,
+                current_deficit=max(0,goal['target_cents']-current_projected))

@@ -99,7 +99,7 @@ def _execute(tools, action):
 
 def plan_savings_agent(store=None, *, question, inputs=(), mode='historical', today=None,
                        client=None, consent=None, max_rounds=10, time_budget=90,
-                       cancel_event=None, clock=monotonic):
+                       cancel_event=None, clock=monotonic, protected_categories=()):
     """No outgoing request without current consent; no model amounts are executed.
 
     Call again with mode='assumption' ONLY after the user selects the returned
@@ -110,7 +110,7 @@ def plan_savings_agent(store=None, *, question, inputs=(), mode='historical', to
         raise ToolValidationError('规划时间预算必须在 0 到 180 秒之间')
     if not isinstance(question, str) or not question.strip() or len(question) > 2000:
         raise ToolValidationError('请输入范围内的储蓄规划问题')
-    tools = AgentTools(store, inputs=inputs, today=today, mode=mode)
+    tools = AgentTools(store, inputs=inputs, today=today, mode=mode, protected_categories=protected_categories)
     baseline = plan_with_tools(tools.fresh_session(share_cache=True))
     model_trace, model_calls = [], 0
     started = clock()
@@ -144,7 +144,7 @@ def plan_savings_agent(store=None, *, question, inputs=(), mode='historical', to
         for round_index in range(max_rounds - 1):  # Reserve a round for claims.
             timeout = check()
             payload = aggregate_payload(tools)
-            payload.update(question=question, tools=deepcopy(TOOL_CATALOG), first_turn=round_index == 0,
+            payload.update(question=question, protected_categories=list(tools.protected_categories), tools=deepcopy(TOOL_CATALOG), first_turn=round_index == 0,
                            remaining_tool_calls=6 - len(tools.facts),
                            remaining_rounds=max_rounds - round_index,
                            last_tool_call=deepcopy(model_trace[-1]) if model_trace else None)

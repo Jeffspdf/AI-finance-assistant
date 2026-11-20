@@ -1,68 +1,23 @@
-"""Qt floating assistant using the existing cropped animation atlas."""
+"""Floating form of the Qt companion."""
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QLabel, QMenu
-
-from finance.animation import TIMELINES, load_frames
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMenu
+from .companion import Companion
 
 
-class DesktopPet(QLabel):
-    def __init__(self, owner, atlas):
+class DesktopPet(Companion):
+    def __init__(self, owner):
         super().__init__(owner, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint |
                          Qt.WindowType.WindowStaysOnTopHint)
         self.owner = owner
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setAccessibleName('小财灵桌面助手')
-        self.setToolTip('拖动移动，单击打招呼，右键打开菜单')
-        width, height = 246, 164
-        self.setFixedSize(width, height)
-        self.frames = {
-            state: [QPixmap.fromImage(QImage(frame.tobytes(), width, height, QImage.Format.Format_RGBA8888).copy())
-                    for frame in frames]
-            for state, frames in load_frames(atlas, (width, height)).items()
-        }
-        self.timer = QTimer(self)
-        self.timer.setSingleShot(True)
-        self.timer.timeout.connect(self.advance)
-        self.paused = False
+        self.setToolTip('拖动移动，点击重播当前动作，右键暂停或隐藏')
+        self.setFixedSize(220, 180)
         self.press = None
         self.dragged = False
-        self.state = 'idle'
-        self.step = 0
         screen = owner.screen().availableGeometry()
-        self.move(screen.right() - width - 16, screen.bottom() - height - 16)
-
-    def play(self, state='idle'):
-        self.state, self.step = state, 0
-        self.advance()
-
-    def advance(self):
-        timeline = TIMELINES[self.state]
-        if self.step == len(timeline):
-            self.state, self.step = 'idle', 0
-            timeline = TIMELINES[self.state]
-        index, delay = timeline[self.step]
-        self.setPixmap(self.frames[self.state][index])
-        self.step += 1
-        if not self.paused and self.isVisible():
-            self.timer.start(delay)
-
-    def toggle_pause(self):
-        self.paused = not self.paused
-        if self.paused:
-            self.timer.stop()
-        else:
-            self.play()
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.play()
-
-    def hideEvent(self, event):
-        self.timer.stop()
-        super().hideEvent(event)
+        self.move(screen.right() - self.width() - 16, screen.bottom() - self.height() - 16)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -80,7 +35,7 @@ class DesktopPet(QLabel):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             if self.press and not self.dragged and not self.paused:
-                self.play('wave')
+                self.restart()
             self.press = None
 
     def contextMenuEvent(self, event):

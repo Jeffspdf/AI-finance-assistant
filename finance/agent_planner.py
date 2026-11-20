@@ -60,6 +60,8 @@ def plan_savings_rules(store=None, *, inputs=(), mode='historical', today=None,
 def plan_with_tools(tools, *, categories=('餐饮', '交通'), cut_pct=10):
     """Shared deterministic fallback operating on an already-frozen snapshot."""
     mode = tools.mode
+    if tools.protected_categories:
+        categories = tuple(c for c in categories if c not in tools.protected_categories)
     missing = [name for name in ('target_cents', 'months', 'saved_cents') if name not in tools.inputs]
 
     def result(status, needed=(), simulation=None):
@@ -77,6 +79,9 @@ def plan_with_tools(tools, *, categories=('餐饮', '交通'), cut_pct=10):
         overview = tools.call('spending_overview', dict(period='last_3_months'))
         if overview['facts']['requires_explicit_budget']:
             return need_assumptions()
+        if tools.protected_categories:
+            categories = tuple(c for c, amount in overview['facts']['category_spending_cents'].items()
+                               if amount > 0 and c not in tools.protected_categories)
         ref = overview['step_id'] + '.'
         args.update(base_income_cents={'$ref': ref + 'average_income_cents'},
                     base_spending_cents={'$ref': ref + 'average_expense_cents'},

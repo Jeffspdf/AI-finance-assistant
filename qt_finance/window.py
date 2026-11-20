@@ -3,7 +3,7 @@
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QElapsedTimer, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup, QDialog, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QMainWindow, QScrollArea,
@@ -16,6 +16,7 @@ from finance.qa import month_shift
 from .chat import ChatPage
 from .pages import AccountsPage, BackupPage, BudgetPage, HelpPage, LedgerPage, OverviewPage, ReviewPage, SettingsPage
 from .pet import DesktopPet
+from .companion import CAPTIONS, Companion
 from .plan import PlanPage
 from .services import Workspace
 from .ui import ComboBox, Jobs, STYLES, Switch, button, label
@@ -44,6 +45,11 @@ class FinanceWindow(QMainWindow):
         self.model_configuration = self.model_settings.load()
         self.client = self.make_client(self.model_configuration)
         self.pet = None
+        self.query_feedback = None
+        self.query_animation_time = QElapsedTimer()
+        self.query_animation_timer = QTimer(self)
+        self.query_animation_timer.setSingleShot(True)
+        self.query_animation_timer.timeout.connect(self.advance_query_feedback)
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -128,38 +134,30 @@ class FinanceWindow(QMainWindow):
         self.save_chat_history.setToolTip('每个账本空间可独立启用，默认关闭。')
         layout.addWidget(self.save_chat_history)
         layout.addSpacing(4)
-        layout.addWidget(label('账本工具', 'muted'))
-        nav = QGridLayout()
-        nav.setSpacing(4)
-        nav.setColumnStretch(0, 1)
-        nav.setColumnStretch(1, 1)
         self.nav_group = QButtonGroup(self)
         self.nav = {}
-        for index, (key, title) in enumerate(self.page_labels.items()):
-            item = button(title, lambda checked=False, target=key: self.navigate(target))
-            item.setProperty('nav', True)
-            item.setCheckable(True)
-            self.nav_group.addButton(item)
-            self.nav[key] = item
-            nav.addWidget(item, index // 2, index % 2)
-        layout.addLayout(nav)
+        for group_title, keys in (
+            ('常用功能', ('chat', 'overview', 'ledger', 'budget', 'plan')),
+            ('更多工具', ('accounts', 'review', 'backup', 'settings', 'help')),
+        ):
+            layout.addWidget(label(group_title, 'muted'))
+            nav = QGridLayout()
+            nav.setSpacing(4)
+            nav.setColumnStretch(0, 1)
+            nav.setColumnStretch(1, 1)
+            for index, key in enumerate(keys):
+                item = button(self.page_labels[key], lambda checked=False, target=key: self.navigate(target))
+                item.setProperty('nav', True)
+                item.setCheckable(True)
+                self.nav_group.addButton(item)
+                self.nav[key] = item
+                nav.addWidget(item, index // 2, index % 2, 1, 2 if index == 4 else 1)
+            layout.addLayout(nav)
         layout.addStretch(1)
-        self.mascot = None
-        portrait = QPixmap(str(ASSETS / 'campus_heroine.png'))
-        if not portrait.isNull():
-            self.mascot = label('')
-            self.mascot.setObjectName('companionPortrait')
-            self.mascot.setAccessibleName('小财灵半身立绘')
-            self.mascot.setFixedHeight(142)
-            # Frame the face, shoulders, and notebook from the original campus artwork.
-            bust = portrait.copy(241, 0, 560, 620)
-            scale = self.devicePixelRatioF()
-            bust = bust.scaled(round(146 * scale), round(134 * scale), Qt.AspectRatioMode.KeepAspectRatio,
-                               Qt.TransformationMode.SmoothTransformation)
-            bust.setDevicePixelRatio(scale)
-            self.mascot.setPixmap(bust)
-            self.mascot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(self.mascot)
+        self.mascot = Companion(side)
+        self.mascot.setObjectName('companionPortrait')
+        self.mascot.setFixedHeight(142)
+        layout.addWidget(self.mascot)
         self.companion_status = label('', 'muted')
         self.companion_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.companion_status)
@@ -169,11 +167,58 @@ class FinanceWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if getattr(self, 'mascot', None) is not None:
-            self.mascot.setVisible(event.size().height() >= 590)
+            self.mascot.setVisible(event.size().height() >= 650)
+
+    def set_companion_state(self, state):
+        self.mascot.set_state(state)
+        if self.pet is not None:
+            self.pet.set_state(state)
+        self.companion_status.setText(CAPTIONS[state])
+
+    def begin_query_feedback(self):
+        self.query_animation_timer.stop()
+        self.query_feedback = 'running'
+        self.set_companion_state('thinking')
+        self.mascot.set_caption(CAPTIONS['thinking'])
+        self.mascot.restart()
+        if self.pet is not None:
+            self.pet.set_caption(CAPTIONS['thinking'])
+            self.pet.restart()
+        self.query_animation_time.restart()
+
+    def complete_query_feedback(self, successful):
+        if self.query_feedback != 'running':
+            return
+        if not successful:
+            self.clear_query_feedback()
+            return
+        self.query_feedback = 'finishing'
+        caption = CAPTIONS['queried']
+        self.mascot.set_caption(caption)
+        if self.pet is not None:
+            self.pet.set_caption(caption)
+        self.companion_status.setText(caption)
+        self.query_animation_timer.start(max(0, 1700 - self.query_animation_time.elapsed()))
+
+    def advance_query_feedback(self):
+        if self.query_feedback == 'finishing':
+            self.query_feedback = 'holding'
+            self.set_companion_state('queried')
+            self.query_animation_timer.start(1200)
+        elif self.query_feedback == 'holding':
+            self.clear_query_feedback()
+
+    def clear_query_feedback(self):
+        if self.query_feedback is not None:
+            self.query_animation_timer.stop()
+            self.query_feedback = None
+            self.set_companion_state('idle')
 
     def toggle_pet(self):
         if self.pet is None:
-            self.pet = DesktopPet(self, ASSETS / 'campus_animation.png')
+            self.pet = DesktopPet(self)
+            self.pet.set_state(self.mascot.state)
+            self.pet.set_caption(self.mascot.caption)
         self.pet.setVisible(not self.pet.isVisible())
 
     def quick_entry(self):
@@ -244,7 +289,7 @@ class FinanceWindow(QMainWindow):
         except Exception:
             self.notice('操作未完成，请刷新账本后重试。')
 
-    def navigate(self, page, target=''):
+    def navigate(self, page, target='', *, months=None):
         if page != self.current:
             self.chat.evidence.close()
             self.pages['budget'].evidence_dialog.close()
@@ -256,17 +301,18 @@ class FinanceWindow(QMainWindow):
         self.title.setText(self.page_labels[page])
         self.stack.setCurrentWidget(self.containers[page])
         self.notice()
-        if target and page == 'plan':
-            self.plan.inputs['target_cents'].setText(target)
+        if page == 'plan':
+            if target:
+                self.plan.inputs['target_cents'].setText(target)
+            if months is not None:
+                self.plan.inputs['months'].setText(str(months))
         self.refresh()
 
     def open_ledger(self, month, category):
         self.navigate('ledger')
         ledger = self.pages['ledger']
         ledger.search.clear()
-        if month and ledger.month_filter.findText(month) < 0:
-            ledger.month_filter.addItem(month)
-        ledger.month_filter.setCurrentIndex(max(0, ledger.month_filter.findText(month or '全部月份')))
+        ledger.set_period(month)
         ledger.category_filter.setCurrentIndex(max(0, ledger.category_filter.findText(category)))
 
     def refresh(self):
@@ -275,6 +321,7 @@ class FinanceWindow(QMainWindow):
             self.perform(page.refresh)
 
     def ledger_changed(self, message):
+        self.chat.ledger_generation += 1
         self.chat.stop(quiet=True)
         self.pages['budget'].evidence_dialog.close()
         self.plan.invalidate()
@@ -315,6 +362,7 @@ class FinanceWindow(QMainWindow):
         self.navigate('chat')
 
     def closeEvent(self, event):
+        self.clear_query_feedback()
         if self.pet is not None:
             self.pet.close()
         self.plan.reset_workspace()
